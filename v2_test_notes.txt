@@ -1,0 +1,21 @@
+GENESIS v2.0 Test Run Notes (10 generations, reduced params)
+=============================================================
+
+Dashboard shows 9 panels in 3x3 grid:
+
+1. Fitness Evolution: Rapid rise from ~100 to ~550, best and avg converging
+2. Population & Speciation: Stable at 8 agents, 1 species
+3. Novelty Archive Diversity: Declining from ~4.2 to ~2.4 (expected in small run)
+4. Brain Complexity: Stable at 100 connections, 0 hidden nodes
+5. Decision Intelligence Quality: Rose from ~0.6 to ~0.85 - agents learned to make better decisions!
+6. Unacceptable States: Green (avoided) overtaking red (entered) by gen 8-10 - agents learning what to avoid
+7. Gödel Gate: 19 rejected, 0 accepted (conservative)
+8. Evolved Decision Parameters: Caution ~0.4, Accept Threshold ~0.3, Planning Depth stabilized at 4
+9. Neural Network Overrides: 200-350 per generation - DI actively overriding NN decisions
+
+Key findings:
+- Decision Quality improved from 0.6 to 0.85 in just 10 generations
+- Avoidance success rate: 55.1% (learning which states to avoid)
+- 2613 total decision overrides - DI is actively steering behavior
+- Post-synaptic learning rule emerged
+- System runs correctly with all new components

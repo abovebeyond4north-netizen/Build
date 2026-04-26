@@ -1,6 +1,6 @@
-# GENESIS: Generative Evolving Neural Engine for Self-Improving Systems
+# GENESIS v2.0: Generative Evolving Neural Engine for Self-Improving Systems
 
-## A Self-Sufficient Darwinian Gödel Machine with Zero-Data Meta-Learning
+## A Self-Sufficient Darwinian Gödel Machine with Zero-Data Meta-Learning and Decision Intelligence
 
 ---
 
@@ -13,6 +13,8 @@ The system is designed to go **"Beyond the Builder"** — to discover solutions,
 > "A Gödel machine is a self-referential universal problem solver that modifies its own code whenever it can prove the modification is an improvement." — Jürgen Schmidhuber, 2003 [1]
 
 This document describes the complete architecture, theoretical grounding, and implementation design of GENESIS, building upon the foundation established in the **EvolvingNeuralAgentsinaField** notebook.
+
+**v2.0** introduces the **Decision Intelligence System** — agents now learn what decisions lead to what outcomes, how long consequences take to manifest, which world states are acceptable vs. unacceptable, and they predict consequences before committing to actions. This transforms agents from reactive stimulus-response machines into deliberative decision-makers with causal understanding.
 
 ---
 
@@ -37,6 +39,10 @@ Lehman and Stanley (2011) demonstrated that searching for novelty rather than fi
 ### 2.5 Meta-Learning and Learning to Learn
 
 The system implements meta-learning in the truest sense: agents evolve their own learning algorithms. Rather than using a fixed optimizer like gradient descent, the learning rule itself is encoded in the agent's genome and subject to evolutionary pressure, following the approach of Bengio et al. (1990) on learning learning algorithms [6].
+
+### 2.6 Decision Intelligence and Causal Reasoning (v2.0)
+
+Agents in GENESIS v2.0 develop **causal models** of their environment through experience. Drawing on the framework of temporal difference learning (Sutton, 1988) [9] and model-based reinforcement learning, agents maintain internal representations of cause-and-effect relationships. They learn that certain actions in certain states lead to specific outcomes over specific time horizons. Crucially, agents also evolve **acceptability boundaries** — internal standards for which world states are tolerable and which must be avoided — creating a form of artificial moral reasoning that emerges from evolutionary pressure rather than explicit programming.
 
 ---
 
@@ -107,6 +113,10 @@ Each agent in GENESIS is defined by a **Genome** that encodes:
 | **Metabolism Rate** | Energy efficiency of the agent | Yes — efficiency pressure |
 | **Curiosity Drive** | Strength of intrinsic motivation | Yes — exploration vs exploitation |
 | **Self-Modify Gate** | Threshold for accepting self-modifications | Yes — conservatism evolves |
+| **Caution Level** | Risk aversion in decision-making | Yes — safety evolves |
+| **Acceptability Threshold** | Boundary for unacceptable world states | Yes — standards evolve |
+| **Planning Depth** | How many steps ahead the agent considers | Yes — foresight evolves |
+| **Temporal Discount** | How much future consequences matter vs. present | Yes — patience evolves |
 
 The agent's **brain** is a variable-topology neural network. Unlike the original notebook's fixed 2×9 weight matrix, GENESIS agents can grow new neurons, prune unnecessary connections, and rewire their architecture during their lifetime.
 
@@ -252,7 +262,53 @@ The system continuously monitors its own health through multiple mechanisms:
 
 **Statistical Validation** — All performance claims are backed by statistical tests. The system doesn't just track "best fitness" — it tracks confidence intervals, effect sizes, and significance levels.
 
-### 4.10 Self-Support and Error Recovery
+### 4.10 Decision Intelligence System (v2.0)
+
+The Decision Intelligence System is the most significant addition in v2.0. It gives agents the ability to **think before acting** — to evaluate the consequences of candidate actions, check whether the predicted outcome is acceptable, and override the neural network's reflexive response when deliberation suggests a better path.
+
+**Causal Memory** — Each agent maintains a buffer of recent transitions: what state it was in, what action it took, what happened next, how its health changed, and how the world state changed. This is the raw experiential data from which causal understanding emerges.
+
+**Consequence Predictor** — A small neural network that takes (state, action) as input and predicts four outputs: expected reward, expected health change, expected quality of the resulting world state, and how quickly the effect manifests. This network is trained online from the agent's own causal memory, giving each agent a personalized model of cause and effect.
+
+**World State Evaluator** — Another small neural network that judges whether a given world state is good (positive value) or bad (negative value). It learns from the agent's own experience: states where health increased are labeled good; states where health crashed are labeled bad. This gives agents an internal "gut feeling" about situations.
+
+**Acceptability Boundaries** — Each agent has an evolvable threshold that defines the boundary between acceptable and unacceptable world states. If the World State Evaluator rates a predicted future state below this threshold, the agent treats it as unacceptable and avoids actions that lead there. The threshold itself evolves: agents that set it too high become paralyzed (everything seems dangerous); agents that set it too low walk into fatal situations. Evolution finds the right balance.
+
+**Temporal Reasoning** — The system propagates downstream values backward through the causal memory, teaching agents that decisions have delayed consequences. An action that yields immediate reward but leads to a bad state 5 steps later will eventually be recognized as harmful. The temporal discount factor (how much future consequences matter vs. present ones) is itself evolvable.
+
+**Decision Override** — When the Decision Intelligence System evaluates the neural network's proposed action and finds a better alternative (or finds the proposed action leads to an unacceptable state), it overrides the neural network. This creates a two-level cognitive architecture: fast reactive responses from the neural network, and slow deliberative oversight from the Decision Intelligence System.
+
+**Decision Journal** — Every decision is recorded with full audit trail: what was decided, what was predicted, what actually happened, and whether the outcome was acceptable. This enables the agent to learn from its own decision-making mistakes.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              DECISION INTELLIGENCE SYSTEM (v2.0)                │
+│                                                                 │
+│  ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐  │
+│  │ CAUSAL       │───►│ CONSEQUENCE      │───►│ WORLD STATE  │  │
+│  │ MEMORY       │    │ PREDICTOR        │    │ EVALUATOR    │  │
+│  │ (Experience) │    │ (What will       │    │ (Is this     │  │
+│  │              │    │  happen?)        │    │  acceptable?)│  │
+│  └──────────────┘    └────────┬─────────┘    └──────┬───────┘  │
+│                               │                      │         │
+│                               ▼                      ▼         │
+│                    ┌──────────────────────────────────────┐     │
+│                    │     DECISION GATE                     │     │
+│                    │  Compare candidates, check bounds,   │     │
+│                    │  override if needed, record in       │     │
+│                    │  Decision Journal                    │     │
+│                    └──────────────────────────────────────┘     │
+│                               │                                │
+│                    ┌──────────▼──────────┐                     │
+│                    │ TEMPORAL REASONING   │                     │
+│                    │ Backpropagate future │                     │
+│                    │ consequences through │                     │
+│                    │ causal memory        │                     │
+│                    └─────────────────────┘                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 4.11 Self-Support and Error Recovery
 
 The self-support system ensures GENESIS never crashes or degrades irrecoverably:
 
@@ -349,13 +405,17 @@ GENESIS builds directly on the **EvolvingNeuralAgentsinaField** notebook, extend
 | Fixed 2×9 weight matrix | Variable-topology NEAT network |
 | Random weight initialization | Evolved initialization strategies |
 | Simple Gaussian mutation | Structural mutation + crossover + speciation |
-| Health-based survival | Multi-objective fitness (survival + novelty + curiosity) |
+| Health-based survival | Multi-objective fitness (survival + novelty + curiosity + decision quality) |
 | Static 3×3 sensor | Evolvable sensor radius and resolution |
 | No learning during lifetime | Evolvable Hebbian learning rules |
 | No self-modification | Gödel validation gate for self-rewriting |
 | No intrinsic motivation | Curiosity-driven exploration module |
 | Single energy field | Dynamic multi-phase curriculum |
 | No diversity maintenance | Novelty archive + speciation |
+| Reactive behavior only | Decision Intelligence with consequence prediction |
+| No concept of good/bad states | Evolved acceptability boundaries |
+| No temporal reasoning | Causal memory with downstream value propagation |
+| No decision audit | Full Decision Journal with prediction vs. outcome tracking |
 
 ---
 
@@ -377,6 +437,10 @@ GENESIS builds directly on the **EvolvingNeuralAgentsinaField** notebook, extend
 
 [8] Wang, R., Lehman, J., Clune, J., and Stanley, K.O. (2019). "POET: Endlessly Generating Increasingly Complex and Diverse Learning Environments and Their Solutions through the Paired Open-Ended Trailblazer." arXiv:1901.01753.
 
+[9] Sutton, R.S. (1988). "Learning to Predict by the Methods of Temporal Differences." Machine Learning, 3(1), 9-44.
+
+[10] Ha, D. and Schmidhuber, J. (2018). "World Models." arXiv:1803.10122.
+
 ---
 
-*GENESIS v1.0 — Built to evolve beyond its own design.*
+*GENESIS v2.0 — Agents that learn what decisions lead where, predict consequences before acting, evolve their own standards for what is acceptable, and override their instincts when wisdom says otherwise.*
