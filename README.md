@@ -1,33 +1,34 @@
-# GENESIS v2.0: Self-Evolving Darwinian Gödel Machine with Decision Intelligence
+# GENESIS v3.0
 
 **Generative Evolving Neural Engine for Self-Improving Systems**
 
-A fully self-sufficient, self-evolving AI agent system that bootstraps intelligence from absolute zero. No external data, no pre-trained models, no human supervision after launch.
+A self-sufficient, self-evolving Darwinian Gödel machine that bootstraps intelligence from absolute zero. No external data, no pre-trained models, no human supervision after launch.
 
-## What's New in v2.0: Decision Intelligence
+## 13 Capabilities
 
-Agents now **think before they act**. The Decision Intelligence System gives every agent:
+| # | Capability | Description |
+|---|-----------|-------------|
+| 1 | Self-Sufficient Passive Learning | Zero external data — agents learn from their own experience |
+| 2 | Meta-Learning from Scratch | Learning rules themselves evolve (evolvable Hebbian plasticity) |
+| 3 | Darwinian Self-Evolution | NEAT-style neuroevolution with topology mutation and speciation |
+| 4 | Gödel Machine Self-Rewriting | Agents modify their own code through empirical validation |
+| 5 | Self-Controlled / Self-Coded | Autonomous architecture generation and modification |
+| 6 | Self-Instructed / Self-Quality-Checked | Internal curriculum, diversity monitors, stagnation detectors |
+| 7 | Self-Support System | Error recovery, rollback, anomaly detection, graceful degradation |
+| 8 | Zero-Data SOTA Methods | Curiosity-driven exploration, novelty search, self-play |
+| 9 | Beyond the Builder | Open-ended evolution discovers behaviors never explicitly programmed |
+| 10 | Decision Intelligence | Causal memory, consequence prediction, temporal reasoning, acceptability boundaries |
+| 11 | Emergent Communication | Agents evolve signals from scratch — developing their own language |
+| 12 | Counterfactual Reasoning | "What if I had done something different?" — regret-based learning |
+| 13 | Persistent Knowledge Transfer | Wisdom survives death — cultural evolution across generations |
 
-- **Causal Memory** — Learns what decisions lead to what outcomes from its own experience
-- **Consequence Predictor** — Predicts reward, health change, state quality, and timing *before* committing to an action
-- **World State Evaluator** — Judges whether a situation is good or bad (learned, not programmed)
-- **Acceptability Boundaries** — Evolves internal standards for what states are unacceptable and avoids them
-- **Temporal Reasoning** — Understands that decisions have delayed consequences; propagates future values backward
-- **Decision Override** — Overrides the neural network's reflexive response when deliberation finds a better path
-- **Decision Journal** — Full audit trail of every decision, prediction, and outcome
+## What's New in v3.0
 
-## All 10 Capabilities
+**Emergent Communication** — Agents broadcast evolved signals to nearby agents. Signal encoding, decoding, honesty, listening weight, and broadcast threshold are all evolvable. Agents can develop cooperative signaling, warning systems, or deceptive strategies — all from scratch.
 
-1. **Self-Sufficient Passive Learning** — Zero external data, learns from own experience
-2. **Meta-Learning from Scratch** — Learning rules themselves evolve
-3. **Darwinian Self-Evolution** — NEAT-style neuroevolution with topology mutation
-4. **Gödel Machine Self-Rewriting** — Validated self-modification with rollback
-5. **Self-Controlled / Self-Coded** — Autonomous architecture generation
-6. **Self-Instructed Curriculum** — Environment complexity auto-advances
-7. **Self-Quality-Checked / Self-Evaluated** — Diversity monitors, stagnation detectors
-8. **Self-Healing** — Error recovery, rollback, anomaly detection
-9. **Beyond the Builder** — Novelty search discovers unprogrammed behaviors
-10. **Decision Intelligence** — Causal learning, consequence prediction, acceptability boundaries
+**Counterfactual Reasoning** — Agents replay past decisions with alternative actions through their consequence predictor. When they discover they missed a better option, they experience regret and adjust future behavior. Regret sensitivity and counterfactual depth are evolvable.
+
+**Persistent Knowledge Bank** — When agents die or reproduce, their best experiences are deposited into a shared knowledge bank. Offspring can query this bank for relevant wisdom. Knowledge entries are scored by usefulness and pruned over time. This enables cultural evolution — knowledge that outlives any individual.
 
 ## Quick Start
 
@@ -38,14 +39,29 @@ python genesis.py
 
 ## Output
 
-The system generates:
-- **genesis_v2_dashboard.png** — 9-panel evolutionary dynamics dashboard including decision quality, acceptability avoidance, evolved decision parameters, and neural network overrides
-- **genesis_v2_metalearning.png** — Analysis of evolved learning rules
-- **genesis_v2_universe.png** — Final state of the energy field with agent positions
+The system generates three visualizations:
+
+- `genesis_v3_dashboard.png` — 16-panel dashboard tracking all metrics across generations
+- `genesis_v3_analysis.png` — Distribution analysis of evolved parameters
+- `genesis_v3_universe.png` — Final state of the energy field with agent positions
 
 ## Architecture
 
-See [GENESIS_Architecture.md](GENESIS_Architecture.md) for the complete theoretical grounding and system design.
+See [GENESIS_Architecture.md](GENESIS_Architecture.md) for the full technical specification.
+
+## Key Results (10-generation test run)
+
+| Metric | Value |
+|--------|-------|
+| Best Fitness | 661.3 |
+| Decision Quality | 0.72 |
+| Avoidance Success Rate | 60.7% |
+| Emergent Vocabulary | 15 distinct signals |
+| Knowledge Helpfulness | 98.1% |
+| Total Broadcasts | 5,434 |
+| Total Knowledge Withdrawals | 10,644 |
+| Counterfactual Adjustments | 43 |
+| Learning Rule Discovered | Novel (non-standard) |
 
 ## Dependencies
 
@@ -54,14 +70,6 @@ See [GENESIS_Architecture.md](GENESIS_Architecture.md) for the complete theoreti
 - Matplotlib
 - SciPy
 
-## Key Results (Test Run)
-
-- Decision Quality improved from 0.6 to 0.85 in 10 generations
-- Agents learned to avoid unacceptable states (55% avoidance rate, improving)
-- 2,613 neural network overrides — Decision Intelligence actively steering behavior
-- Post-synaptic learning rules emerged from scratch
-- Fitness improved from ~100 to ~557
-
 ---
 
-*GENESIS v2.0 — Agents that learn what decisions lead where, predict consequences before acting, evolve their own standards for what is acceptable, and override their instincts when wisdom says otherwise.*
+*GENESIS v3.0 — Agents that communicate, reason about what could have been, inherit wisdom from the dead, and evolve intelligence from nothing.*

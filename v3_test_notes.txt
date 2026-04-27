@@ -1,0 +1,37 @@
+GENESIS v3.0 Test Run Results (10 generations, reduced parameters)
+===================================================================
+
+16-panel dashboard confirmed all systems working:
+
+Row 1 - Core Evolution:
+- Fitness: 367 -> 661 (80% improvement in 10 gens)
+- Population stable at 8-15
+- Behavioral diversity increasing (1.6 -> 2.2)
+- Brain complexity stable at ~100 connections
+
+Row 2 - Decision Intelligence:
+- Decision quality: 0.69-0.87 range, above 0.5 baseline
+- Unacceptable states: avoided > entered (60.7% avoidance rate)
+- Decision params evolving (caution, accept threshold, planning depth)
+- 3,420 neural network overrides by Decision Intelligence
+
+Row 3 - Communication (NEW v3.0):
+- Signal activity: 441 -> 707 signals per generation (increasing)
+- Emergent vocabulary: grew from 8 to 15 distinct signal types
+- Honesty evolved to ~0.57 (moderate honesty)
+- Listen weight stable at ~0.57 (balanced trust)
+- 5,434 total broadcasts, 11,262 total receptions
+
+Row 4 - Counterfactual & Knowledge (NEW v3.0):
+- 43 counterfactual adjustments made
+- Regret levels fluctuating, showing active what-if analysis
+- Knowledge Bank: filled to capacity (200 entries)
+- Knowledge helpfulness: 98.1% (extremely high utility)
+- 10,644 knowledge withdrawals
+
+Key Findings:
+1. Communication emerged naturally - agents developed 15 distinct signals
+2. Knowledge Bank proved extremely useful (98.1% helpfulness)
+3. Counterfactual reasoning actively adjusting behavior
+4. Novel learning rule discovered (non-standard Hebbian)
+5. All 13 capabilities confirmed operational
