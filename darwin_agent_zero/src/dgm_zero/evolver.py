@@ -16,6 +16,7 @@ from .meta_learning import MetaLearner, MetaLearningPolicy
 from .metacognition import CognitiveState, MetacognitiveMonitor
 from .oracle import EmpiricalGodelOracle
 from .self_instruction import SelfInstructor
+from .sota_methods import UCBOperatorBandit, pareto_front, regret, uncertainty_score
 from .tools import ToolRegistry, default_registry
 
 
@@ -72,12 +73,13 @@ class EvolutionReport:
     mined_cases_path: str
     cognitive_state: dict[str, object]
     meta_policy: dict[str, float]
+    operator_bandit: dict[str, dict[str, float]]
     registered_tools: list[str]
     recalled_tasks: list[str]
 
 
 class DarwinAgentZero:
-    """Bounded Darwinian Godel loop with metacognitive control."""
+    """Bounded Darwinian Godel loop with metacognitive and SOTA-style search control."""
 
     def __init__(self, workspace: Path, config: EvolutionConfig | None = None, registry: ToolRegistry | None = None) -> None:
         self.workspace = workspace
@@ -90,6 +92,8 @@ class DarwinAgentZero:
         self.curriculum_state = self.curriculum.load()
         self.metacognition = MetacognitiveMonitor()
         self.meta_learner = MetaLearner()
+        self.operator_bandit = UCBOperatorBandit(["wrap", "append", "replace", "simplify"])
+        self.pending_operator = "replace"
         self.cognitive_state = self.assess_self()
         self.meta_policy = self.meta_learner.policy_from_state(self.cognitive_state)
         self.mined_cases = self.mine_cases()
@@ -185,6 +189,7 @@ class DarwinAgentZero:
             mined_cases_path=str(self.workspace / "mined_cases.json"),
             cognitive_state=asdict(self.cognitive_state),
             meta_policy=asdict(self.meta_policy),
+            operator_bandit=self.operator_bandit.snapshot(),
             registered_tools=self.registry.names(),
             recalled_tasks=[entry.content for entry in self.memory.recall("task", limit=5)],
         )
@@ -197,8 +202,13 @@ class DarwinAgentZero:
             return None
         elite_ids = {cell.record_id for cell in self.map_elites.cells.values()}
         elite_records = [record for record in accepted if record.id in elite_ids]
-        pool = elite_records or accepted
-        pool = sorted(pool, key=lambda record: record.score.get("weighted_total", 0.0), reverse=True)[: self.config.elite_parent_limit]
+        candidate_pool = elite_records or accepted
+        front = pareto_front(candidate_pool)
+        pool = sorted(
+            front or candidate_pool,
+            key=lambda record: record.score.get("weighted_total", 0.0) + 0.15 * uncertainty_score(record.score),
+            reverse=True,
+        )[: self.config.elite_parent_limit]
         if self.cognitive_state.focus in {"increase diversity", "escape stagnation"} and elite_records:
             return self.rng.choice(elite_records)
         return self.rng.choice(pool)
@@ -226,10 +236,18 @@ class DarwinAgentZero:
         self.rng.shuffle(candidates)
         return dedupe(candidates)
 
-    def mutate(self, expression: str, generation: int) -> str:
+    def choose_operator(self, generation: int) -> str:
         if generation % 4 == 0 and self.meta_policy.novelty_bias >= 1.0:
-            return self.rng.choice(SEED_EXPRESSIONS)
-        mode = self.rng.choice(self.meta_learner.weighted_modes(self.meta_policy))
+            return "replace"
+        if self.cognitive_state.focus in {"increase diversity", "escape stagnation"}:
+            return self.rng.choice(["replace", self.operator_bandit.choose()])
+        if self.cognitive_state.focus == "repair correctness":
+            return self.rng.choice(["simplify", self.operator_bandit.choose()])
+        return self.operator_bandit.choose()
+
+    def mutate(self, expression: str, generation: int) -> str:
+        mode = self.choose_operator(generation)
+        self.pending_operator = mode
         if mode == "wrap":
             return f"({expression}){self.rng.choice(MUTATION_SNIPPETS)}"
         if mode == "append":
@@ -242,7 +260,14 @@ class DarwinAgentZero:
         parent_score = parent.score.get("weighted_total") if parent else None
         decision = self.oracle.judge(expression, parent_total=parent_score)
         usefulness = decision.score.weighted_total
-        self.memory.deposit("candidate", f"{expression} -> {decision.reason}", usefulness)
+        loss = regret(parent_score, usefulness)
+        reward = max(0.0, usefulness - loss)
+        self.operator_bandit.update(self.pending_operator, reward)
+        self.memory.deposit(
+            "candidate",
+            f"operator={self.pending_operator}; reward={reward:.3f}; {expression} -> {decision.reason}",
+            usefulness,
+        )
         return self.archive.append(
             generation=generation,
             parent_id=parent.id if parent else None,
