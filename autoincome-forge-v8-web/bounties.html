@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bounty Operations — AutoIncome Forge</title>
+  <meta name="description" content="How AutoIncome Forge autonomous bounty claims and completions work through GitHub Issues.">
+  <style>
+    :root{--ink:#101624;--muted:#5d6880;--line:#dfe7f5;--blue:#2167e8;--soft:#eaf2ff;--card:#fff;--dark:#101827;--shadow:0 18px 55px rgba(16,22,36,.10)}*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;background:linear-gradient(135deg,#f5f8ff,#fff);color:var(--ink)}.page{width:min(1000px,92vw);margin:0 auto;padding:30px 0 60px}.top{display:flex;justify-content:space-between;gap:12px;margin-bottom:24px}.top a{text-decoration:none;color:var(--muted);font-weight:800}.card{background:var(--card);border:1px solid var(--line);border-radius:26px;padding:26px;margin-bottom:16px;box-shadow:var(--shadow)}h1{font-size:clamp(2rem,5vw,4rem);letter-spacing:-.06em;line-height:.98;margin:0 0 10px}h2{letter-spacing:-.03em}.lead,.muted{color:var(--muted);line-height:1.65}.pill{display:inline-block;background:var(--soft);color:var(--blue);padding:6px 10px;border-radius:999px;font-weight:950;font-size:.8rem}.list li{margin:.55em 0;line-height:1.55}.box{background:var(--dark);color:#e8f0ff;border-radius:18px;padding:18px;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.65}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.button{display:inline-flex;background:var(--blue);color:white;border-radius:999px;padding:12px 16px;text-decoration:none;font-weight:950;margin-top:10px}@media(max-width:760px){.grid{grid-template-columns:1fr}.top{flex-direction:column}.card{padding:22px}}
+  </style>
+</head>
+<body>
+<main class="page">
+  <div class="top"><strong>AutoIncome Forge — Bounty Ops</strong><a href="index.html">← Back home</a></div>
+  <section class="card"><span class="pill">Autonomous claims + completions</span><h1>Bounties become packages.</h1><p class="lead">Create a structured GitHub Issue with <strong>[BOUNTY]</strong> in the title. The worker safety-scans it, completes safe requests, commits deliverables, uploads artifacts, comments status, and labels the issue.</p><a class="button" href="https://github.com/abovebeyond4north-netizen/Build/issues/new/choose">Create bounty issue</a></section>
+  <section class="grid"><div class="card"><h2>Safe auto-completion</h2><ul class="list"><li>workflow.md</li><li>customer_questions.md</li><li>message_templates.md</li><li>implementation_checklist.md</li><li>release_checklist.md</li><li>invoice_draft.md</li><li>client_status.md</li></ul></div><div class="card"><h2>Release gates</h2><ul class="list"><li>quality score</li><li>payment/deposit confirmation</li><li>human release approval</li><li>no auto-sending</li></ul></div></section>
+  <section class="card"><h2>Pipeline</h2><div class="box">GitHub Issue -> Safety scan -> Claim safe bounty -> Generate package -> Quality review -> ZIP output -> Artifact upload -> Commit deliverables -> Issue comment -> Labels</div></section>
+  <section class="card"><h2>Blocked automatically</h2><p class="muted">The worker blocks or escalates requests involving spam, scraping, phishing, credentials, malware, hacking, impersonation, fake reviews, illegal work, and guaranteed-income claims.</p></section>
+</main>
+</body>
+</html>
