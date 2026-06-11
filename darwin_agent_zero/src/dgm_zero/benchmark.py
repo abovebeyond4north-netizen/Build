@@ -43,15 +43,45 @@ class BenchmarkResult:
         return max(0.0, min(1.0, 1.0 / (1.0 + self.elapsed_seconds)))
 
 
-def canonical_cases(seed: int = 7, count: int = 64) -> list[BenchmarkCase]:
+@dataclass(frozen=True)
+class SplitBenchmarkResult:
+    train: BenchmarkResult
+    validation: BenchmarkResult
+
+    @property
+    def correctness(self) -> float:
+        """Conservative score: a candidate must work on both train and validation."""
+
+        return min(self.train.correctness, self.validation.correctness)
+
+    @property
+    def efficiency(self) -> float:
+        return (self.train.efficiency + self.validation.efficiency) / 2.0
+
+    @property
+    def errors(self) -> list[str]:
+        return [*self.train.errors[:5], *self.validation.errors[:5]]
+
+
+def target_function(a: int, b: int) -> int:
+    """Hidden objective for the seed benchmark family."""
+
+    return a * a + 3 * b - math.gcd(a, b)
+
+
+def canonical_cases(seed: int = 7, count: int = 64, label: str = "case") -> list[BenchmarkCase]:
     rng = random.Random(seed)
     cases: list[BenchmarkCase] = []
     for index in range(count):
         a = rng.randint(-30, 30)
         b = rng.randint(-30, 30)
-        expected = a * a + 3 * b - math.gcd(a, b)
-        cases.append(BenchmarkCase(f"case_{index}", a, b, expected))
+        expected = target_function(a, b)
+        cases.append(BenchmarkCase(f"{label}_{index}", a, b, expected))
     return cases
+
+
+def split_cases(train_seed: int = 7, validation_seed: int = 404, count: int = 64) -> tuple[list[BenchmarkCase], list[BenchmarkCase]]:
+    return canonical_cases(train_seed, count, "train"), canonical_cases(validation_seed, count, "validation")
 
 
 def eval_expr(expr: str, a: int, b: int) -> int:
@@ -90,3 +120,8 @@ def evaluate_expression(expr: str, cases: list[BenchmarkCase] | None = None) -> 
         except Exception as exc:
             errors.append(f"{case.name}: {exc}")
     return BenchmarkResult(passed, len(cases), time.perf_counter() - start, errors[:10])
+
+
+def evaluate_expression_split(expr: str) -> SplitBenchmarkResult:
+    train, validation = split_cases()
+    return SplitBenchmarkResult(evaluate_expression(expr, train), evaluate_expression(expr, validation))
