@@ -1,1 +1,87 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AutoIncome Forge v8</title><style>body{font-family:system-ui;margin:0;background:#f6f8fc;color:#121722}.page{width:min(1000px,92vw);margin:0 auto;padding:40px 0}.hero,.card{background:white;border:1px solid #e4e8f0;border-radius:24px;padding:28px;margin-bottom:18px}.eyebrow{text-transform:uppercase;letter-spacing:.12em;color:#2864d9;font-weight:800;font-size:.78rem}h1{font-size:clamp(2rem,6vw,4rem);line-height:1.04}.button{display:inline-block;background:#2864d9;color:white;padding:12px 16px;border-radius:999px;text-decoration:none;font-weight:800}.notice{border-left:4px solid #2864d9;background:#edf4ff;padding:12px 14px;border-radius:12px}pre{white-space:pre-wrap;background:#101827;color:white;padding:18px;border-radius:14px}</style></head><body><main class="page"><section class="hero"><p class="eyebrow">AutoIncome Forge v8</p><h1>Autonomous fulfillment system</h1><p>Safe digital bounty fulfillment with worker completion, quality review, packaged deliverables, invoices, client status pages, and release gates.</p><p class="notice">This is the public front door. Private worker files stay in the repository package until connected to hosting and payment providers.</p><p><a class="button" href="#offer">View offer</a></p></section><section class="card"><h2>Production loop</h2><pre>Bounty -> worker completes package -> quality review -> package manifest -> invoice -> client status page -> release queue -> approval gate</pre></section><section class="card" id="offer"><h2>Offer</h2><p>I build simple automation workflows for local service businesses: lead intake, quote templates, booking workflows, follow-up sequences, invoice reminders, and SOPs.</p></section></main></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AutoIncome Forge v8 — Local Service Automation Fulfillment</title>
+  <meta name="description" content="Done-for-you automation workflows for local service businesses: lead intake, quote templates, booking workflows, follow-ups, invoice reminders, SOPs, and fulfillment packages.">
+  <meta property="og:title" content="AutoIncome Forge v8">
+  <meta property="og:description" content="Safe digital bounty fulfillment for local service automation workflows.">
+  <meta property="og:type" content="website">
+  <style>
+    :root{--bg:#f5f8ff;--ink:#101624;--muted:#5d6880;--line:#dfe7f5;--card:#ffffff;--blue:#2167e8;--blue2:#0f48b8;--soft:#eaf2ff;--green:#0b7a4b;--dark:#101827;--shadow:0 18px 55px rgba(16,22,36,.10)}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:radial-gradient(circle at top left,#dbeafe 0,#f5f8ff 34%,#ffffff 100%);color:var(--ink)}
+    a{color:inherit}.page{width:min(1120px,92vw);margin:0 auto;padding:28px 0 56px}.nav{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:28px}.brand{display:flex;align-items:center;gap:10px;font-weight:900}.mark{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,var(--blue),#73a7ff);box-shadow:var(--shadow)}.navlinks{display:flex;gap:12px;flex-wrap:wrap}.navlinks a{text-decoration:none;color:var(--muted);font-weight:750;font-size:.95rem}.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:22px;align-items:stretch}.panel,.card{background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:28px;padding:30px;box-shadow:var(--shadow);backdrop-filter:blur(10px)}.eyebrow{color:var(--blue);text-transform:uppercase;letter-spacing:.14em;font-size:.78rem;font-weight:900;margin:0 0 12px}h1{font-size:clamp(2.4rem,6.8vw,5.2rem);line-height:.96;letter-spacing:-.07em;margin:0 0 18px}h2{font-size:clamp(1.55rem,3vw,2.35rem);letter-spacing:-.04em;margin:0 0 12px}h3{margin:0 0 8px;font-size:1.05rem}.lead{font-size:1.18rem;line-height:1.6;color:#344057;max-width:720px}.muted{color:var(--muted);line-height:1.65}.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}.button{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 18px;border-radius:999px;background:var(--blue);color:white;text-decoration:none;font-weight:900;box-shadow:0 12px 30px rgba(33,103,232,.22)}.button:hover{background:var(--blue2)}.secondary{background:white;color:var(--blue);border:1px solid var(--line);box-shadow:none}.notice{background:var(--soft);border:1px solid #cfe0ff;border-left:5px solid var(--blue);padding:14px 16px;border-radius:16px;color:#23324d;line-height:1.55}.terminal{background:var(--dark);color:#e8f0ff;border-radius:22px;padding:22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.7;min-height:100%}.terminal .ok{color:#71f3ad}.terminal .wait{color:#ffd166}.grid{display:grid;gap:16px}.three{grid-template-columns:repeat(3,1fr)}.two{grid-template-columns:repeat(2,1fr)}.section{margin-top:18px}.mini{padding:20px;border-radius:22px;background:var(--card);border:1px solid var(--line)}.pill{display:inline-block;background:var(--soft);color:var(--blue);padding:6px 10px;border-radius:999px;font-weight:900;font-size:.8rem;margin-bottom:10px}.price{font-size:2rem;font-weight:950;letter-spacing:-.04em}.list{padding-left:20px}.list li{margin:.55em 0;line-height:1.5}.steps{counter-reset:step}.step{position:relative;padding-left:58px}.step:before{counter-increment:step;content:counter(step);position:absolute;left:0;top:18px;width:38px;height:38px;border-radius:14px;background:var(--blue);color:white;display:grid;place-items:center;font-weight:950}.footer{padding:28px 0;color:var(--muted);font-size:.95rem}.status{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}.status div{padding:16px;border-radius:18px;border:1px solid var(--line);background:white}.status strong{display:block;font-size:1.2rem}.green{color:var(--green)}
+    @media(max-width:850px){.hero,.two,.three,.status{grid-template-columns:1fr}.nav{align-items:flex-start;flex-direction:column}h1{letter-spacing:-.055em}.panel,.card{padding:22px}.navlinks{font-size:.92rem}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <nav class="nav" aria-label="Main navigation">
+      <div class="brand"><span class="mark"></span><span>AutoIncome Forge v8</span></div>
+      <div class="navlinks"><a href="#offer">Offer</a><a href="#process">Process</a><a href="#packages">Packages</a><a href="#start">Start</a></div>
+    </nav>
+
+    <section class="hero">
+      <div class="panel">
+        <p class="eyebrow">Local service automation fulfillment</p>
+        <h1>Turn service chaos into clean workflows.</h1>
+        <p class="lead">I build practical automation packages for local service businesses: lead intake, quote templates, booking workflows, follow-up sequences, invoice reminders, SOPs, and client-ready handoff files.</p>
+        <p class="notice">Built for useful digital delivery. No spam, scraping, account access, fake reviews, or guaranteed-income claims. The system prepares finished packages behind payment and human-review gates.</p>
+        <div class="actions">
+          <a class="button" href="mailto:above.beyond.4north@gmail.com?subject=Start%20a%20bounty%20-%20AutoIncome%20Forge&body=Business%20type%3A%0AWhat%20I%20need%20built%3A%0ADeadline%3A%0ABudget%3A%0ABest%20contact%3A">Start a bounty</a>
+          <a class="button secondary" href="#packages">See packages</a>
+        </div>
+      </div>
+      <div class="terminal" aria-label="Fulfillment loop">
+        <div><span class="ok">✓</span> Bounty received</div>
+        <div><span class="ok">✓</span> Safety scan</div>
+        <div><span class="ok">✓</span> Work type classified</div>
+        <div><span class="ok">✓</span> Deliverables generated</div>
+        <div><span class="ok">✓</span> Quality review scored</div>
+        <div><span class="ok">✓</span> Package zipped + hashed</div>
+        <div><span class="wait">→</span> Payment / approval gate</div>
+      </div>
+    </section>
+
+    <section class="section status" aria-label="System status">
+      <div><strong class="green">Safe</strong><span class="muted">bounded workflow</span></div>
+      <div><strong>ZIP</strong><span class="muted">deliverable packages</span></div>
+      <div><strong>80+</strong><span class="muted">quality target</span></div>
+      <div><strong>Gated</strong><span class="muted">release control</span></div>
+    </section>
+
+    <section class="section grid three" id="offer">
+      <div class="mini"><span class="pill">Lead intake</span><h3>Capture the right details</h3><p class="muted">Forms, message templates, customer questions, and internal summaries so a business can quote faster.</p></div>
+      <div class="mini"><span class="pill">Booking</span><h3>Reduce back-and-forth</h3><p class="muted">Appointment workflows, confirmation copy, prep instructions, and reminder rules.</p></div>
+      <div class="mini"><span class="pill">Follow-up</span><h3>Recover missed opportunities</h3><p class="muted">Polite sequences for warm leads, unpaid invoices, estimates, and stalled conversations.</p></div>
+    </section>
+
+    <section class="section card" id="process">
+      <p class="eyebrow">Process</p>
+      <h2>A simple fulfillment pipeline</h2>
+      <div class="grid two steps">
+        <div class="mini step"><h3>Submit the bounty</h3><p class="muted">Send business type, outcome, deadline, and budget.</p></div>
+        <div class="mini step"><h3>Build the package</h3><p class="muted">The worker creates workflows, templates, checklists, and handoff files.</p></div>
+        <div class="mini step"><h3>Review quality</h3><p class="muted">Files are checked for completeness, clarity, safety, and readiness.</p></div>
+        <div class="mini step"><h3>Release after gates</h3><p class="muted">Delivery waits for payment confirmation and human approval.</p></div>
+      </div>
+    </section>
+
+    <section class="section grid three" id="packages">
+      <div class="card"><span class="pill">Starter</span><h2>Template Pack</h2><div class="price">CAD 75+</div><ul class="list"><li>One workflow</li><li>Copy/paste templates</li><li>Checklist</li></ul></div>
+      <div class="card"><span class="pill">Best first move</span><h2>Service Workflow</h2><div class="price">CAD 150+</div><ul class="list"><li>Lead intake</li><li>Quote or booking flow</li><li>Handoff package</li></ul></div>
+      <div class="card"><span class="pill">Expanded</span><h2>Fulfillment Kit</h2><div class="price">CAD 250+</div><ul class="list"><li>Multiple workflows</li><li>Status page copy</li><li>Implementation plan</li></ul></div>
+    </section>
+
+    <section class="section card" id="start">
+      <p class="eyebrow">Start now</p>
+      <h2>Send one clear bounty request.</h2>
+      <p class="muted">Best first target: a junk removal, cleaning, landscaping, moving, contractor, or auto-detailing workflow. Keep the first job narrow so it can be completed cleanly.</p>
+      <div class="actions"><a class="button" href="mailto:above.beyond.4north@gmail.com?subject=Start%20a%20bounty%20-%20AutoIncome%20Forge&body=Business%20type%3A%0AWhat%20I%20need%20built%3A%0ADeadline%3A%0ABudget%3A%0ABest%20contact%3A">Start a bounty by email</a></div>
+    </section>
+
+    <footer class="footer">AutoIncome Forge v8 — safe digital fulfillment for practical local service automation.</footer>
+  </main>
+</body>
+</html>
