@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   issues: write
+  actions: read
 
 jobs:
   bounty-worker:
@@ -20,6 +21,20 @@ jobs:
       - name: Run safe bounty worker
         if: github.event_name != 'workflow_dispatch'
         run: python tools/bounty_worker.py
+
+      - name: Add workflow summary
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          echo "# AutoIncome Forge Bounty Worker" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          cat bounty-outputs/issue_comment.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload bounty artifact
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bounty-${{ github.event.issue.number }}-outputs
+          path: bounty-outputs
 
       - name: Commit bounty outputs
         if: github.event_name != 'workflow_dispatch'
