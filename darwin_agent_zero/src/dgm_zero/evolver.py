@@ -25,8 +25,9 @@ from .tools import ToolRegistry, default_registry
 SEED_EXPRESSIONS = [
     "a + b",
     "a * a + b",
+    "a * a + 2 * b",
     "a * a + 3 * b",
-    "a * a + 3 * b - gcd(a, b)",
+    "a * a + 4 * b",
     "abs(a) + abs(b)",
     "a * a - gcd(a, b)",
     "a * a + b + b + b",
