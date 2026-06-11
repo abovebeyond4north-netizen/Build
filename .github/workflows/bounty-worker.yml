@@ -1,0 +1,65 @@
+name: Autonomous Bounty Worker
+
+on:
+  issues:
+    types: [opened, edited, reopened, labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  bounty-worker:
+    if: contains(github.event.issue.title, '[BOUNTY]') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run safe bounty worker
+        if: github.event_name != 'workflow_dispatch'
+        run: python tools/bounty_worker.py
+
+      - name: Commit bounty outputs
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          git config user.name "autoincome-forge-worker"
+          git config user.email "actions@github.com"
+          git add bounty-outputs || true
+          git diff --cached --quiet || git commit -m "Complete bounty #${{ github.event.issue.number }}"
+          git push || true
+
+      - name: Comment on issue
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const comment = fs.readFileSync('bounty-outputs/issue_comment.md', 'utf8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+
+      - name: Add completion labels
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const result = JSON.parse(fs.readFileSync('bounty-outputs/worker_result.json', 'utf8'));
+            let labels = [];
+            if (result.status === 'claimed_and_completed') labels = ['bounty:claimed', 'bounty:completed', 'needs-human-release'];
+            if (result.status === 'needs_human_review') labels = ['bounty:needs-human-review'];
+            if (result.status === 'rejected_by_worker') labels = ['bounty:blocked'];
+            if (labels.length) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels
+              });
+            }
