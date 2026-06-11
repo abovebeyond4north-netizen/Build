@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "darwin-agent-zero"
+version = "0.1.0"
+description = "Safe local Darwinian Gödel machine prototype for bounded tool evolution"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Code" }]
+dependencies = []
+
+[project.scripts]
+dgm-zero = "dgm_zero.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
