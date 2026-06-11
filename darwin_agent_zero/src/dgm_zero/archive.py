@@ -6,6 +6,8 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .signature import expression_signature
+
 
 @dataclass(frozen=True)
 class ArchiveRecord:
@@ -17,6 +19,8 @@ class ArchiveRecord:
     accepted: bool
     reason: str
     created_at: float
+    signature: str | None = None
+    bucket: str | None = None
 
 
 class Archive:
@@ -41,6 +45,7 @@ class Archive:
         accepted: bool,
         reason: str,
     ) -> ArchiveRecord:
+        signature = expression_signature(expression)
         record = ArchiveRecord(
             id=self.make_id(expression, generation),
             generation=generation,
@@ -50,6 +55,8 @@ class Archive:
             accepted=accepted,
             reason=reason,
             created_at=time.time(),
+            signature=signature.digest,
+            bucket=signature.bucket,
         )
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(asdict(record), sort_keys=True) + "\n")
@@ -75,23 +82,30 @@ class Archive:
             return None
         return max(accepted, key=lambda record: record.score.get("weighted_total", 0.0))
 
-    def novelty(self, expression: str) -> float:
-        """Reward expressions that differ from the archive.
+    def elites_by_bucket(self) -> dict[str, ArchiveRecord]:
+        """Return the best accepted record in each behaviour bucket."""
 
-        Cheap string-level novelty is enough for the seed prototype. Future builds
-        can replace this with AST edit distance, behaviour embeddings, or MAP-Elites.
-        """
+        elites: dict[str, ArchiveRecord] = {}
+        for record in self.accepted():
+            bucket = record.bucket or "unknown"
+            current = elites.get(bucket)
+            if current is None or record.score.get("weighted_total", 0.0) > current.score.get("weighted_total", 0.0):
+                elites[bucket] = record
+        return elites
+
+    def novelty(self, expression: str) -> float:
+        """Reward expressions that differ in source and behaviour."""
 
         records = self.records()
         if not records:
             return 1.0
         tokens = set(expression.replace("(", " ").replace(")", " ").split())
+        signature = expression_signature(expression)
         distances: list[float] = []
         for record in records[-50:]:
             other = set(record.expression.replace("(", " ").replace(")", " ").split())
             union = tokens | other
-            if not union:
-                distances.append(0.0)
-            else:
-                distances.append(1.0 - len(tokens & other) / len(union))
+            token_distance = 0.0 if not union else 1.0 - len(tokens & other) / len(union)
+            behaviour_distance = 0.0 if record.signature == signature.digest else 1.0
+            distances.append((token_distance + behaviour_distance) / 2.0)
         return max(0.0, min(1.0, sum(distances) / len(distances)))
