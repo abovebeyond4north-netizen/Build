@@ -6,6 +6,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .archive import Archive, ArchiveRecord
+from .benchmark import BenchmarkConfig
+from .curriculum import CurriculumManager, CurriculumState
 from .decision_matrix import DecisionMatrix
 from .map_elites import MAPElitesGrid
 from .memory import KnowledgeBank
@@ -46,6 +48,7 @@ class EvolutionConfig:
     seed: int = 11
     accept_threshold: float = 0.72
     elite_parent_limit: int = 16
+    curriculum_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -60,17 +63,13 @@ class EvolutionReport:
     elite_buckets: dict[str, str]
     map_elites_cells: int
     map_elites_path: str
+    curriculum: dict[str, object]
     registered_tools: list[str]
     recalled_tasks: list[str]
 
 
 class DarwinAgentZero:
-    """Bounded Darwinian Gödel loop for local tool evolution.
-
-    The prototype evolves arithmetic tool expressions rather than arbitrary code.
-    This keeps the loop safe while preserving the essential architecture: propose,
-    evaluate, score, archive, remember, and select from many stepping stones.
-    """
+    """Bounded Darwinian Godel loop for local tool evolution."""
 
     def __init__(self, workspace: Path, config: EvolutionConfig | None = None, registry: ToolRegistry | None = None) -> None:
         self.workspace = workspace
@@ -79,17 +78,35 @@ class DarwinAgentZero:
         self.config = config or EvolutionConfig()
         self.rng = random.Random(self.config.seed)
         self.matrix = DecisionMatrix(accept_threshold=self.config.accept_threshold)
-        self.oracle = EmpiricalGodelOracle(self.archive, self.matrix)
+        self.curriculum = CurriculumManager(workspace)
+        self.curriculum_state = self.curriculum.load()
+        self.oracle = self.make_oracle(self.curriculum_state)
         self.instructor = SelfInstructor(self.memory)
         self.registry = registry or default_registry()
         self.map_elites = MAPElitesGrid().build(self.archive.records())
+
+    def make_oracle(self, state: CurriculumState) -> EmpiricalGodelOracle:
+        level = state.current
+        benchmark_config = BenchmarkConfig(
+            value_min=level.value_min,
+            value_max=level.value_max,
+            train_count=level.train_count,
+            validation_count=level.validation_count,
+            adversarial_scale=level.adversarial_scale,
+        )
+        return EmpiricalGodelOracle(self.archive, self.matrix, benchmark_config)
 
     def run(self) -> EvolutionReport:
         parent: ArchiveRecord | None = self.archive.champion()
         for generation in range(self.config.generations):
             self.map_elites = MAPElitesGrid().build(self.archive.records())
             tasks = self.instructor.create_tasks(parent)
-            self.memory.deposit("generation", f"generation={generation}; tasks={len(tasks)}; elite_cells={len(self.map_elites.cells)}", 0.5)
+            level = self.curriculum_state.current
+            self.memory.deposit(
+                "generation",
+                f"generation={generation}; tasks={len(tasks)}; elite_cells={len(self.map_elites.cells)}; curriculum_level={level.level}",
+                0.5,
+            )
             candidates = self.self_instruct(parent, generation)
             for expr in candidates[: self.config.population]:
                 record = self.evaluate_and_archive(expr, parent, generation)
@@ -101,6 +118,12 @@ class DarwinAgentZero:
             self.write_champion(champion)
             self.memory.deposit("champion", champion.expression, champion.score.get("weighted_total", 0.0))
         self.memory.prune()
+        champion_total = champion.score.get("weighted_total", 0.0) if champion else None
+        if self.config.curriculum_enabled:
+            self.curriculum_state = self.curriculum.update_after_run(champion_total)
+            self.oracle = self.make_oracle(self.curriculum_state)
+        else:
+            self.curriculum.save(self.curriculum_state)
         self.map_elites = MAPElitesGrid().build(self.archive.records())
         map_path = self.workspace / "map_elites.json"
         self.map_elites.write(map_path)
@@ -116,6 +139,7 @@ class DarwinAgentZero:
             elite_buckets={bucket: record.id for bucket, record in sorted(elites.items())},
             map_elites_cells=len(self.map_elites.cells),
             map_elites_path=str(map_path),
+            curriculum=asdict(self.curriculum_state),
             registered_tools=self.registry.names(),
             recalled_tasks=[entry.content for entry in self.memory.recall("task", limit=5)],
         )
@@ -123,8 +147,6 @@ class DarwinAgentZero:
         return report
 
     def select_parent(self) -> ArchiveRecord | None:
-        """Select from MAP-Elites cells so evolution uses diverse stepping stones."""
-
         accepted = self.archive.accepted()
         if not accepted:
             return None
@@ -135,8 +157,6 @@ class DarwinAgentZero:
         return self.rng.choice(pool)
 
     def self_instruct(self, parent: ArchiveRecord | None, generation: int) -> list[str]:
-        """Generate improvement candidates from champion, MAP-Elites, seeds, and memory."""
-
         if parent is None:
             base_pool = SEED_EXPRESSIONS[:]
         else:
