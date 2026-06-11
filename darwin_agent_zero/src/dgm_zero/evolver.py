@@ -17,6 +17,7 @@ from .memory import KnowledgeBank
 from .meta_learning import MetaLearner, MetaLearningPolicy
 from .metacognition import CognitiveState, MetacognitiveMonitor
 from .oracle import EmpiricalGodelOracle
+from .provenance import ProvenanceRecorder
 from .self_instruction import SelfInstructor
 from .sota_methods import UCBOperatorBandit, pareto_front, regret, uncertainty_score
 from .tools import ToolRegistry, default_registry
@@ -87,6 +88,7 @@ class EvolutionReport:
     operator_bandit_path: str
     health_path: str
     checkpoint: dict[str, object]
+    provenance_path: str
     registered_tools: list[str]
     recalled_tasks: list[str]
 
@@ -107,6 +109,7 @@ class DarwinAgentZero:
         self.meta_learner = MetaLearner()
         self.health_auditor = RunHealthAuditor()
         self.checkpoints = CheckpointManager(workspace)
+        self.provenance = ProvenanceRecorder(Path(__file__).resolve().parents[2], workspace)
         self.bandit_path = self.workspace / "operator_bandit.json"
         self.operator_bandit = UCBOperatorBandit.load(self.bandit_path, OPERATORS)
         self.cognitive_state = self.assess_self()
@@ -190,6 +193,7 @@ class DarwinAgentZero:
         map_path = self.workspace / "map_elites.json"
         self.map_elites.write(map_path)
         health_path = self.workspace / "health_report.json"
+        provenance_path = self.workspace / "provenance.json"
         elites = self.archive.elites_by_bucket()
         preliminary = EvolutionReport(
             generations=self.config.generations,
@@ -211,6 +215,7 @@ class DarwinAgentZero:
             operator_bandit_path=str(self.bandit_path),
             health_path=str(health_path),
             checkpoint={},
+            provenance_path=str(provenance_path),
             registered_tools=self.registry.names(),
             recalled_tasks=[entry.content for entry in self.memory.recall("task", limit=5)],
         )
@@ -219,6 +224,8 @@ class DarwinAgentZero:
         checkpoint = self.checkpoints.save_if_healthy(health_path)
         report = EvolutionReport(**{**asdict(preliminary), "checkpoint": asdict(checkpoint)})
         (self.workspace / "evolution_report.json").write_text(json.dumps(asdict(report), indent=2), encoding="utf-8")
+        manifest = self.provenance.build(self.config)
+        self.provenance.write(provenance_path, manifest)
         return report
 
     def select_parent(self) -> ArchiveRecord | None:
