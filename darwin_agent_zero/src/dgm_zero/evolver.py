@@ -221,11 +221,11 @@ class DarwinAgentZero:
         )
         health = self.health_auditor.audit(preliminary)
         self.health_auditor.write(health_path, health)
+        self.provenance.write(provenance_path, self.provenance.build(self.config))
         checkpoint = self.checkpoints.save_if_healthy(health_path)
         report = EvolutionReport(**{**asdict(preliminary), "checkpoint": asdict(checkpoint)})
         (self.workspace / "evolution_report.json").write_text(json.dumps(asdict(report), indent=2), encoding="utf-8")
-        manifest = self.provenance.build(self.config)
-        self.provenance.write(provenance_path, manifest)
+        self.provenance.write(provenance_path, self.provenance.build(self.config))
         return report
 
     def select_parent(self) -> ArchiveRecord | None:
