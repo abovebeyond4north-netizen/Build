@@ -56,11 +56,7 @@ class CheckpointManager:
         copied: list[str] = []
         if healthy:
             target.mkdir(parents=True, exist_ok=True)
-            for name in SNAPSHOT_FILES:
-                src = self.workspace / name
-                if src.exists() and src.is_file():
-                    shutil.copy2(src, target / name)
-                    copied.append(name)
+            copied = self._copy_snapshot_files(target)
         manifest = CheckpointManifest(
             checkpoint_id=checkpoint_id,
             path=str(target),
@@ -71,6 +67,26 @@ class CheckpointManager:
         )
         self._write_manifest(manifest)
         return manifest
+
+    def refresh(self, manifest: CheckpointManifest) -> CheckpointManifest:
+        """Refresh a healthy checkpoint after final artifacts are written."""
+
+        if not manifest.healthy:
+            self._write_manifest(manifest)
+            return manifest
+        target = Path(manifest.path)
+        target.mkdir(parents=True, exist_ok=True)
+        copied = self._copy_snapshot_files(target)
+        refreshed = CheckpointManifest(
+            checkpoint_id=manifest.checkpoint_id,
+            path=manifest.path,
+            created_at=manifest.created_at,
+            healthy=manifest.healthy,
+            copied_files=copied,
+            reason=manifest.reason,
+        )
+        self._write_manifest(refreshed)
+        return refreshed
 
     def restore_latest(self) -> RestoreReport:
         manifest = self.latest_manifest()
@@ -101,6 +117,15 @@ class CheckpointManager:
             return None
         data = json.loads(manifests[0].read_text(encoding="utf-8"))
         return CheckpointManifest(**data)
+
+    def _copy_snapshot_files(self, target: Path) -> list[str]:
+        copied: list[str] = []
+        for name in SNAPSHOT_FILES:
+            src = self.workspace / name
+            if src.exists() and src.is_file():
+                shutil.copy2(src, target / name)
+                copied.append(name)
+        return copied
 
     def _read_health(self, path: Path) -> tuple[bool, str]:
         if not path.exists():
