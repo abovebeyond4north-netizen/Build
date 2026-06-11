@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .archive import Archive
-from .benchmark import BenchmarkResult, evaluate_expression
+from .benchmark import SplitBenchmarkResult, evaluate_expression_split
 from .decision_matrix import CandidateScore, DecisionMatrix
 from .safety import SafetyReport, scan_source
 
@@ -13,7 +13,7 @@ class OracleDecision:
     expression: str
     accepted: bool
     reason: str
-    benchmark: BenchmarkResult
+    benchmark: SplitBenchmarkResult
     safety: SafetyReport
     score: CandidateScore
 
@@ -23,7 +23,7 @@ class EmpiricalGodelOracle:
 
     A classical Gödel machine waits for a formal proof that a rewrite improves
     utility. This practical gate accepts a smaller promise: bounded evidence from
-    tests, safety checks, and the decision matrix.
+    train/validation tests, safety checks, and the decision matrix.
     """
 
     def __init__(self, archive: Archive, matrix: DecisionMatrix | None = None) -> None:
@@ -33,9 +33,10 @@ class EmpiricalGodelOracle:
     def judge(self, expression: str, parent_total: float | None = None) -> OracleDecision:
         source = f"def solve(a, b):\n    return {expression}\n"
         safety = scan_source(source)
-        benchmark = evaluate_expression(expression)
+        benchmark = evaluate_expression_split(expression)
         simplicity = max(0.0, min(1.0, 1.0 - (len(expression) / 240.0)))
-        generalization = 1.0 if benchmark.correctness >= 0.95 else benchmark.correctness * 0.85
+        validation_bonus = 1.0 if benchmark.validation.correctness >= 0.95 else benchmark.validation.correctness * 0.85
+        generalization = min(benchmark.train.correctness, validation_bonus)
         score = self.matrix.score(
             {
                 "correctness": benchmark.correctness,
