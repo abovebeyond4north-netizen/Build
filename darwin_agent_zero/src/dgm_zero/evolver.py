@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .archive import Archive, ArchiveRecord
 from .benchmark import BenchmarkConfig
+from .case_miner import CaseMiner
 from .curriculum import CurriculumManager, CurriculumState
 from .decision_matrix import DecisionMatrix
 from .map_elites import MAPElitesGrid
@@ -49,6 +50,7 @@ class EvolutionConfig:
     accept_threshold: float = 0.72
     elite_parent_limit: int = 16
     curriculum_enabled: bool = True
+    mined_case_limit: int = 24
 
 
 @dataclass(frozen=True)
@@ -64,6 +66,8 @@ class EvolutionReport:
     map_elites_cells: int
     map_elites_path: str
     curriculum: dict[str, object]
+    mined_cases: int
+    mined_cases_path: str
     registered_tools: list[str]
     recalled_tasks: list[str]
 
@@ -80,10 +84,18 @@ class DarwinAgentZero:
         self.matrix = DecisionMatrix(accept_threshold=self.config.accept_threshold)
         self.curriculum = CurriculumManager(workspace)
         self.curriculum_state = self.curriculum.load()
+        self.mined_cases = self.mine_cases()
         self.oracle = self.make_oracle(self.curriculum_state)
         self.instructor = SelfInstructor(self.memory)
         self.registry = registry or default_registry()
         self.map_elites = MAPElitesGrid().build(self.archive.records())
+
+    def mine_cases(self):
+        level = self.curriculum_state.current
+        miner = CaseMiner(level.value_min, level.value_max, self.config.mined_case_limit)
+        cases = miner.mine(self.archive.records())
+        miner.write(self.workspace / "mined_cases.json", cases)
+        return tuple(cases)
 
     def make_oracle(self, state: CurriculumState) -> EmpiricalGodelOracle:
         level = state.current
@@ -94,17 +106,19 @@ class DarwinAgentZero:
             validation_count=level.validation_count,
             adversarial_scale=level.adversarial_scale,
         )
-        return EmpiricalGodelOracle(self.archive, self.matrix, benchmark_config)
+        return EmpiricalGodelOracle(self.archive, self.matrix, benchmark_config, self.mined_cases)
 
     def run(self) -> EvolutionReport:
         parent: ArchiveRecord | None = self.archive.champion()
         for generation in range(self.config.generations):
             self.map_elites = MAPElitesGrid().build(self.archive.records())
+            self.mined_cases = self.mine_cases()
+            self.oracle = self.make_oracle(self.curriculum_state)
             tasks = self.instructor.create_tasks(parent)
             level = self.curriculum_state.current
             self.memory.deposit(
                 "generation",
-                f"generation={generation}; tasks={len(tasks)}; elite_cells={len(self.map_elites.cells)}; curriculum_level={level.level}",
+                f"generation={generation}; tasks={len(tasks)}; elite_cells={len(self.map_elites.cells)}; curriculum_level={level.level}; mined_cases={len(self.mined_cases)}",
                 0.5,
             )
             candidates = self.self_instruct(parent, generation)
@@ -121,6 +135,7 @@ class DarwinAgentZero:
         champion_total = champion.score.get("weighted_total", 0.0) if champion else None
         if self.config.curriculum_enabled:
             self.curriculum_state = self.curriculum.update_after_run(champion_total)
+            self.mined_cases = self.mine_cases()
             self.oracle = self.make_oracle(self.curriculum_state)
         else:
             self.curriculum.save(self.curriculum_state)
@@ -140,6 +155,8 @@ class DarwinAgentZero:
             map_elites_cells=len(self.map_elites.cells),
             map_elites_path=str(map_path),
             curriculum=asdict(self.curriculum_state),
+            mined_cases=len(self.mined_cases),
+            mined_cases_path=str(self.workspace / "mined_cases.json"),
             registered_tools=self.registry.names(),
             recalled_tasks=[entry.content for entry in self.memory.recall("task", limit=5)],
         )
