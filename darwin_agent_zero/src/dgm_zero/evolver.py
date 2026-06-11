@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .archive import Archive, ArchiveRecord
 from .decision_matrix import DecisionMatrix
+from .map_elites import MAPElitesGrid
 from .memory import KnowledgeBank
 from .oracle import EmpiricalGodelOracle
 from .self_instruction import SelfInstructor
@@ -44,6 +45,7 @@ class EvolutionConfig:
     population: int = 6
     seed: int = 11
     accept_threshold: float = 0.72
+    elite_parent_limit: int = 16
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,8 @@ class EvolutionReport:
     champion_expression: str | None
     champion_score: dict[str, float] | None
     elite_buckets: dict[str, str]
+    map_elites_cells: int
+    map_elites_path: str
     registered_tools: list[str]
     recalled_tasks: list[str]
 
@@ -65,7 +69,7 @@ class DarwinAgentZero:
 
     The prototype evolves arithmetic tool expressions rather than arbitrary code.
     This keeps the loop safe while preserving the essential architecture: propose,
-    evaluate, score, archive, remember, and select from prior stepping stones.
+    evaluate, score, archive, remember, and select from many stepping stones.
     """
 
     def __init__(self, workspace: Path, config: EvolutionConfig | None = None, registry: ToolRegistry | None = None) -> None:
@@ -78,22 +82,28 @@ class DarwinAgentZero:
         self.oracle = EmpiricalGodelOracle(self.archive, self.matrix)
         self.instructor = SelfInstructor(self.memory)
         self.registry = registry or default_registry()
+        self.map_elites = MAPElitesGrid().build(self.archive.records())
 
     def run(self) -> EvolutionReport:
         parent: ArchiveRecord | None = self.archive.champion()
         for generation in range(self.config.generations):
+            self.map_elites = MAPElitesGrid().build(self.archive.records())
             tasks = self.instructor.create_tasks(parent)
-            self.memory.deposit("generation", f"generation={generation}; tasks={len(tasks)}", 0.5)
+            self.memory.deposit("generation", f"generation={generation}; tasks={len(tasks)}; elite_cells={len(self.map_elites.cells)}", 0.5)
             candidates = self.self_instruct(parent, generation)
             for expr in candidates[: self.config.population]:
-                self.evaluate_and_archive(expr, parent, generation)
-            parent = self.archive.champion()
+                record = self.evaluate_and_archive(expr, parent, generation)
+                self.map_elites.add(record)
+            parent = self.select_parent()
 
         champion = self.archive.champion()
         if champion:
             self.write_champion(champion)
             self.memory.deposit("champion", champion.expression, champion.score.get("weighted_total", 0.0))
         self.memory.prune()
+        self.map_elites = MAPElitesGrid().build(self.archive.records())
+        map_path = self.workspace / "map_elites.json"
+        self.map_elites.write(map_path)
         elites = self.archive.elites_by_bucket()
         report = EvolutionReport(
             generations=self.config.generations,
@@ -104,23 +114,37 @@ class DarwinAgentZero:
             champion_expression=champion.expression if champion else None,
             champion_score=champion.score if champion else None,
             elite_buckets={bucket: record.id for bucket, record in sorted(elites.items())},
+            map_elites_cells=len(self.map_elites.cells),
+            map_elites_path=str(map_path),
             registered_tools=self.registry.names(),
             recalled_tasks=[entry.content for entry in self.memory.recall("task", limit=5)],
         )
         (self.workspace / "evolution_report.json").write_text(json.dumps(asdict(report), indent=2), encoding="utf-8")
         return report
 
+    def select_parent(self) -> ArchiveRecord | None:
+        """Select from MAP-Elites cells so evolution uses diverse stepping stones."""
+
+        accepted = self.archive.accepted()
+        if not accepted:
+            return None
+        elite_ids = {cell.record_id for cell in self.map_elites.cells.values()}
+        elite_records = [record for record in accepted if record.id in elite_ids]
+        pool = elite_records or accepted
+        pool = sorted(pool, key=lambda record: record.score.get("weighted_total", 0.0), reverse=True)[: self.config.elite_parent_limit]
+        return self.rng.choice(pool)
+
     def self_instruct(self, parent: ArchiveRecord | None, generation: int) -> list[str]:
-        """Generate improvement candidates from champion, elites, seeds, and memory."""
+        """Generate improvement candidates from champion, MAP-Elites, seeds, and memory."""
 
         if parent is None:
             base_pool = SEED_EXPRESSIONS[:]
         else:
             base_pool = [parent.expression] + SEED_EXPRESSIONS
 
-        for elite in self.archive.elites_by_bucket().values():
-            if elite.expression not in base_pool:
-                base_pool.append(elite.expression)
+        for expression in self.map_elites.elite_expressions(limit=self.config.elite_parent_limit):
+            if expression not in base_pool:
+                base_pool.append(expression)
 
         for memory in self.memory.recall("champion", limit=3):
             if memory.content not in base_pool:
