@@ -31,8 +31,16 @@ class CheckpointManifest:
     reason: str
 
 
+@dataclass(frozen=True)
+class RestoreReport:
+    restored: bool
+    checkpoint_id: str | None
+    restored_files: list[str]
+    reason: str
+
+
 class CheckpointManager:
-    """Save last-known-good run artifacts for rollback and inspection."""
+    """Save and restore last-known-good run artifacts."""
 
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace
@@ -63,7 +71,30 @@ class CheckpointManager:
         self._write_manifest(manifest)
         return manifest
 
+    def restore_latest(self) -> RestoreReport:
+        manifest = self.latest_manifest()
+        if manifest is None:
+            return RestoreReport(False, None, [], "no_checkpoint_found")
+        if not manifest.healthy:
+            return RestoreReport(False, manifest.checkpoint_id, [], "latest_checkpoint_not_healthy")
+        checkpoint_path = Path(manifest.path)
+        if not checkpoint_path.exists():
+            return RestoreReport(False, manifest.checkpoint_id, [], "checkpoint_path_missing")
+        restored: list[str] = []
+        for name in manifest.copied_files:
+            src = checkpoint_path / name
+            if src.exists() and src.is_file():
+                shutil.copy2(src, self.workspace / name)
+                restored.append(name)
+        report = RestoreReport(True, manifest.checkpoint_id, restored, "restored_latest_healthy_checkpoint")
+        (self.root / "last_restore.json").write_text(json.dumps(asdict(report), indent=2, sort_keys=True), encoding="utf-8")
+        return report
+
     def latest_manifest(self) -> CheckpointManifest | None:
+        latest = self.root / "latest.json"
+        if latest.exists():
+            data = json.loads(latest.read_text(encoding="utf-8"))
+            return CheckpointManifest(**data)
         manifests = sorted(self.root.glob("*/manifest.json"), reverse=True)
         if not manifests:
             return None
