@@ -19,6 +19,8 @@ SEED_EXPRESSIONS = [
     "a * a + 3 * b",
     "a * a + 3 * b - gcd(a, b)",
     "abs(a) + abs(b)",
+    "a * a - gcd(a, b)",
+    "a * a + b + b + b",
 ]
 
 MUTATION_SNIPPETS = [
@@ -27,6 +29,7 @@ MUTATION_SNIPPETS = [
     " + b",
     " - b",
     " + 3 * b",
+    " + b + b + b",
     " - gcd(a, b)",
     " + gcd(a, b)",
     " + a * a",
@@ -52,6 +55,7 @@ class EvolutionReport:
     champion_id: str | None
     champion_expression: str | None
     champion_score: dict[str, float] | None
+    elite_buckets: dict[str, str]
     registered_tools: list[str]
     recalled_tasks: list[str]
 
@@ -90,6 +94,7 @@ class DarwinAgentZero:
             self.write_champion(champion)
             self.memory.deposit("champion", champion.expression, champion.score.get("weighted_total", 0.0))
         self.memory.prune()
+        elites = self.archive.elites_by_bucket()
         report = EvolutionReport(
             generations=self.config.generations,
             population=self.config.population,
@@ -98,6 +103,7 @@ class DarwinAgentZero:
             champion_id=champion.id if champion else None,
             champion_expression=champion.expression if champion else None,
             champion_score=champion.score if champion else None,
+            elite_buckets={bucket: record.id for bucket, record in sorted(elites.items())},
             registered_tools=self.registry.names(),
             recalled_tasks=[entry.content for entry in self.memory.recall("task", limit=5)],
         )
@@ -105,12 +111,16 @@ class DarwinAgentZero:
         return report
 
     def self_instruct(self, parent: ArchiveRecord | None, generation: int) -> list[str]:
-        """Generate improvement candidates from champion, seeds, and memory."""
+        """Generate improvement candidates from champion, elites, seeds, and memory."""
 
         if parent is None:
             base_pool = SEED_EXPRESSIONS[:]
         else:
             base_pool = [parent.expression] + SEED_EXPRESSIONS
+
+        for elite in self.archive.elites_by_bucket().values():
+            if elite.expression not in base_pool:
+                base_pool.append(elite.expression)
 
         for memory in self.memory.recall("champion", limit=3):
             if memory.content not in base_pool:
@@ -127,11 +137,13 @@ class DarwinAgentZero:
     def mutate(self, expression: str, generation: int) -> str:
         if generation % 4 == 0:
             return self.rng.choice(SEED_EXPRESSIONS)
-        mode = self.rng.choice(["wrap", "append", "replace"])
+        mode = self.rng.choice(["wrap", "append", "replace", "simplify"])
         if mode == "wrap":
             return f"({expression}){self.rng.choice(MUTATION_SNIPPETS)}"
         if mode == "append":
             return f"{expression}{self.rng.choice(MUTATION_SNIPPETS)}"
+        if mode == "simplify":
+            return expression.replace("b + b + b", "3 * b").replace("(a * a)", "a * a")
         return self.rng.choice(SEED_EXPRESSIONS)
 
     def evaluate_and_archive(self, expression: str, parent: ArchiveRecord | None, generation: int) -> ArchiveRecord:
