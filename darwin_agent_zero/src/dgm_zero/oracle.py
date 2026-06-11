@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .archive import Archive
-from .benchmark import SplitBenchmarkResult, evaluate_expression_split
+from .benchmark import BenchmarkConfig, SplitBenchmarkResult, evaluate_expression_split
 from .decision_matrix import CandidateScore, DecisionMatrix
 from .safety import SafetyReport, scan_source
 
@@ -26,14 +26,15 @@ class EmpiricalGodelOracle:
     train, validation, adversarial tests, safety checks, and the decision matrix.
     """
 
-    def __init__(self, archive: Archive, matrix: DecisionMatrix | None = None) -> None:
+    def __init__(self, archive: Archive, matrix: DecisionMatrix | None = None, benchmark_config: BenchmarkConfig | None = None) -> None:
         self.archive = archive
         self.matrix = matrix or DecisionMatrix()
+        self.benchmark_config = benchmark_config or BenchmarkConfig()
 
     def judge(self, expression: str, parent_total: float | None = None) -> OracleDecision:
         source = f"def solve(a, b):\n    return {expression}\n"
         safety = scan_source(source)
-        benchmark = evaluate_expression_split(expression)
+        benchmark = evaluate_expression_split(expression, self.benchmark_config)
         simplicity = max(0.0, min(1.0, 1.0 - (len(expression) / 240.0)))
         validation_bonus = 1.0 if benchmark.validation.correctness >= 0.95 else benchmark.validation.correctness * 0.85
         adversarial_bonus = 1.0 if benchmark.adversarial.correctness >= 0.95 else benchmark.adversarial.correctness * 0.75
