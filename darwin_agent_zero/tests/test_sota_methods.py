@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 from dgm_zero.sota_methods import UCBOperatorBandit, disagreement, pareto_front, regret, uncertainty_score
 
@@ -15,6 +17,17 @@ class SOTAMethodTests(unittest.TestCase):
         bandit.update(first, 1.0)
         second = bandit.choose()
         self.assertNotEqual(first, second)
+
+    def test_bandit_persists_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bandit.json"
+            bandit = UCBOperatorBandit(["wrap", "append"])
+            bandit.update("wrap", 0.75)
+            bandit.save(path)
+            loaded = UCBOperatorBandit.load(path, ["wrap", "append", "replace"])
+            self.assertEqual(loaded.arms["wrap"].pulls, 1)
+            self.assertAlmostEqual(loaded.arms["wrap"].reward_sum, 0.75)
+            self.assertIn("replace", loaded.arms)
 
     def test_pareto_front_keeps_non_dominated_records(self):
         weak = FakeRecord(correctness=0.2, novelty=0.1, simplicity=0.2, generalization=0.1)
