@@ -22,6 +22,25 @@ class CheckpointTests(unittest.TestCase):
             self.assertTrue(restored.restored)
             self.assertEqual((workspace / "archive.jsonl").read_text(encoding="utf-8"), "good\n")
 
+    def test_refresh_updates_checkpoint_with_final_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "health_report.json").write_text(json.dumps({"passed": True, "summary": "healthy"}), encoding="utf-8")
+            (workspace / "evolution_report.json").write_text(json.dumps({"phase": "preliminary"}), encoding="utf-8")
+            (workspace / "provenance.json").write_text(json.dumps({"phase": "preliminary"}), encoding="utf-8")
+            manager = CheckpointManager(workspace)
+            manifest = manager.save_if_healthy()
+
+            (workspace / "evolution_report.json").write_text(json.dumps({"phase": "final"}), encoding="utf-8")
+            (workspace / "provenance.json").write_text(json.dumps({"phase": "final"}), encoding="utf-8")
+            refreshed = manager.refresh(manifest)
+
+            checkpoint_path = Path(refreshed.path)
+            self.assertIn("evolution_report.json", refreshed.copied_files)
+            self.assertIn("provenance.json", refreshed.copied_files)
+            self.assertEqual(json.loads((checkpoint_path / "evolution_report.json").read_text(encoding="utf-8"))["phase"], "final")
+            self.assertEqual(json.loads((checkpoint_path / "provenance.json").read_text(encoding="utf-8"))["phase"], "final")
+
     def test_restore_without_checkpoint_fails_cleanly(self):
         with tempfile.TemporaryDirectory() as tmp:
             restored = CheckpointManager(Path(tmp)).restore_latest()
