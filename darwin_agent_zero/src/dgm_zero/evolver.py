@@ -43,6 +43,13 @@ MUTATION_SNIPPETS = [
     " - a",
     " + abs(b)",
 ]
+OPERATORS = ["wrap", "append", "replace", "simplify"]
+
+
+@dataclass(frozen=True)
+class Candidate:
+    expression: str
+    operator: str
 
 
 @dataclass(frozen=True)
@@ -74,6 +81,7 @@ class EvolutionReport:
     cognitive_state: dict[str, object]
     meta_policy: dict[str, float]
     operator_bandit: dict[str, dict[str, float]]
+    operator_bandit_path: str
     registered_tools: list[str]
     recalled_tasks: list[str]
 
@@ -92,8 +100,8 @@ class DarwinAgentZero:
         self.curriculum_state = self.curriculum.load()
         self.metacognition = MetacognitiveMonitor()
         self.meta_learner = MetaLearner()
-        self.operator_bandit = UCBOperatorBandit(["wrap", "append", "replace", "simplify"])
-        self.pending_operator = "replace"
+        self.bandit_path = self.workspace / "operator_bandit.json"
+        self.operator_bandit = UCBOperatorBandit.load(self.bandit_path, OPERATORS)
         self.cognitive_state = self.assess_self()
         self.meta_policy = self.meta_learner.policy_from_state(self.cognitive_state)
         self.mined_cases = self.mine_cases()
@@ -149,10 +157,11 @@ class DarwinAgentZero:
                 0.5,
             )
             candidates = self.self_instruct(parent, generation)
-            for expr in candidates[: self.config.population]:
-                record = self.evaluate_and_archive(expr, parent, generation)
+            for candidate in candidates[: self.config.population]:
+                record = self.evaluate_and_archive(candidate, parent, generation)
                 self.map_elites.add(record)
             parent = self.select_parent()
+            self.operator_bandit.save(self.bandit_path)
 
         champion = self.archive.champion()
         if champion:
@@ -166,6 +175,7 @@ class DarwinAgentZero:
             self.oracle = self.make_oracle(self.curriculum_state)
         else:
             self.curriculum.save(self.curriculum_state)
+        self.operator_bandit.save(self.bandit_path)
         self.map_elites = MAPElitesGrid().build(self.archive.records())
         self.cognitive_state = self.assess_self()
         self.meta_policy = self.meta_learner.policy_from_state(self.cognitive_state)
@@ -190,6 +200,7 @@ class DarwinAgentZero:
             cognitive_state=asdict(self.cognitive_state),
             meta_policy=asdict(self.meta_policy),
             operator_bandit=self.operator_bandit.snapshot(),
+            operator_bandit_path=str(self.bandit_path),
             registered_tools=self.registry.names(),
             recalled_tasks=[entry.content for entry in self.memory.recall("task", limit=5)],
         )
@@ -213,7 +224,7 @@ class DarwinAgentZero:
             return self.rng.choice(elite_records)
         return self.rng.choice(pool)
 
-    def self_instruct(self, parent: ArchiveRecord | None, generation: int) -> list[str]:
+    def self_instruct(self, parent: ArchiveRecord | None, generation: int) -> list[Candidate]:
         if parent is None:
             base_pool = SEED_EXPRESSIONS[:]
         else:
@@ -227,14 +238,14 @@ class DarwinAgentZero:
             if memory.content not in base_pool:
                 base_pool.append(memory.content)
 
-        candidates: list[str] = []
+        candidates: list[Candidate] = []
         expansion = max(1, int((self.config.population // 2) * self.meta_policy.exploration_bias))
         for base in base_pool:
-            candidates.append(base)
+            candidates.append(Candidate(base, "seed"))
             for _ in range(expansion):
                 candidates.append(self.mutate(base, generation))
         self.rng.shuffle(candidates)
-        return dedupe(candidates)
+        return dedupe_candidates(candidates)
 
     def choose_operator(self, generation: int) -> str:
         if generation % 4 == 0 and self.meta_policy.novelty_bias >= 1.0:
@@ -245,33 +256,33 @@ class DarwinAgentZero:
             return self.rng.choice(["simplify", self.operator_bandit.choose()])
         return self.operator_bandit.choose()
 
-    def mutate(self, expression: str, generation: int) -> str:
+    def mutate(self, expression: str, generation: int) -> Candidate:
         mode = self.choose_operator(generation)
-        self.pending_operator = mode
         if mode == "wrap":
-            return f"({expression}){self.rng.choice(MUTATION_SNIPPETS)}"
+            return Candidate(f"({expression}){self.rng.choice(MUTATION_SNIPPETS)}", mode)
         if mode == "append":
-            return f"{expression}{self.rng.choice(MUTATION_SNIPPETS)}"
+            return Candidate(f"{expression}{self.rng.choice(MUTATION_SNIPPETS)}", mode)
         if mode == "simplify":
-            return expression.replace("b + b + b", "3 * b").replace("(a * a)", "a * a")
-        return self.rng.choice(SEED_EXPRESSIONS)
+            return Candidate(expression.replace("b + b + b", "3 * b").replace("(a * a)", "a * a"), mode)
+        return Candidate(self.rng.choice(SEED_EXPRESSIONS), mode)
 
-    def evaluate_and_archive(self, expression: str, parent: ArchiveRecord | None, generation: int) -> ArchiveRecord:
+    def evaluate_and_archive(self, candidate: Candidate, parent: ArchiveRecord | None, generation: int) -> ArchiveRecord:
         parent_score = parent.score.get("weighted_total") if parent else None
-        decision = self.oracle.judge(expression, parent_total=parent_score)
+        decision = self.oracle.judge(candidate.expression, parent_total=parent_score)
         usefulness = decision.score.weighted_total
         loss = regret(parent_score, usefulness)
         reward = max(0.0, usefulness - loss)
-        self.operator_bandit.update(self.pending_operator, reward)
+        if candidate.operator != "seed":
+            self.operator_bandit.update(candidate.operator, reward)
         self.memory.deposit(
             "candidate",
-            f"operator={self.pending_operator}; reward={reward:.3f}; {expression} -> {decision.reason}",
+            f"operator={candidate.operator}; reward={reward:.3f}; {candidate.expression} -> {decision.reason}",
             usefulness,
         )
         return self.archive.append(
             generation=generation,
             parent_id=parent.id if parent else None,
-            expression=expression,
+            expression=candidate.expression,
             score=decision.score.as_dict(),
             accepted=decision.accepted,
             reason=decision.reason,
@@ -280,7 +291,7 @@ class DarwinAgentZero:
     def write_champion(self, champion: ArchiveRecord) -> None:
         code = "\n".join(
             [
-                '"""Best evolved tool from Darwin Agent Zero."""',
+                '\"\"\"Best evolved tool from Darwin Agent Zero.\"\"\"',
                 "",
                 "from math import gcd",
                 "",
@@ -293,11 +304,11 @@ class DarwinAgentZero:
         (self.workspace / "champion.py").write_text(code, encoding="utf-8")
 
 
-def dedupe(items: list[str]) -> list[str]:
+def dedupe_candidates(items: list[Candidate]) -> list[Candidate]:
     seen: set[str] = set()
-    output: list[str] = []
+    output: list[Candidate] = []
     for item in items:
-        if item not in seen:
-            seen.add(item)
+        if item.expression not in seen:
+            seen.add(item.expression)
             output.append(item)
     return output
