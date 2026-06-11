@@ -10,6 +10,7 @@ from .benchmark import BenchmarkConfig
 from .case_miner import CaseMiner
 from .curriculum import CurriculumManager, CurriculumState
 from .decision_matrix import DecisionMatrix
+from .health import RunHealthAuditor
 from .map_elites import MAPElitesGrid
 from .memory import KnowledgeBank
 from .meta_learning import MetaLearner, MetaLearningPolicy
@@ -82,6 +83,7 @@ class EvolutionReport:
     meta_policy: dict[str, float]
     operator_bandit: dict[str, dict[str, float]]
     operator_bandit_path: str
+    health_path: str
     registered_tools: list[str]
     recalled_tasks: list[str]
 
@@ -100,6 +102,7 @@ class DarwinAgentZero:
         self.curriculum_state = self.curriculum.load()
         self.metacognition = MetacognitiveMonitor()
         self.meta_learner = MetaLearner()
+        self.health_auditor = RunHealthAuditor()
         self.bandit_path = self.workspace / "operator_bandit.json"
         self.operator_bandit = UCBOperatorBandit.load(self.bandit_path, OPERATORS)
         self.cognitive_state = self.assess_self()
@@ -182,6 +185,7 @@ class DarwinAgentZero:
         self.metacognition.write(self.workspace / "cognitive_state.json", self.cognitive_state)
         map_path = self.workspace / "map_elites.json"
         self.map_elites.write(map_path)
+        health_path = self.workspace / "health_report.json"
         elites = self.archive.elites_by_bucket()
         report = EvolutionReport(
             generations=self.config.generations,
@@ -201,9 +205,12 @@ class DarwinAgentZero:
             meta_policy=asdict(self.meta_policy),
             operator_bandit=self.operator_bandit.snapshot(),
             operator_bandit_path=str(self.bandit_path),
+            health_path=str(health_path),
             registered_tools=self.registry.names(),
             recalled_tasks=[entry.content for entry in self.memory.recall("task", limit=5)],
         )
+        health = self.health_auditor.audit(report)
+        self.health_auditor.write(health_path, health)
         (self.workspace / "evolution_report.json").write_text(json.dumps(asdict(report), indent=2), encoding="utf-8")
         return report
 
