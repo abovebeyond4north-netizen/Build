@@ -23,7 +23,7 @@ class EmpiricalGodelOracle:
 
     A classical Gödel machine waits for a formal proof that a rewrite improves
     utility. This practical gate accepts a smaller promise: bounded evidence from
-    train/validation tests, safety checks, and the decision matrix.
+    train, validation, adversarial tests, safety checks, and the decision matrix.
     """
 
     def __init__(self, archive: Archive, matrix: DecisionMatrix | None = None) -> None:
@@ -36,7 +36,8 @@ class EmpiricalGodelOracle:
         benchmark = evaluate_expression_split(expression)
         simplicity = max(0.0, min(1.0, 1.0 - (len(expression) / 240.0)))
         validation_bonus = 1.0 if benchmark.validation.correctness >= 0.95 else benchmark.validation.correctness * 0.85
-        generalization = min(benchmark.train.correctness, validation_bonus)
+        adversarial_bonus = 1.0 if benchmark.adversarial.correctness >= 0.95 else benchmark.adversarial.correctness * 0.75
+        generalization = min(benchmark.train.correctness, validation_bonus, adversarial_bonus)
         score = self.matrix.score(
             {
                 "correctness": benchmark.correctness,
