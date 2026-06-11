@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import math
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Iterable, Protocol
 
 
@@ -20,7 +22,8 @@ class UCBOperatorBandit:
     """Upper-confidence-bound selector for mutation operators.
 
     Operators that have produced reward are reused, but uncertain operators still
-    get exploration chances. This gives the evolver a simple online meta-optimizer.
+    get exploration chances. The bandit can persist across runs so learning does
+    not reset every time the CLI is invoked.
     """
 
     def __init__(self, arms: Iterable[str], exploration: float = 1.4) -> None:
@@ -53,6 +56,30 @@ class UCBOperatorBandit:
             }
             for name, arm in sorted(self.arms.items())
         }
+
+    def save(self, path: Path) -> None:
+        payload = {
+            "exploration": self.exploration,
+            "arms": {name: asdict(arm) for name, arm in self.arms.items()},
+        }
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: Path, arms: Iterable[str], exploration: float = 1.4) -> "UCBOperatorBandit":
+        bandit = cls(arms, exploration=exploration)
+        if not path.exists():
+            return bandit
+        data = json.loads(path.read_text(encoding="utf-8"))
+        bandit.exploration = float(data.get("exploration", exploration))
+        for name, arm_data in data.get("arms", {}).items():
+            bandit.arms[name] = BanditArm(
+                name=name,
+                pulls=int(arm_data.get("pulls", 0)),
+                reward_sum=float(arm_data.get("reward_sum", 0.0)),
+            )
+        for name in arms:
+            bandit.arms.setdefault(name, BanditArm(name))
+        return bandit
 
 
 class HasScore(Protocol):
