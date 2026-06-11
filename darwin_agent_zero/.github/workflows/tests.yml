@@ -1,0 +1,31 @@
+name: Darwin Agent Zero Tests
+
+on:
+  push:
+    paths:
+      - 'darwin_agent_zero/**'
+  pull_request:
+    paths:
+      - 'darwin_agent_zero/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package
+        run: |
+          cd darwin_agent_zero
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Run tests
+        run: |
+          cd darwin_agent_zero
+          python -m unittest discover -s tests
+      - name: Run smoke evolution
+        run: |
+          cd darwin_agent_zero
+          dgm-zero run --generations 3 --population 4 --workspace .dgm_workspace
