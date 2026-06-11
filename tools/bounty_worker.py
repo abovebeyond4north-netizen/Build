@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """
-AutoIncome Forge GitHub Bounty Worker
+AutoIncome Forge GitHub Bounty Worker v2
 
 Safe autonomous bounty claiming and completion for GitHub Issues.
 
-What it does:
-- Reads an issue body from GitHub Actions event payload.
-- Scans for unsafe or high-risk terms.
-- Claims safe bounties by producing a local deliverable package.
-- Writes status markdown for a GitHub issue comment.
-- Never sends external messages, scrapes leads, accesses accounts, or spends money.
+It turns a structured [BOUNTY] issue into a complete local-service workflow package.
+
+It does not send external messages, scrape leads, access accounts, spend money,
+or bypass payment/human release gates.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import textwrap
 from datetime import datetime, timezone
@@ -24,6 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "bounty-outputs"
+CATALOG_PATH = ROOT / "data" / "bounty_catalog.json"
 
 REJECT_TERMS = [
     "spam", "scrape", "scraping", "phishing", "credential", "password",
@@ -36,15 +37,17 @@ REVIEW_TERMS = [
     "legal advice", "tax advice", "medical advice", "financial advice", "investment",
 ]
 
-ALLOWED_TYPES = [
-    "quote intake workflow",
-    "booking workflow",
-    "follow-up sequence",
-    "invoice reminder workflow",
-    "lead qualification workflow",
-    "sop/checklist",
-    "landing page copy",
-]
+BASE_PRICES = {
+    "quote intake workflow": 150,
+    "booking workflow": 175,
+    "follow-up sequence": 125,
+    "invoice reminder workflow": 125,
+    "lead qualification workflow": 150,
+    "sop/checklist": 100,
+    "landing page copy": 175,
+}
+
+ALLOWED_TYPES = list(BASE_PRICES.keys())
 
 
 def now() -> str:
@@ -58,7 +61,6 @@ def slugify(value: str) -> str:
 
 
 def extract_field(body: str, label: str) -> str:
-    # GitHub issue forms render markdown headings like: ### Business type
     pattern = rf"###\s+{re.escape(label)}\s*\n+(.+?)(?=\n###\s+|\Z)"
     match = re.search(pattern, body, flags=re.IGNORECASE | re.DOTALL)
     if not match:
@@ -77,8 +79,9 @@ def scan(text: str) -> tuple[list[str], list[str]]:
 
 def classify(work_type: str, outcome: str) -> str:
     low = f"{work_type} {outcome}".lower()
+    normalized = low.replace("/", " ")
     for allowed in ALLOWED_TYPES:
-        if allowed.replace("/", " ") in low or allowed in low:
+        if allowed.replace("/", " ") in normalized or allowed in low:
             return allowed
     if "quote" in low or "estimate" in low:
         return "quote intake workflow"
@@ -95,17 +98,42 @@ def classify(work_type: str, outcome: str) -> str:
     return "lead qualification workflow"
 
 
+def parse_budget(value: str, work_type: str) -> tuple[int, int, str]:
+    nums = re.findall(r"\d+", value or "")
+    posted = int(nums[0]) if nums else 0
+    suggested = max(posted, BASE_PRICES.get(work_type, 150))
+    deposit = round(suggested * 0.5)
+    return suggested, deposit, "CAD"
+
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content.strip() + "\n", encoding="utf-8")
+
+
 def quality_score(files: dict[str, str]) -> tuple[int, list[str]]:
     text = "\n".join(files.values()).lower()
     score = 100
     issues = []
-    for concept in ["workflow", "template", "checklist", "no spam"]:
+    required = ["workflow", "template", "checklist", "no spam", "release gates", "human approval"]
+    for concept in required:
         if concept not in text:
-            score -= 10
+            score -= 8
             issues.append(f"Missing concept: {concept}")
-    if len(text) < 900:
-        score -= 15
+    if len(text) < 1400:
+        score -= 12
         issues.append("Content may be thin")
+    if "guaranteed income" not in text:
+        score -= 4
+        issues.append("Missing guaranteed-income boundary")
     return max(0, score), issues
 
 
@@ -117,9 +145,12 @@ def build_package(issue_number: int, title: str, body: str) -> dict[str, str]:
     deadline = extract_field(body, "Deadline") or "Not specified"
     notes = extract_field(body, "Extra notes") or ""
     work_type = classify(work_type_raw, outcome)
+    suggested, deposit, currency = parse_budget(budget, work_type)
 
     bounty_id = f"GH-{issue_number}"
     package_dir = OUT / bounty_id
+    if package_dir.exists():
+        shutil.rmtree(package_dir)
     package_dir.mkdir(parents=True, exist_ok=True)
 
     files = {
@@ -129,16 +160,14 @@ def build_package(issue_number: int, title: str, body: str) -> dict[str, str]:
 **Generated:** {now()}  
 **Business type:** {business}  
 **Work type:** {work_type}  
-**Budget:** {budget}  
+**Posted budget:** {budget}  
+**Suggested price:** {currency} {suggested}  
+**Suggested deposit:** {currency} {deposit}  
 **Deadline:** {deadline}
 
 ## Desired outcome
 
 {outcome}
-
-## Extra notes
-
-{notes or 'None provided.'}
 
 ## Package contents
 
@@ -146,12 +175,24 @@ def build_package(issue_number: int, title: str, body: str) -> dict[str, str]:
 - customer_questions.md
 - message_templates.md
 - implementation_checklist.md
+- release_checklist.md
+- invoice_draft.md
+- client_status.md
 - handoff_email_draft.txt
 - delivery_package.json
+- quality_review.json
+- package_manifest.json
 
 ## Safety boundary
 
-No spam, scraping, phishing, account access, fake reviews, illegal work, or guaranteed-income claims.
+No spam, scraping, phishing, account access, fake reviews, illegal work, or guaranteed income claims.
+
+## Release gates
+
+- quality review passed
+- payment/deposit confirmation
+- human approval before final delivery
+- no auto-sending
 """,
         "workflow.md": f"""# {work_type.title()} — Workflow
 
@@ -161,22 +202,33 @@ Help a {business} business handle this outcome:
 
 {outcome}
 
-## Workflow
+## Operating workflow
 
 1. Customer reaches out with a service request.
 2. Business sends the intake template.
 3. Customer provides missing details.
 4. Business reviews the details.
 5. Business quotes, books, follows up, or closes the loop.
-6. Business records outcome for weekly improvement.
+6. Business records the outcome for weekly improvement.
+
+## Internal tracking
+
+Track these numbers weekly:
+
+- inbound requests
+- completed intakes
+- quotes sent
+- bookings confirmed
+- lost leads
+- average response time
 
 ## Rules
 
-- Use this for inbound leads or existing contacts.
+- Use for inbound leads or existing contacts.
 - No spam.
 - No scraping.
 - No impersonation.
-- No guaranteed-income claims.
+- No guaranteed income claims.
 """,
         "customer_questions.md": f"""# Customer Questions
 
@@ -188,7 +240,12 @@ Use these questions for a {business} request:
 - What date or time works best?
 - Do you have photos or extra details?
 - Is there anything urgent or unusual?
+- Are there access notes, parking notes, stairs, pets, or gate codes?
 - What is the best phone number or email for follow-up?
+
+## Keep it simple
+
+Ask only what the business needs to quote, book, or decide the next step.
 """,
         "message_templates.md": f"""# Message Templates
 
@@ -211,17 +268,72 @@ Hey, just checking in on your request. I can still help if you want to move forw
 ## Confirmation
 
 Thanks — I have the details. Next step: {{next_step}}. Please reply YES to confirm or send any changes.
+
+## Close-the-loop reply
+
+Thanks for the update. I will close this request for now. If you need help later, just send a new message and I can reopen it.
 """,
         "implementation_checklist.md": f"""# Implementation Checklist
 
-- [ ] Copy the intake reply into SMS/email/CRM.
+- [ ] Copy the intake reply into SMS, email, CRM, or saved replies.
 - [ ] Add the business phone number or booking link.
+- [ ] Remove questions that do not matter.
+- [ ] Add questions specific to {business}.
 - [ ] Test with one fake customer request.
-- [ ] Remove unnecessary questions.
 - [ ] Save the final workflow.
 - [ ] Track inbound requests weekly.
 - [ ] Track booked jobs weekly.
 - [ ] Improve after real replies.
+""",
+        "release_checklist.md": f"""# Release Checklist
+
+Before delivery:
+
+- [ ] Quality review score is 80 or higher.
+- [ ] The workflow solves one clear problem.
+- [ ] The client can use the files without technical knowledge.
+- [ ] Safety language is included.
+- [ ] Payment/deposit is confirmed if required.
+- [ ] Human approval is recorded.
+- [ ] Final files are ready for client delivery.
+
+Do not release automatically. Human approval is required.
+""",
+        "invoice_draft.md": f"""# Invoice Draft
+
+**Bounty ID:** {bounty_id}  
+**Business type:** {business}  
+**Work type:** {work_type}  
+**Suggested amount:** {currency} {suggested}  
+**Suggested deposit:** {currency} {deposit}  
+**Status:** requested
+
+## Line item
+
+Safe digital automation workflow package for {business}.
+
+## Note
+
+This is a draft. Confirm payment details manually before release.
+""",
+        "client_status.md": f"""# Client Status
+
+**Bounty ID:** {bounty_id}  
+**Current status:** completed_pending_release_gates
+
+## Completed
+
+- workflow package created
+- templates created
+- checklist created
+- invoice draft created
+- release checklist created
+
+## Still required
+
+- payment/deposit confirmation
+- human review
+- manual delivery approval
 """,
         "handoff_email_draft.txt": f"""Subject: Completed bounty package ready for review — {title}
 
@@ -234,6 +346,8 @@ Included:
 - customer questions
 - message templates
 - implementation checklist
+- release checklist
+- invoice draft
 - delivery summary
 
 Release gates:
@@ -243,27 +357,33 @@ Release gates:
 
 Bounty ID: {bounty_id}
 """,
-        "delivery_package.json": json.dumps({
-            "bounty_id": bounty_id,
-            "generated_at": now(),
-            "business_type": business,
-            "work_type": work_type,
-            "budget": budget,
-            "deadline": deadline,
-            "status": "completed_pending_human_review",
-            "release_gates": {
-                "quality_review": True,
-                "payment_confirmation_required": True,
-                "human_approval_required": True,
-                "auto_send": False,
-            },
-        }, indent=2),
     }
 
-    for filename, content in files.items():
-        (package_dir / filename).write_text(content, encoding="utf-8")
-
     score, issues = quality_score(files)
+    delivery_package = {
+        "bounty_id": bounty_id,
+        "generated_at": now(),
+        "business_type": business,
+        "work_type": work_type,
+        "budget_posted": budget,
+        "suggested_amount": suggested,
+        "suggested_deposit": deposit,
+        "currency": currency,
+        "deadline": deadline,
+        "status": "completed_pending_human_review",
+        "quality_score": score,
+        "release_gates": {
+            "quality_review": score >= 80,
+            "payment_confirmation_required": True,
+            "human_approval_required": True,
+            "auto_send": False,
+        },
+    }
+    files["delivery_package.json"] = json.dumps(delivery_package, indent=2)
+
+    for filename, content in files.items():
+        write(package_dir / filename, content)
+
     review = {
         "bounty_id": bounty_id,
         "quality_score": score,
@@ -271,15 +391,53 @@ Bounty ID: {bounty_id}
         "issues": issues,
         "generated_at": now(),
     }
-    (package_dir / "quality_review.json").write_text(json.dumps(review, indent=2), encoding="utf-8")
+    write(package_dir / "quality_review.json", json.dumps(review, indent=2))
+
+    manifest_items = []
+    for path in sorted(package_dir.glob("*")):
+        if path.is_file():
+            manifest_items.append({
+                "file": path.name,
+                "sha256": sha256_file(path),
+                "bytes": path.stat().st_size,
+            })
+    manifest = {
+        "bounty_id": bounty_id,
+        "created_at": now(),
+        "file_count": len(manifest_items),
+        "files": manifest_items,
+    }
+    write(package_dir / "package_manifest.json", json.dumps(manifest, indent=2))
+
+    zip_base = OUT / bounty_id
+    zip_path = shutil.make_archive(str(zip_base), "zip", root_dir=package_dir)
+
+    index = f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>{bounty_id} Status</title></head>
+<body style="font-family:system-ui;max-width:860px;margin:40px auto;line-height:1.6">
+<h1>{bounty_id} — Bounty Package</h1>
+<p><strong>Status:</strong> completed pending release gates</p>
+<p><strong>Business:</strong> {business}</p>
+<p><strong>Work type:</strong> {work_type}</p>
+<p><strong>Quality score:</strong> {score}</p>
+<h2>Release gates</h2>
+<ul><li>Payment/deposit confirmation</li><li>Human review</li><li>Manual delivery approval</li></ul>
+<p>No auto-sending. No spam. No scraping. No guaranteed income claims.</p>
+</body></html>
+"""
+    write(package_dir / "status.html", index)
 
     return {
         "bounty_id": bounty_id,
         "business": business,
         "work_type": work_type,
         "budget": budget,
+        "suggested_amount": str(suggested),
+        "suggested_deposit": str(deposit),
+        "currency": currency,
         "deadline": deadline,
         "package_dir": str(package_dir.relative_to(ROOT)),
+        "zip_path": str(Path(zip_path).relative_to(ROOT)),
         "quality_score": str(score),
         "review_status": review["status"],
     }
@@ -341,10 +499,13 @@ Status: `claimed_and_completed`
 **Bounty ID:** `{package['bounty_id']}`  
 **Business:** {package['business']}  
 **Work type:** {package['work_type']}  
-**Budget:** {package['budget']}  
+**Posted budget:** {package['budget']}  
+**Suggested amount:** {package['currency']} {package['suggested_amount']}  
+**Suggested deposit:** {package['currency']} {package['suggested_deposit']}  
 **Deadline:** {package['deadline']}  
 **Quality score:** `{package['quality_score']}`  
-**Package path:** `{package['package_dir']}`
+**Package path:** `{package['package_dir']}`  
+**ZIP path:** `{package['zip_path']}`
 
 Release gates remain active:
 
@@ -353,8 +514,8 @@ Release gates remain active:
 - no auto-sending
 """
 
-    (OUT / "worker_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
-    (OUT / "issue_comment.md").write_text(comment, encoding="utf-8")
+    write(OUT / "worker_result.json", json.dumps(result, indent=2))
+    write(OUT / "issue_comment.md", comment)
     print(json.dumps(result, indent=2))
     return 0
 
