@@ -47,20 +47,21 @@ class BenchmarkResult:
 class SplitBenchmarkResult:
     train: BenchmarkResult
     validation: BenchmarkResult
+    adversarial: BenchmarkResult
 
     @property
     def correctness(self) -> float:
-        """Conservative score: a candidate must work on both train and validation."""
+        """Conservative score: candidate must work across all benchmark pressure."""
 
-        return min(self.train.correctness, self.validation.correctness)
+        return min(self.train.correctness, self.validation.correctness, self.adversarial.correctness)
 
     @property
     def efficiency(self) -> float:
-        return (self.train.efficiency + self.validation.efficiency) / 2.0
+        return (self.train.efficiency + self.validation.efficiency + self.adversarial.efficiency) / 3.0
 
     @property
     def errors(self) -> list[str]:
-        return [*self.train.errors[:5], *self.validation.errors[:5]]
+        return [*self.train.errors[:3], *self.validation.errors[:3], *self.adversarial.errors[:4]]
 
 
 def target_function(a: int, b: int) -> int:
@@ -80,8 +81,32 @@ def canonical_cases(seed: int = 7, count: int = 64, label: str = "case") -> list
     return cases
 
 
-def split_cases(train_seed: int = 7, validation_seed: int = 404, count: int = 64) -> tuple[list[BenchmarkCase], list[BenchmarkCase]]:
-    return canonical_cases(train_seed, count, "train"), canonical_cases(validation_seed, count, "validation")
+def adversarial_cases() -> list[BenchmarkCase]:
+    """Edge cases that catch overfitting and arithmetic shortcuts."""
+
+    pairs = [
+        (0, 0),
+        (0, 31),
+        (0, -31),
+        (1, 0),
+        (-1, 0),
+        (2, 2),
+        (-2, -2),
+        (30, -30),
+        (-30, 30),
+        (31, 31),
+        (-31, -31),
+        (97, 13),
+        (-97, 13),
+        (97, -13),
+        (144, 89),
+        (-144, -89),
+    ]
+    return [BenchmarkCase(f"adversarial_{idx}", a, b, target_function(a, b)) for idx, (a, b) in enumerate(pairs)]
+
+
+def split_cases(train_seed: int = 7, validation_seed: int = 404, count: int = 64) -> tuple[list[BenchmarkCase], list[BenchmarkCase], list[BenchmarkCase]]:
+    return canonical_cases(train_seed, count, "train"), canonical_cases(validation_seed, count, "validation"), adversarial_cases()
 
 
 def eval_expr(expr: str, a: int, b: int) -> int:
@@ -123,5 +148,9 @@ def evaluate_expression(expr: str, cases: list[BenchmarkCase] | None = None) -> 
 
 
 def evaluate_expression_split(expr: str) -> SplitBenchmarkResult:
-    train, validation = split_cases()
-    return SplitBenchmarkResult(evaluate_expression(expr, train), evaluate_expression(expr, validation))
+    train, validation, adversarial = split_cases()
+    return SplitBenchmarkResult(
+        evaluate_expression(expr, train),
+        evaluate_expression(expr, validation),
+        evaluate_expression(expr, adversarial),
+    )
