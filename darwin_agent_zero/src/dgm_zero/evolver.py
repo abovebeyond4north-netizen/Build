@@ -226,6 +226,11 @@ class DarwinAgentZero:
         report = EvolutionReport(**{**asdict(preliminary), "checkpoint": asdict(checkpoint)})
         (self.workspace / "evolution_report.json").write_text(json.dumps(asdict(report), indent=2), encoding="utf-8")
         self.provenance.write(provenance_path, self.provenance.build(self.config))
+        checkpoint = self.checkpoints.refresh(checkpoint)
+        report = EvolutionReport(**{**asdict(report), "checkpoint": asdict(checkpoint)})
+        (self.workspace / "evolution_report.json").write_text(json.dumps(asdict(report), indent=2), encoding="utf-8")
+        self.provenance.write(provenance_path, self.provenance.build(self.config))
+        self.checkpoints.refresh(checkpoint)
         return report
 
     def select_parent(self) -> ArchiveRecord | None:
