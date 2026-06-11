@@ -43,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"map elites cells: {report.map_elites_cells}")
         print(f"map elites path: {report.map_elites_path}")
         print(f"health report: {report.health_path}")
+        print(f"provenance: {report.provenance_path}")
         print(f"checkpoint: {report.checkpoint}")
         print(f"champion: {report.champion_expression}")
         print(f"score: {report.champion_score}")
