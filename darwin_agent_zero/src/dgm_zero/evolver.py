@@ -6,9 +6,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .archive import Archive, ArchiveRecord
-from .benchmark import evaluate_expression
 from .decision_matrix import DecisionMatrix
-from .safety import scan_source
+from .memory import KnowledgeBank
+from .oracle import EmpiricalGodelOracle
+from .self_instruction import SelfInstructor
+from .tools import ToolRegistry, default_registry
 
 
 SEED_EXPRESSIONS = [
@@ -50,6 +52,8 @@ class EvolutionReport:
     champion_id: str | None
     champion_expression: str | None
     champion_score: dict[str, float] | None
+    registered_tools: list[str]
+    recalled_tasks: list[str]
 
 
 class DarwinAgentZero:
@@ -57,19 +61,25 @@ class DarwinAgentZero:
 
     The prototype evolves arithmetic tool expressions rather than arbitrary code.
     This keeps the loop safe while preserving the essential architecture: propose,
-    evaluate, score, archive, and select from prior stepping stones.
+    evaluate, score, archive, remember, and select from prior stepping stones.
     """
 
-    def __init__(self, workspace: Path, config: EvolutionConfig | None = None) -> None:
+    def __init__(self, workspace: Path, config: EvolutionConfig | None = None, registry: ToolRegistry | None = None) -> None:
         self.workspace = workspace
         self.archive = Archive(workspace)
+        self.memory = KnowledgeBank(workspace)
         self.config = config or EvolutionConfig()
         self.rng = random.Random(self.config.seed)
         self.matrix = DecisionMatrix(accept_threshold=self.config.accept_threshold)
+        self.oracle = EmpiricalGodelOracle(self.archive, self.matrix)
+        self.instructor = SelfInstructor(self.memory)
+        self.registry = registry or default_registry()
 
     def run(self) -> EvolutionReport:
         parent: ArchiveRecord | None = self.archive.champion()
         for generation in range(self.config.generations):
+            tasks = self.instructor.create_tasks(parent)
+            self.memory.deposit("generation", f"generation={generation}; tasks={len(tasks)}", 0.5)
             candidates = self.self_instruct(parent, generation)
             for expr in candidates[: self.config.population]:
                 self.evaluate_and_archive(expr, parent, generation)
@@ -78,6 +88,8 @@ class DarwinAgentZero:
         champion = self.archive.champion()
         if champion:
             self.write_champion(champion)
+            self.memory.deposit("champion", champion.expression, champion.score.get("weighted_total", 0.0))
+        self.memory.prune()
         report = EvolutionReport(
             generations=self.config.generations,
             population=self.config.population,
@@ -86,17 +98,24 @@ class DarwinAgentZero:
             champion_id=champion.id if champion else None,
             champion_expression=champion.expression if champion else None,
             champion_score=champion.score if champion else None,
+            registered_tools=self.registry.names(),
+            recalled_tasks=[entry.content for entry in self.memory.recall("task", limit=5)],
         )
         (self.workspace / "evolution_report.json").write_text(json.dumps(asdict(report), indent=2), encoding="utf-8")
         return report
 
     def self_instruct(self, parent: ArchiveRecord | None, generation: int) -> list[str]:
-        """Generate improvement tasks from the current champion and archive gaps."""
+        """Generate improvement candidates from champion, seeds, and memory."""
 
         if parent is None:
             base_pool = SEED_EXPRESSIONS[:]
         else:
             base_pool = [parent.expression] + SEED_EXPRESSIONS
+
+        for memory in self.memory.recall("champion", limit=3):
+            if memory.content not in base_pool:
+                base_pool.append(memory.content)
+
         candidates: list[str] = []
         for base in base_pool:
             candidates.append(base)
@@ -116,32 +135,17 @@ class DarwinAgentZero:
         return self.rng.choice(SEED_EXPRESSIONS)
 
     def evaluate_and_archive(self, expression: str, parent: ArchiveRecord | None, generation: int) -> ArchiveRecord:
-        source = f"def solve(a, b):\n    return {expression}\n"
-        safety = scan_source(source)
-        benchmark = evaluate_expression(expression)
-        line_count = max(1, source.count("\n"))
-        simplicity = max(0.0, min(1.0, 1.0 - (len(expression) / 240.0) - (line_count / 100.0)))
-        generalization = 1.0 if benchmark.correctness >= 0.95 else benchmark.correctness * 0.85
-        score = self.matrix.score(
-            {
-                "correctness": benchmark.correctness,
-                "efficiency": benchmark.efficiency,
-                "novelty": self.archive.novelty(expression),
-                "safety": safety.score,
-                "simplicity": simplicity,
-                "generalization": generalization,
-            }
-        )
         parent_score = parent.score.get("weighted_total") if parent else None
-        accepted = safety.passed and self.matrix.accepts(score, parent_score=parent_score)
-        reason = "accepted by empirical Gödel gate" if accepted else "; ".join(safety.reasons or benchmark.errors[:2] or ["below threshold"])
+        decision = self.oracle.judge(expression, parent_total=parent_score)
+        usefulness = decision.score.weighted_total
+        self.memory.deposit("candidate", f"{expression} -> {decision.reason}", usefulness)
         return self.archive.append(
             generation=generation,
             parent_id=parent.id if parent else None,
             expression=expression,
-            score=score.as_dict(),
-            accepted=accepted,
-            reason=reason,
+            score=decision.score.as_dict(),
+            accepted=decision.accepted,
+            reason=decision.reason,
         )
 
     def write_champion(self, champion: ArchiveRecord) -> None:
