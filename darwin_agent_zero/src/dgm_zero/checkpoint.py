@@ -17,6 +17,7 @@ SNAPSHOT_FILES = (
     "operator_bandit.json",
     "mined_cases.json",
     "health_report.json",
+    "provenance.json",
     "champion.py",
 )
 
