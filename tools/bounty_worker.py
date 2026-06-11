@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-AutoIncome Forge GitHub Bounty Worker v2
+AutoIncome Forge GitHub Bounty Worker v3
 
 Safe autonomous bounty claiming and completion for GitHub Issues.
 
-It turns a structured [BOUNTY] issue into a complete local-service workflow package.
+New v3 behavior:
+- Small, safe, clear jobs can be auto-released inside GitHub without human approval.
+- Anything risky, unclear, high-value, external-contact related, or low-confidence stays gated.
 
 It does not send external messages, scrape leads, access accounts, spend money,
-or bypass payment/human release gates.
+or bypass safety/payment gates for risky work.
 """
 
 from __future__ import annotations
@@ -18,13 +20,11 @@ import os
 import re
 import shutil
 import sys
-import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "bounty-outputs"
-CATALOG_PATH = ROOT / "data" / "bounty_catalog.json"
 
 REJECT_TERMS = [
     "spam", "scrape", "scraping", "phishing", "credential", "password",
@@ -35,6 +35,7 @@ REJECT_TERMS = [
 REVIEW_TERMS = [
     "cold email", "lead list", "account access", "login", "payment account",
     "legal advice", "tax advice", "medical advice", "financial advice", "investment",
+    "urgent", "asap", "same day", "today", "tomorrow", "call clients", "send to clients",
 ]
 
 BASE_PRICES = {
@@ -47,7 +48,16 @@ BASE_PRICES = {
     "landing page copy": 175,
 }
 
+LOW_RISK_AUTO_RELEASE_TYPES = {
+    "sop/checklist",
+    "follow-up sequence",
+    "invoice reminder workflow",
+}
+
 ALLOWED_TYPES = list(BASE_PRICES.keys())
+AUTO_RELEASE_MAX_AMOUNT_CAD = 125
+AUTO_RELEASE_MIN_CONFIDENCE = 90
+AUTO_RELEASE_MIN_QUALITY = 90
 
 
 def now() -> str:
@@ -137,7 +147,33 @@ def quality_score(files: dict[str, str]) -> tuple[int, list[str]]:
     return max(0, score), issues
 
 
-def build_package(issue_number: int, title: str, body: str) -> dict[str, str]:
+def confidence_score(work_type: str, outcome: str, notes: str, suggested_amount: int, reject_flags: list[str], review_flags: list[str]) -> tuple[int, list[str]]:
+    score = 100
+    reasons = []
+
+    if reject_flags:
+        score -= 100
+        reasons.append("reject flags present")
+    if review_flags:
+        score -= 50
+        reasons.append("review flags present")
+    if work_type not in LOW_RISK_AUTO_RELEASE_TYPES:
+        score -= 20
+        reasons.append("work type is not in low-risk auto-release set")
+    if suggested_amount > AUTO_RELEASE_MAX_AMOUNT_CAD:
+        score -= 25
+        reasons.append("amount above small-job threshold")
+    if len(outcome.strip()) < 40:
+        score -= 15
+        reasons.append("desired outcome is too short")
+    if len(outcome.strip()) > 1200 or len(notes.strip()) > 1200:
+        score -= 10
+        reasons.append("scope may be too broad")
+
+    return max(0, score), reasons
+
+
+def build_package(issue_number: int, title: str, body: str, reject_flags: list[str], review_flags: list[str]) -> dict[str, str]:
     business = extract_field(body, "Business type") or "Local service business"
     work_type_raw = extract_field(body, "Work type") or "Lead qualification workflow"
     outcome = extract_field(body, "Desired outcome") or "Create a practical workflow package."
@@ -153,6 +189,13 @@ def build_package(issue_number: int, title: str, body: str) -> dict[str, str]:
         shutil.rmtree(package_dir)
     package_dir.mkdir(parents=True, exist_ok=True)
 
+    confidence, confidence_reasons = confidence_score(work_type, outcome, notes, suggested, reject_flags, review_flags)
+    auto_release_candidate = confidence >= AUTO_RELEASE_MIN_CONFIDENCE and suggested <= AUTO_RELEASE_MAX_AMOUNT_CAD and work_type in LOW_RISK_AUTO_RELEASE_TYPES
+
+    release_gate_line = "human approval before final delivery"
+    if auto_release_candidate:
+        release_gate_line = "auto-release allowed because this is a small, safe, low-risk, high-confidence GitHub-contained job"
+
     files = {
         "README.md": f"""# Bounty Package — {title}
 
@@ -163,7 +206,8 @@ def build_package(issue_number: int, title: str, body: str) -> dict[str, str]:
 **Posted budget:** {budget}  
 **Suggested price:** {currency} {suggested}  
 **Suggested deposit:** {currency} {deposit}  
-**Deadline:** {deadline}
+**Deadline:** {deadline}  
+**Confidence score:** {confidence}
 
 ## Desired outcome
 
@@ -190,9 +234,9 @@ No spam, scraping, phishing, account access, fake reviews, illegal work, or guar
 ## Release gates
 
 - quality review passed
-- payment/deposit confirmation
-- human approval before final delivery
-- no auto-sending
+- payment/deposit confirmation when required
+- {release_gate_line}
+- no external auto-sending
 """,
         "workflow.md": f"""# {work_type.title()} — Workflow
 
@@ -289,15 +333,15 @@ Thanks for the update. I will close this request for now. If you need help later
 
 Before delivery:
 
-- [ ] Quality review score is 80 or higher.
+- [ ] Quality review score is 90 or higher for auto-release, or 80+ for human review.
 - [ ] The workflow solves one clear problem.
 - [ ] The client can use the files without technical knowledge.
 - [ ] Safety language is included.
 - [ ] Payment/deposit is confirmed if required.
-- [ ] Human approval is recorded.
+- [ ] Human approval is recorded unless auto-release eligibility is true.
 - [ ] Final files are ready for client delivery.
 
-Do not release automatically. Human approval is required.
+Auto-release is allowed only for small, safe, high-confidence jobs contained inside GitHub.
 """,
         "invoice_draft.md": f"""# Invoice Draft
 
@@ -314,12 +358,12 @@ Safe digital automation workflow package for {business}.
 
 ## Note
 
-This is a draft. Confirm payment details manually before release.
+This is a draft. Confirm payment details manually before external release.
 """,
         "client_status.md": f"""# Client Status
 
 **Bounty ID:** {bounty_id}  
-**Current status:** completed_pending_release_gates
+**Current status:** {'auto_released_small_job' if auto_release_candidate else 'completed_pending_release_gates'}
 
 ## Completed
 
@@ -331,15 +375,13 @@ This is a draft. Confirm payment details manually before release.
 
 ## Still required
 
-- payment/deposit confirmation
-- human review
-- manual delivery approval
+{'No human approval required for this small GitHub-contained job.' if auto_release_candidate else '- payment/deposit confirmation\n- human review\n- manual delivery approval'}
 """,
         "handoff_email_draft.txt": f"""Subject: Completed bounty package ready for review — {title}
 
 Hey,
 
-The {work_type} package for {business} is complete and ready for review.
+The {work_type} package for {business} is complete.
 
 Included:
 - workflow
@@ -350,16 +392,16 @@ Included:
 - invoice draft
 - delivery summary
 
-Release gates:
-- quality review passed
-- payment/deposit confirmed if required
-- human approval before final client delivery
+Release status: {'auto-released inside GitHub because this is a small, safe, high-confidence job' if auto_release_candidate else 'pending payment/human review gates'}
 
 Bounty ID: {bounty_id}
 """,
     }
 
     score, issues = quality_score(files)
+    auto_release = auto_release_candidate and score >= AUTO_RELEASE_MIN_QUALITY
+    status = "auto_released_small_job" if auto_release else "completed_pending_human_review"
+
     delivery_package = {
         "bounty_id": bounty_id,
         "generated_at": now(),
@@ -370,12 +412,22 @@ Bounty ID: {bounty_id}
         "suggested_deposit": deposit,
         "currency": currency,
         "deadline": deadline,
-        "status": "completed_pending_human_review",
+        "status": status,
         "quality_score": score,
+        "confidence_score": confidence,
+        "confidence_reasons": confidence_reasons,
+        "auto_release": auto_release,
+        "auto_release_policy": {
+            "max_amount_cad": AUTO_RELEASE_MAX_AMOUNT_CAD,
+            "min_confidence": AUTO_RELEASE_MIN_CONFIDENCE,
+            "min_quality": AUTO_RELEASE_MIN_QUALITY,
+            "allowed_types": sorted(LOW_RISK_AUTO_RELEASE_TYPES),
+            "external_auto_send": False,
+        },
         "release_gates": {
-            "quality_review": score >= 80,
-            "payment_confirmation_required": True,
-            "human_approval_required": True,
+            "quality_review": score >= AUTO_RELEASE_MIN_QUALITY if auto_release_candidate else score >= 80,
+            "payment_confirmation_required": not auto_release,
+            "human_approval_required": not auto_release,
             "auto_send": False,
         },
     }
@@ -387,8 +439,11 @@ Bounty ID: {bounty_id}
     review = {
         "bounty_id": bounty_id,
         "quality_score": score,
+        "confidence_score": confidence,
         "status": "pass" if score >= 80 else "needs_review",
+        "auto_release": auto_release,
         "issues": issues,
+        "confidence_reasons": confidence_reasons,
         "generated_at": now(),
     }
     write(package_dir / "quality_review.json", json.dumps(review, indent=2))
@@ -405,6 +460,7 @@ Bounty ID: {bounty_id}
         "bounty_id": bounty_id,
         "created_at": now(),
         "file_count": len(manifest_items),
+        "auto_release": auto_release,
         "files": manifest_items,
     }
     write(package_dir / "package_manifest.json", json.dumps(manifest, indent=2))
@@ -416,13 +472,14 @@ Bounty ID: {bounty_id}
 <html><head><meta charset="utf-8"><title>{bounty_id} Status</title></head>
 <body style="font-family:system-ui;max-width:860px;margin:40px auto;line-height:1.6">
 <h1>{bounty_id} — Bounty Package</h1>
-<p><strong>Status:</strong> completed pending release gates</p>
+<p><strong>Status:</strong> {status}</p>
 <p><strong>Business:</strong> {business}</p>
 <p><strong>Work type:</strong> {work_type}</p>
 <p><strong>Quality score:</strong> {score}</p>
+<p><strong>Confidence score:</strong> {confidence}</p>
 <h2>Release gates</h2>
-<ul><li>Payment/deposit confirmation</li><li>Human review</li><li>Manual delivery approval</li></ul>
-<p>No auto-sending. No spam. No scraping. No guaranteed income claims.</p>
+<ul><li>Payment/deposit confirmation: {'not required for auto-release' if auto_release else 'required'}</li><li>Human review: {'not required for auto-release' if auto_release else 'required'}</li><li>External auto-sending: never</li></ul>
+<p>No spam. No scraping. No guaranteed income claims.</p>
 </body></html>
 """
     write(package_dir / "status.html", index)
@@ -439,7 +496,10 @@ Bounty ID: {bounty_id}
         "package_dir": str(package_dir.relative_to(ROOT)),
         "zip_path": str(Path(zip_path).relative_to(ROOT)),
         "quality_score": str(score),
+        "confidence_score": str(confidence),
+        "auto_release": auto_release,
         "review_status": review["status"],
+        "status": status,
     }
 
 
@@ -490,11 +550,36 @@ Review flags: `{', '.join(review)}`
 No autonomous completion was performed.
 """
     else:
-        package = build_package(issue_number, title, body)
-        result = {"status": "claimed_and_completed", **package}
-        comment = f"""## Bounty claimed and completed by AutoIncome Forge
+        package = build_package(issue_number, title, body, reject, review)
+        result = {"status": package["status"], **package}
+        if package["auto_release"]:
+            comment = f"""## Small bounty auto-completed and auto-released
 
-Status: `claimed_and_completed`
+Status: `auto_released_small_job`
+
+**Bounty ID:** `{package['bounty_id']}`  
+**Business:** {package['business']}  
+**Work type:** {package['work_type']}  
+**Suggested amount:** {package['currency']} {package['suggested_amount']}  
+**Quality score:** `{package['quality_score']}`  
+**Confidence score:** `{package['confidence_score']}`  
+**Package path:** `{package['package_dir']}`  
+**ZIP path:** `{package['zip_path']}`
+
+This small job met the auto-release policy:
+
+- safe scan passed
+- low-risk work type
+- amount at or below CAD {AUTO_RELEASE_MAX_AMOUNT_CAD}
+- quality score at least {AUTO_RELEASE_MIN_QUALITY}
+- confidence score at least {AUTO_RELEASE_MIN_CONFIDENCE}
+
+No external messages were sent. The release happened inside GitHub only.
+"""
+        else:
+            comment = f"""## Bounty claimed and completed by AutoIncome Forge
+
+Status: `claimed_and_completed_pending_release`
 
 **Bounty ID:** `{package['bounty_id']}`  
 **Business:** {package['business']}  
@@ -504,6 +589,7 @@ Status: `claimed_and_completed`
 **Suggested deposit:** {package['currency']} {package['suggested_deposit']}  
 **Deadline:** {package['deadline']}  
 **Quality score:** `{package['quality_score']}`  
+**Confidence score:** `{package['confidence_score']}`  
 **Package path:** `{package['package_dir']}`  
 **ZIP path:** `{package['zip_path']}`
 
