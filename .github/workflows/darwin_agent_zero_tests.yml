@@ -23,11 +23,7 @@ jobs:
           cd darwin_agent_zero
           python -m pip install --upgrade pip
           pip install -e .
-      - name: Run unit tests
+      - name: Run validation suite
         run: |
           cd darwin_agent_zero
-          python -m unittest discover -s tests
-      - name: Run smoke evolution
-        run: |
-          cd darwin_agent_zero
-          dgm-zero run --generations 2 --population 4 --workspace .dgm_workspace_ci
+          python scripts/validate.py
