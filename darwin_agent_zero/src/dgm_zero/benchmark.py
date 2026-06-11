@@ -28,6 +28,15 @@ class BenchmarkCase:
 
 
 @dataclass(frozen=True)
+class BenchmarkConfig:
+    value_min: int = -30
+    value_max: int = 30
+    train_count: int = 64
+    validation_count: int = 64
+    adversarial_scale: int = 1
+
+
+@dataclass(frozen=True)
 class BenchmarkResult:
     passed: int
     total: int
@@ -70,21 +79,22 @@ def target_function(a: int, b: int) -> int:
     return a * a + 3 * b - math.gcd(a, b)
 
 
-def canonical_cases(seed: int = 7, count: int = 64, label: str = "case") -> list[BenchmarkCase]:
+def canonical_cases(seed: int = 7, count: int = 64, label: str = "case", value_min: int = -30, value_max: int = 30) -> list[BenchmarkCase]:
     rng = random.Random(seed)
     cases: list[BenchmarkCase] = []
     for index in range(count):
-        a = rng.randint(-30, 30)
-        b = rng.randint(-30, 30)
+        a = rng.randint(value_min, value_max)
+        b = rng.randint(value_min, value_max)
         expected = target_function(a, b)
         cases.append(BenchmarkCase(f"{label}_{index}", a, b, expected))
     return cases
 
 
-def adversarial_cases() -> list[BenchmarkCase]:
+def adversarial_cases(scale: int = 1) -> list[BenchmarkCase]:
     """Edge cases that catch overfitting and arithmetic shortcuts."""
 
-    pairs = [
+    scale = max(1, scale)
+    base_pairs = [
         (0, 0),
         (0, 31),
         (0, -31),
@@ -102,11 +112,21 @@ def adversarial_cases() -> list[BenchmarkCase]:
         (144, 89),
         (-144, -89),
     ]
+    pairs = [(a * scale, b * scale) for a, b in base_pairs]
     return [BenchmarkCase(f"adversarial_{idx}", a, b, target_function(a, b)) for idx, (a, b) in enumerate(pairs)]
 
 
-def split_cases(train_seed: int = 7, validation_seed: int = 404, count: int = 64) -> tuple[list[BenchmarkCase], list[BenchmarkCase], list[BenchmarkCase]]:
-    return canonical_cases(train_seed, count, "train"), canonical_cases(validation_seed, count, "validation"), adversarial_cases()
+def split_cases(
+    train_seed: int = 7,
+    validation_seed: int = 404,
+    config: BenchmarkConfig | None = None,
+) -> tuple[list[BenchmarkCase], list[BenchmarkCase], list[BenchmarkCase]]:
+    cfg = config or BenchmarkConfig()
+    return (
+        canonical_cases(train_seed, cfg.train_count, "train", cfg.value_min, cfg.value_max),
+        canonical_cases(validation_seed, cfg.validation_count, "validation", cfg.value_min, cfg.value_max),
+        adversarial_cases(cfg.adversarial_scale),
+    )
 
 
 def eval_expr(expr: str, a: int, b: int) -> int:
@@ -147,8 +167,8 @@ def evaluate_expression(expr: str, cases: list[BenchmarkCase] | None = None) -> 
     return BenchmarkResult(passed, len(cases), time.perf_counter() - start, errors[:10])
 
 
-def evaluate_expression_split(expr: str) -> SplitBenchmarkResult:
-    train, validation, adversarial = split_cases()
+def evaluate_expression_split(expr: str, config: BenchmarkConfig | None = None) -> SplitBenchmarkResult:
+    train, validation, adversarial = split_cases(config=config)
     return SplitBenchmarkResult(
         evaluate_expression(expr, train),
         evaluate_expression(expr, validation),
