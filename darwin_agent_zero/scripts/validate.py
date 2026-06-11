@@ -102,6 +102,36 @@ def inspect_artifacts() -> None:
             raise SystemExit(f"provenance missing artifact fingerprint for {name}: {artifact_paths}")
 
 
+def validate_restore_path() -> None:
+    print("\n==> validate restore path")
+    from dgm_zero.checkpoint import CheckpointManager
+
+    original_report = (CI_WORKSPACE / "evolution_report.json").read_text(encoding="utf-8")
+    original_provenance = (CI_WORKSPACE / "provenance.json").read_text(encoding="utf-8")
+    original_champion = (CI_WORKSPACE / "champion.py").read_text(encoding="utf-8")
+
+    (CI_WORKSPACE / "evolution_report.json").write_text('{"corrupt": true}\n', encoding="utf-8")
+    (CI_WORKSPACE / "provenance.json").write_text('{"corrupt": true}\n', encoding="utf-8")
+    (CI_WORKSPACE / "champion.py").write_text("# corrupt\n", encoding="utf-8")
+
+    restored = CheckpointManager(CI_WORKSPACE).restore_latest()
+    if not restored.restored:
+        raise SystemExit(f"restore failed: {restored}")
+    for name in ["evolution_report.json", "provenance.json", "champion.py"]:
+        if name not in restored.restored_files:
+            raise SystemExit(f"restore did not include {name}: {restored.restored_files}")
+
+    restored_report = (CI_WORKSPACE / "evolution_report.json").read_text(encoding="utf-8")
+    restored_provenance = (CI_WORKSPACE / "provenance.json").read_text(encoding="utf-8")
+    restored_champion = (CI_WORKSPACE / "champion.py").read_text(encoding="utf-8")
+    if restored_report != original_report:
+        raise SystemExit("restored evolution_report.json did not match final report")
+    if restored_provenance != original_provenance:
+        raise SystemExit("restored provenance.json did not match final provenance")
+    if restored_champion != original_champion:
+        raise SystemExit("restored champion.py did not match final champion")
+
+
 def main() -> int:
     if CI_WORKSPACE.exists():
         shutil.rmtree(CI_WORKSPACE)
@@ -123,6 +153,7 @@ def main() -> int:
         ],
     )
     inspect_artifacts()
+    validate_restore_path()
     print("\nValidation complete")
     print(f"workspace: {CI_WORKSPACE}")
     return 0
