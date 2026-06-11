@@ -12,6 +12,8 @@ from .curriculum import CurriculumManager, CurriculumState
 from .decision_matrix import DecisionMatrix
 from .map_elites import MAPElitesGrid
 from .memory import KnowledgeBank
+from .meta_learning import MetaLearner, MetaLearningPolicy
+from .metacognition import CognitiveState, MetacognitiveMonitor
 from .oracle import EmpiricalGodelOracle
 from .self_instruction import SelfInstructor
 from .tools import ToolRegistry, default_registry
@@ -68,12 +70,14 @@ class EvolutionReport:
     curriculum: dict[str, object]
     mined_cases: int
     mined_cases_path: str
+    cognitive_state: dict[str, object]
+    meta_policy: dict[str, float]
     registered_tools: list[str]
     recalled_tasks: list[str]
 
 
 class DarwinAgentZero:
-    """Bounded Darwinian Godel loop for local tool evolution."""
+    """Bounded Darwinian Godel loop with metacognitive control."""
 
     def __init__(self, workspace: Path, config: EvolutionConfig | None = None, registry: ToolRegistry | None = None) -> None:
         self.workspace = workspace
@@ -84,11 +88,22 @@ class DarwinAgentZero:
         self.matrix = DecisionMatrix(accept_threshold=self.config.accept_threshold)
         self.curriculum = CurriculumManager(workspace)
         self.curriculum_state = self.curriculum.load()
+        self.metacognition = MetacognitiveMonitor()
+        self.meta_learner = MetaLearner()
+        self.cognitive_state = self.assess_self()
+        self.meta_policy = self.meta_learner.policy_from_state(self.cognitive_state)
         self.mined_cases = self.mine_cases()
         self.oracle = self.make_oracle(self.curriculum_state)
         self.instructor = SelfInstructor(self.memory)
         self.registry = registry or default_registry()
         self.map_elites = MAPElitesGrid().build(self.archive.records())
+
+    def assess_self(self) -> CognitiveState:
+        return self.metacognition.assess(
+            self.archive.records(),
+            elite_cell_count=len(getattr(self, "map_elites", MAPElitesGrid()).cells),
+            mined_case_count=len(getattr(self, "mined_cases", ())),
+        )
 
     def mine_cases(self):
         level = self.curriculum_state.current
@@ -113,12 +128,20 @@ class DarwinAgentZero:
         for generation in range(self.config.generations):
             self.map_elites = MAPElitesGrid().build(self.archive.records())
             self.mined_cases = self.mine_cases()
+            self.cognitive_state = self.assess_self()
+            self.meta_policy = self.meta_learner.policy_from_state(self.cognitive_state)
+            self.metacognition.write(self.workspace / "cognitive_state.json", self.cognitive_state)
             self.oracle = self.make_oracle(self.curriculum_state)
             tasks = self.instructor.create_tasks(parent)
             level = self.curriculum_state.current
             self.memory.deposit(
+                "metacognition",
+                f"focus={self.cognitive_state.focus}; critique={self.cognitive_state.critique}",
+                self.cognitive_state.confidence,
+            )
+            self.memory.deposit(
                 "generation",
-                f"generation={generation}; tasks={len(tasks)}; elite_cells={len(self.map_elites.cells)}; curriculum_level={level.level}; mined_cases={len(self.mined_cases)}",
+                f"generation={generation}; tasks={len(tasks)}; elite_cells={len(self.map_elites.cells)}; curriculum_level={level.level}; mined_cases={len(self.mined_cases)}; focus={self.cognitive_state.focus}",
                 0.5,
             )
             candidates = self.self_instruct(parent, generation)
@@ -140,6 +163,9 @@ class DarwinAgentZero:
         else:
             self.curriculum.save(self.curriculum_state)
         self.map_elites = MAPElitesGrid().build(self.archive.records())
+        self.cognitive_state = self.assess_self()
+        self.meta_policy = self.meta_learner.policy_from_state(self.cognitive_state)
+        self.metacognition.write(self.workspace / "cognitive_state.json", self.cognitive_state)
         map_path = self.workspace / "map_elites.json"
         self.map_elites.write(map_path)
         elites = self.archive.elites_by_bucket()
@@ -157,6 +183,8 @@ class DarwinAgentZero:
             curriculum=asdict(self.curriculum_state),
             mined_cases=len(self.mined_cases),
             mined_cases_path=str(self.workspace / "mined_cases.json"),
+            cognitive_state=asdict(self.cognitive_state),
+            meta_policy=asdict(self.meta_policy),
             registered_tools=self.registry.names(),
             recalled_tasks=[entry.content for entry in self.memory.recall("task", limit=5)],
         )
@@ -171,6 +199,8 @@ class DarwinAgentZero:
         elite_records = [record for record in accepted if record.id in elite_ids]
         pool = elite_records or accepted
         pool = sorted(pool, key=lambda record: record.score.get("weighted_total", 0.0), reverse=True)[: self.config.elite_parent_limit]
+        if self.cognitive_state.focus in {"increase diversity", "escape stagnation"} and elite_records:
+            return self.rng.choice(elite_records)
         return self.rng.choice(pool)
 
     def self_instruct(self, parent: ArchiveRecord | None, generation: int) -> list[str]:
@@ -188,17 +218,18 @@ class DarwinAgentZero:
                 base_pool.append(memory.content)
 
         candidates: list[str] = []
+        expansion = max(1, int((self.config.population // 2) * self.meta_policy.exploration_bias))
         for base in base_pool:
             candidates.append(base)
-            for _ in range(max(1, self.config.population // 2)):
+            for _ in range(expansion):
                 candidates.append(self.mutate(base, generation))
         self.rng.shuffle(candidates)
         return dedupe(candidates)
 
     def mutate(self, expression: str, generation: int) -> str:
-        if generation % 4 == 0:
+        if generation % 4 == 0 and self.meta_policy.novelty_bias >= 1.0:
             return self.rng.choice(SEED_EXPRESSIONS)
-        mode = self.rng.choice(["wrap", "append", "replace", "simplify"])
+        mode = self.rng.choice(self.meta_learner.weighted_modes(self.meta_policy))
         if mode == "wrap":
             return f"({expression}){self.rng.choice(MUTATION_SNIPPETS)}"
         if mode == "append":
