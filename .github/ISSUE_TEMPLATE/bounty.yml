@@ -1,0 +1,88 @@
+name: Automation Bounty
+
+description: Request a safe local service automation package.
+
+title: "[BOUNTY] "
+
+labels:
+  - bounty:open
+  - bounty:needs-triage
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for safe digital workflow packages only.
+
+        Allowed examples:
+        - quote intake workflow
+        - booking workflow
+        - follow-up sequence
+        - invoice reminder workflow
+        - SOP/checklist
+        - landing page copy
+
+        Not allowed:
+        - spam
+        - scraping
+        - phishing
+        - account access
+        - fake reviews
+        - illegal work
+        - guaranteed income claims
+
+  - type: input
+    id: business_type
+    attributes:
+      label: Business type
+      placeholder: Junk removal, cleaning, landscaping, contractor, auto detailing
+    validations:
+      required: true
+
+  - type: dropdown
+    id: work_type
+    attributes:
+      label: Work type
+      options:
+        - Quote intake workflow
+        - Booking workflow
+        - Follow-up sequence
+        - Invoice reminder workflow
+        - Lead qualification workflow
+        - SOP/checklist
+        - Landing page copy
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What should the workflow help the business do?
+      placeholder: Help a junk removal business collect photos, address, access notes, and timing before quoting.
+    validations:
+      required: true
+
+  - type: input
+    id: budget
+    attributes:
+      label: Budget
+      placeholder: CAD 150
+    validations:
+      required: true
+
+  - type: input
+    id: deadline
+    attributes:
+      label: Deadline
+      placeholder: 3 business days
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra_notes
+    attributes:
+      label: Extra notes
+      placeholder: Add any tone, business details, or constraints.
+    validations:
+      required: false
