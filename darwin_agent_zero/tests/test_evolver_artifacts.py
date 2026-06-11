@@ -55,9 +55,23 @@ class EvolverArtifactSmokeTests(unittest.TestCase):
             self.assertIn("provenance.json", report.checkpoint["copied_files"])
             self.assertIn("evolution_report.json", report.checkpoint["copied_files"])
 
+            disk_report = json.loads((workspace / "evolution_report.json").read_text(encoding="utf-8"))
+            self.assertEqual(disk_report["checkpoint"]["checkpoint_id"], report.checkpoint["checkpoint_id"])
+            self.assertEqual(disk_report["provenance_path"], report.provenance_path)
+            self.assertEqual(disk_report["health_path"], report.health_path)
+
+            provenance = json.loads((workspace / "provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(provenance["config"]["generations"], 1)
+            self.assertTrue(any(item["path"] == "evolution_report.json" for item in provenance["artifacts"]))
+            self.assertTrue(any(item["path"] == "champion.py" for item in provenance["artifacts"]))
+
             checkpoint_path = Path(report.checkpoint["path"])
             self.assertTrue((checkpoint_path / "provenance.json").exists())
             self.assertTrue((checkpoint_path / "evolution_report.json").exists())
+            checkpoint_report = json.loads((checkpoint_path / "evolution_report.json").read_text(encoding="utf-8"))
+            self.assertEqual(checkpoint_report["checkpoint"]["checkpoint_id"], report.checkpoint["checkpoint_id"])
+            checkpoint_provenance = json.loads((checkpoint_path / "provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(checkpoint_provenance["config"]["population"], 3)
 
             restored = CheckpointManager(workspace).restore_latest()
             self.assertTrue(restored.restored)
