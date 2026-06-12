@@ -5,12 +5,14 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
 CI_WORKSPACE = PROJECT_ROOT / ".dgm_workspace_ci"
+VALIDATION_SUMMARY = CI_WORKSPACE / "validation_summary.json"
 
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
@@ -64,7 +66,7 @@ def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def inspect_artifacts() -> None:
+def inspect_artifacts() -> dict[str, object]:
     print("\n==> inspect artifacts")
     expected = [
         "archive.jsonl",
@@ -101,8 +103,19 @@ def inspect_artifacts() -> None:
         if name not in artifact_paths:
             raise SystemExit(f"provenance missing artifact fingerprint for {name}: {artifact_paths}")
 
+    return {
+        "expected_artifacts": expected,
+        "health_passed": bool(health.get("passed")),
+        "checkpoint_id": checkpoint.get("checkpoint_id"),
+        "checkpoint_copied_files": sorted(copied_files),
+        "provenance_artifacts": sorted(artifact_paths),
+        "champion_expression": report.get("champion_expression"),
+        "accepted_records": report.get("accepted_records"),
+        "total_records": report.get("total_records"),
+    }
 
-def validate_restore_path() -> None:
+
+def validate_restore_path() -> dict[str, object]:
     print("\n==> validate restore path")
     from dgm_zero.checkpoint import CheckpointManager
 
@@ -131,6 +144,25 @@ def validate_restore_path() -> None:
     if restored_champion != original_champion:
         raise SystemExit("restored champion.py did not match final champion")
 
+    return {
+        "restored": restored.restored,
+        "checkpoint_id": restored.checkpoint_id,
+        "restored_files": restored.restored_files,
+        "reason": restored.reason,
+    }
+
+
+def write_validation_summary(artifact_summary: dict[str, object], restore_summary: dict[str, object]) -> None:
+    summary = {
+        "passed": True,
+        "created_at": time.time(),
+        "workspace": str(CI_WORKSPACE),
+        "steps": ["unit tests", "smoke evolution", "inspect artifacts", "restore corruption check"],
+        "artifacts": artifact_summary,
+        "restore": restore_summary,
+    }
+    VALIDATION_SUMMARY.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+
 
 def main() -> int:
     if CI_WORKSPACE.exists():
@@ -152,10 +184,12 @@ def main() -> int:
             str(CI_WORKSPACE),
         ],
     )
-    inspect_artifacts()
-    validate_restore_path()
+    artifact_summary = inspect_artifacts()
+    restore_summary = validate_restore_path()
+    write_validation_summary(artifact_summary, restore_summary)
     print("\nValidation complete")
     print(f"workspace: {CI_WORKSPACE}")
+    print(f"summary: {VALIDATION_SUMMARY}")
     return 0
 
 
