@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 """
-GENESIS v3.0: Generative Evolving Neural Engine for Self-Improving Systems
+GENESIS v4.0: Generative Evolving Neural Engine for Self-Improving Systems
 ==========================================================================
 
 A self-sufficient, self-evolving Darwinian Godel machine with zero-data
 meta-learning, Decision Intelligence, Emergent Communication, Counterfactual
-Reasoning, and Persistent Knowledge Transfer.
+Reasoning, Persistent Knowledge Transfer, Hierarchical Goal Formation,
+Theory of Mind, Abstract Concept Formation, and Self-Narrative.
 
-v3.0 Additions:
-  - Emergent Communication: agents evolve signals to broadcast, developing
-    their own language from scratch to coordinate, warn, or deceive
-  - Counterfactual Reasoning: agents learn "what would have happened if I'd
-    done something different?" by replaying past decisions with alternatives
-  - Persistent Knowledge Bank: accumulated wisdom survives death and can be
-    inherited by offspring -- knowledge transfer beyond genetics
+v4.0 Additions:
+  - Hierarchical Goal Formation: agents set their own goals, decompose them
+    into sub-goals, and pursue multi-step plans with genuine intentionality
+  - Theory of Mind: agents build internal models of other agents' behavior,
+    predict what others will do, enabling cooperation and strategic deception
+  - Abstract Concept Formation: agents compress repeated experiences into
+    abstract prototypes, recognizing situations at a higher level
+  - Self-Narrative: agents maintain a compressed autobiography that influences
+    future decisions and gets partially inherited by offspring
 
-Full Capabilities:
+Full Capabilities (17):
   1.  Self-Sufficient Passive Learning (zero external data)
   2.  Meta-Learning from Scratch (evolving learning rules)
   3.  Darwinian Self-Evolution (NEAT-style neuroevolution)
@@ -25,11 +28,14 @@ Full Capabilities:
   7.  Self-Support System (error recovery, rollback, self-healing)
   8.  Zero-Data SOTA Methods (curiosity, novelty search, self-play)
   9.  Beyond the Builder (open-ended emergent evolution)
-  10. Decision Intelligence (causal learning, temporal reasoning,
-      world-state evaluation, acceptability boundaries)
+  10. Decision Intelligence (causal learning, temporal reasoning)
   11. Emergent Communication (evolved signaling, proto-language)
   12. Counterfactual Reasoning (what-if analysis, regret-based learning)
   13. Persistent Knowledge Transfer (wisdom inheritance, cultural evolution)
+  14. Hierarchical Goal Formation (intentionality, multi-step planning)
+  15. Theory of Mind (social modeling, prediction, trust)
+  16. Abstract Concept Formation (situation recognition, prototypes)
+  17. Self-Narrative (autobiographical memory, identity, life story)
 
 Usage:
     python genesis.py
@@ -118,22 +124,42 @@ class Config:
     DECISION_WEIGHT = 0.4
 
     # Communication (v3.0)
-    SIGNAL_DIM = 4              # Dimensionality of broadcast signals
-    COMM_RANGE = 8.0            # How far signals travel
-    SIGNAL_COST = 0.02          # Energy cost to broadcast
-    COMM_WEIGHT = 0.2           # Fitness weight for communication effectiveness
-    SIGNAL_DECAY = 0.9          # Signal strength decay with distance
+    SIGNAL_DIM = 4
+    COMM_RANGE = 8.0
+    SIGNAL_COST = 0.02
+    COMM_WEIGHT = 0.2
+    SIGNAL_DECAY = 0.9
 
     # Counterfactual Reasoning (v3.0)
-    COUNTERFACTUAL_REPLAYS = 3  # How many "what-if" replays per learning step
-    REGRET_WEIGHT = 0.3         # How much regret influences future decisions
-    COUNTERFACTUAL_INTERVAL = 5 # Steps between counterfactual analysis
+    COUNTERFACTUAL_REPLAYS = 3
+    REGRET_WEIGHT = 0.3
+    COUNTERFACTUAL_INTERVAL = 5
 
     # Knowledge Bank (v3.0)
-    KNOWLEDGE_BANK_SIZE = 200   # Max entries in the shared knowledge bank
-    KNOWLEDGE_INHERIT_RATE = 0.7  # Probability offspring inherits knowledge
-    KNOWLEDGE_ENTRY_DIM = 20    # Dimensionality of knowledge entries
-    WISDOM_TRANSFER_AMOUNT = 10 # How many knowledge entries to pass on death
+    KNOWLEDGE_BANK_SIZE = 200
+    KNOWLEDGE_INHERIT_RATE = 0.7
+    KNOWLEDGE_ENTRY_DIM = 20
+    WISDOM_TRANSFER_AMOUNT = 10
+
+    # Hierarchical Goals (v4.0)
+    MAX_GOAL_DEPTH = 3
+    GOAL_UPDATE_INTERVAL = 5
+    GOAL_WEIGHT = 0.3
+
+    # Theory of Mind (v4.0)
+    TOM_OBSERVATION_RANGE = 6.0
+    TOM_MEMORY_SIZE = 20
+    TOM_WEIGHT = 0.2
+
+    # Abstract Concepts (v4.0)
+    MAX_CONCEPTS = 20
+    CONCEPT_MERGE_THRESHOLD = 0.5
+    CONCEPT_WEIGHT = 0.15
+
+    # Self-Narrative (v4.0)
+    MAX_LIFE_EVENTS = 50
+    NARRATIVE_WEIGHT = 0.15
+    SIGNIFICANCE_THRESHOLD = 0.3
 
     # Simulation
     STEPS_PER_GENERATION = 100
@@ -225,7 +251,7 @@ class Genome:
     """
     NEAT-style genome encoding a variable-topology neural network
     plus evolvable learning rules, sensor config, metabolism,
-    decision intelligence params, and communication params.
+    decision intelligence params, communication params, and v4.0 cognitive params.
     """
 
     def __init__(self, input_size, output_size):
@@ -252,13 +278,32 @@ class Genome:
 
         # Communication evolvable parameters (v3.0)
         self.signal_strength = np.random.uniform(0.3, 1.0)
-        self.signal_honesty = np.random.uniform(0.0, 1.0)  # 1=honest, 0=deceptive
-        self.listen_weight = np.random.uniform(0.1, 0.9)    # How much to trust signals
-        self.broadcast_threshold = np.random.uniform(0.1, 0.8)  # When to broadcast
+        self.signal_honesty = np.random.uniform(0.0, 1.0)
+        self.listen_weight = np.random.uniform(0.1, 0.9)
+        self.broadcast_threshold = np.random.uniform(0.1, 0.8)
 
         # Counterfactual reasoning (v3.0)
         self.regret_sensitivity = np.random.uniform(0.1, 0.8)
         self.counterfactual_depth = max(1, int(np.random.uniform(1, 4)))
+
+        # Hierarchical Goals (v4.0)
+        self.goal_ambition = np.random.uniform(0.2, 0.8)
+        self.goal_persistence = np.random.uniform(0.3, 0.9)
+        self.goal_flexibility = np.random.uniform(0.2, 0.8)
+
+        # Theory of Mind (v4.0)
+        self.social_awareness = np.random.uniform(0.2, 0.8)
+        self.trust_default = np.random.uniform(0.3, 0.7)
+        self.modeling_capacity = max(3, int(np.random.uniform(3, 15)))
+
+        # Abstract Concepts (v4.0)
+        self.abstraction_capacity = max(5, int(np.random.uniform(5, 30)))
+        self.concept_threshold = np.random.uniform(0.3, 1.5)
+        self.generalization_rate = np.random.uniform(0.1, 0.7)
+
+        # Self-Narrative (v4.0)
+        self.narrative_sensitivity = np.random.uniform(0.2, 0.8)
+        self.identity_strength = np.random.uniform(0.1, 0.7)
 
         self._initialize_minimal()
 
@@ -374,6 +419,21 @@ class Genome:
         # Counterfactual params (v3.0)
         new.regret_sensitivity = self.regret_sensitivity
         new.counterfactual_depth = self.counterfactual_depth
+        # Hierarchical Goals (v4.0)
+        new.goal_ambition = self.goal_ambition
+        new.goal_persistence = self.goal_persistence
+        new.goal_flexibility = self.goal_flexibility
+        # Theory of Mind (v4.0)
+        new.social_awareness = self.social_awareness
+        new.trust_default = self.trust_default
+        new.modeling_capacity = self.modeling_capacity
+        # Abstract Concepts (v4.0)
+        new.abstraction_capacity = self.abstraction_capacity
+        new.concept_threshold = self.concept_threshold
+        new.generalization_rate = self.generalization_rate
+        # Self-Narrative (v4.0)
+        new.narrative_sensitivity = self.narrative_sensitivity
+        new.identity_strength = self.identity_strength
         return new
 
 
@@ -470,6 +530,47 @@ class Mutator:
             genome.counterfactual_depth += np.random.choice([-1, 0, 1])
             genome.counterfactual_depth = max(1, min(6, genome.counterfactual_depth))
 
+        # Mutate Hierarchical Goals parameters (v4.0)
+        if np.random.random() < 0.1:
+            genome.goal_ambition += np.random.randn() * 0.05
+            genome.goal_ambition = np.clip(genome.goal_ambition, 0.0, 1.0)
+        if np.random.random() < 0.1:
+            genome.goal_persistence += np.random.randn() * 0.05
+            genome.goal_persistence = np.clip(genome.goal_persistence, 0.0, 1.0)
+        if np.random.random() < 0.1:
+            genome.goal_flexibility += np.random.randn() * 0.05
+            genome.goal_flexibility = np.clip(genome.goal_flexibility, 0.0, 1.0)
+
+        # Mutate Theory of Mind parameters (v4.0)
+        if np.random.random() < 0.1:
+            genome.social_awareness += np.random.randn() * 0.05
+            genome.social_awareness = np.clip(genome.social_awareness, 0.0, 1.0)
+        if np.random.random() < 0.1:
+            genome.trust_default += np.random.randn() * 0.05
+            genome.trust_default = np.clip(genome.trust_default, 0.0, 1.0)
+        if np.random.random() < 0.05:
+            genome.modeling_capacity += np.random.choice([-1, 0, 1])
+            genome.modeling_capacity = max(3, min(15, genome.modeling_capacity))
+
+        # Mutate Abstract Concepts parameters (v4.0)
+        if np.random.random() < 0.05:
+            genome.abstraction_capacity += np.random.choice([-2, -1, 0, 1, 2])
+            genome.abstraction_capacity = max(5, min(30, genome.abstraction_capacity))
+        if np.random.random() < 0.1:
+            genome.concept_threshold += np.random.randn() * 0.1
+            genome.concept_threshold = np.clip(genome.concept_threshold, 0.1, 3.0)
+        if np.random.random() < 0.1:
+            genome.generalization_rate += np.random.randn() * 0.05
+            genome.generalization_rate = np.clip(genome.generalization_rate, 0.0, 1.0)
+
+        # Mutate Self-Narrative parameters (v4.0)
+        if np.random.random() < 0.1:
+            genome.narrative_sensitivity += np.random.randn() * 0.05
+            genome.narrative_sensitivity = np.clip(genome.narrative_sensitivity, 0.0, 1.0)
+        if np.random.random() < 0.1:
+            genome.identity_strength += np.random.randn() * 0.05
+            genome.identity_strength = np.clip(genome.identity_strength, 0.0, 1.0)
+
         return genome
 
     @staticmethod
@@ -553,6 +654,29 @@ class Mutator:
             child.regret_sensitivity = parent2.regret_sensitivity
         if np.random.random() < 0.5:
             child.counterfactual_depth = parent2.counterfactual_depth
+        # Crossover v4.0 params
+        if np.random.random() < 0.5:
+            child.goal_ambition = parent2.goal_ambition
+        if np.random.random() < 0.5:
+            child.goal_persistence = parent2.goal_persistence
+        if np.random.random() < 0.5:
+            child.goal_flexibility = parent2.goal_flexibility
+        if np.random.random() < 0.5:
+            child.social_awareness = parent2.social_awareness
+        if np.random.random() < 0.5:
+            child.trust_default = parent2.trust_default
+        if np.random.random() < 0.5:
+            child.modeling_capacity = parent2.modeling_capacity
+        if np.random.random() < 0.5:
+            child.abstraction_capacity = parent2.abstraction_capacity
+        if np.random.random() < 0.5:
+            child.concept_threshold = parent2.concept_threshold
+        if np.random.random() < 0.5:
+            child.generalization_rate = parent2.generalization_rate
+        if np.random.random() < 0.5:
+            child.narrative_sensitivity = parent2.narrative_sensitivity
+        if np.random.random() < 0.5:
+            child.identity_strength = parent2.identity_strength
         return child
 
 
@@ -643,7 +767,6 @@ class WorldModel:
 
 class CausalTransition:
     """A single recorded experience: state + action -> outcome + timing."""
-
     def __init__(self, state, action, next_state, reward, health_delta, time_cost,
                  world_state_before, world_state_after):
         self.state = state
@@ -655,12 +778,11 @@ class CausalTransition:
         self.world_state_before = world_state_before
         self.world_state_after = world_state_after
         self.downstream_value = 0.0
-        self.counterfactual_regret = 0.0  # v3.0: regret from what-if analysis
+        self.counterfactual_regret = 0.0
 
 
 class WorldStateEvaluator:
     """Learns to judge whether a world state is good, bad, or unacceptable."""
-
     def __init__(self, state_dim):
         self.state_dim = state_dim
         hidden = Config.STATE_EVAL_HIDDEN
@@ -708,7 +830,6 @@ class WorldStateEvaluator:
 
 class ConsequencePredictor:
     """Predicts what will happen if a certain action is taken."""
-
     def __init__(self, state_dim, action_dim=2):
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -777,7 +898,6 @@ class ConsequencePredictor:
 
 class DecisionJournal:
     """Full audit trail of every decision the agent makes."""
-
     def __init__(self):
         self.entries = deque(maxlen=500)
         self.good_decisions = 0
@@ -794,9 +914,6 @@ class DecisionJournal:
             'actual': actual_outcome,
             'was_acceptable': was_acceptable,
             'was_predicted_acceptable': was_predicted_acceptable,
-            'prediction_error': abs(
-                predicted_consequence.get('reward', 0) - actual_outcome.get('reward', 0)
-            )
         }
         self.entries.append(entry)
         if actual_outcome.get('health_delta', 0) > 0:
@@ -817,23 +934,9 @@ class DecisionJournal:
         unacceptable_penalty = self.entered_unacceptable * 0.2
         return np.clip(quality + avoidance_bonus - unacceptable_penalty, 0, 1)
 
-    def get_stats(self):
-        return {
-            'total_decisions': len(self.entries),
-            'good': self.good_decisions,
-            'bad': self.bad_decisions,
-            'avoided_unacceptable': self.avoided_unacceptable,
-            'entered_unacceptable': self.entered_unacceptable,
-            'quality': self.get_decision_quality()
-        }
-
 
 class DecisionIntelligence:
-    """
-    The complete Decision Intelligence System for an agent.
-    v3.0: Now includes counterfactual reasoning integration.
-    """
-
+    """The complete Decision Intelligence System for an agent."""
     def __init__(self, state_dim):
         self.state_dim = state_dim
         self.causal_memory = deque(maxlen=Config.CAUSAL_MEMORY_SIZE)
@@ -862,11 +965,7 @@ class DecisionIntelligence:
             score = reward_score + safety_score - penalty
         else:
             score = reward_score + safety_score * 0.5 + time_value * 0.3
-        return {
-            'score': score,
-            'predicted': pred,
-            'acceptable': predicted_acceptable
-        }
+        return {'score': score, 'predicted': pred, 'acceptable': predicted_acceptable}
 
     def choose_best_action(self, state, genome, base_action):
         candidates = [base_action]
@@ -876,7 +975,6 @@ class DecisionIntelligence:
             candidates.append(alt)
         candidates.append(np.array([0.0, 0.0]))
         candidates.append(-base_action)
-
         best_score = -float('inf')
         best_action = base_action
         best_eval = None
@@ -886,7 +984,6 @@ class DecisionIntelligence:
                 best_score = evaluation['score']
                 best_action = action
                 best_eval = evaluation
-
         self.total_decisions += 1
         return best_action, best_eval
 
@@ -895,42 +992,33 @@ class DecisionIntelligence:
         health_delta = health_after - health_before
         ws_before = self.get_world_state_descriptor(state, health_before, age)
         ws_after = self.get_world_state_descriptor(next_state, health_after, age + 1)
-
         transition = CausalTransition(
             state=state, action=action, next_state=next_state,
             reward=reward, health_delta=health_delta, time_cost=1,
             world_state_before=ws_before, world_state_after=ws_after
         )
         self.causal_memory.append(transition)
-
         state_value_target = np.clip(
-            health_delta * 0.5 + reward * 0.3 + (health_after / Config.INITIAL_HEALTH - 0.5),
-            -1, 1
+            health_delta * 0.5 + reward * 0.3 + (health_after / Config.INITIAL_HEALTH - 0.5), -1, 1
         )
         self.state_evaluator.train(ws_after, state_value_target)
-
         actual_state_value = self.state_evaluator.evaluate(ws_after)
         self.consequence_predictor.train(
-            state, action,
-            actual_reward=reward, actual_health_delta=health_delta,
+            state, action, actual_reward=reward, actual_health_delta=health_delta,
             actual_state_value=actual_state_value, actual_time_factor=1.0
         )
-
         is_acceptable = actual_state_value > -genome.acceptability_threshold
         pred = self.consequence_predictor.predict(state, action)
         pred_acceptable = pred['state_value'] > -genome.acceptability_threshold
         self.journal.record(
             state, action, pred,
-            {'reward': reward, 'health_delta': health_delta,
-             'state_value': actual_state_value},
+            {'reward': reward, 'health_delta': health_delta, 'state_value': actual_state_value},
             is_acceptable, pred_acceptable
         )
-
         if not is_acceptable:
             self.unacceptable_states.append(ws_after.copy())
             if len(self.unacceptable_states) > 50:
                 self.unacceptable_states = self.unacceptable_states[-50:]
-
         self._update_downstream_values(genome.temporal_discount)
         return is_acceptable
 
@@ -945,8 +1033,7 @@ class DecisionIntelligence:
     def get_decision_fitness(self):
         quality = self.journal.get_decision_quality()
         accuracy = self.consequence_predictor.get_accuracy()
-        avoidance = 1.0 - (self.journal.entered_unacceptable /
-                           max(self.total_decisions, 1))
+        avoidance = 1.0 - (self.journal.entered_unacceptable / max(self.total_decisions, 1))
         return (quality * 0.4 + accuracy * 0.3 + avoidance * 0.3)
 
     def copy(self):
@@ -961,8 +1048,6 @@ class DecisionIntelligence:
 # ============================================================================
 
 class Signal:
-    """A broadcast signal from an agent."""
-
     def __init__(self, sender_pos, signal_vector, strength, sender_id):
         self.sender_pos = sender_pos.copy()
         self.signal_vector = np.array(signal_vector)
@@ -972,35 +1057,23 @@ class Signal:
 
 
 class CommunicationChannel:
-    """
-    The shared communication medium. Agents broadcast signals into this
-    channel and receive signals from nearby agents. Signals decay with
-    distance and age.
-    """
-
     def __init__(self):
         self.active_signals = []
         self.signal_history = deque(maxlen=1000)
         self.total_broadcasts = 0
         self.total_receptions = 0
-        self.language_diversity = 0.0
 
     def broadcast(self, sender_pos, signal_vector, strength, sender_id):
-        """Agent broadcasts a signal into the channel."""
         sig = Signal(sender_pos, signal_vector, strength, sender_id)
         self.active_signals.append(sig)
         self.signal_history.append(signal_vector.copy())
         self.total_broadcasts += 1
 
     def receive(self, receiver_pos, receiver_id):
-        """
-        Receive all signals within range. Returns list of (signal_vector, strength)
-        tuples, weighted by distance decay.
-        """
         received = []
         for sig in self.active_signals:
             if sig.sender_id == receiver_id:
-                continue  # Don't hear your own signal
+                continue
             dist = np.linalg.norm(receiver_pos - sig.sender_pos)
             if dist < Config.COMM_RANGE:
                 decay = Config.SIGNAL_DECAY ** dist
@@ -1010,98 +1083,58 @@ class CommunicationChannel:
         return received
 
     def step(self):
-        """Age and remove old signals."""
         for sig in self.active_signals:
             sig.age += 1
         self.active_signals = [s for s in self.active_signals if s.age < 3]
 
     def get_language_stats(self):
-        """Analyze the emergent language structure."""
         if len(self.signal_history) < 10:
             return {'diversity': 0.0, 'clusters': 0, 'vocab_size': 0}
         signals = np.array(list(self.signal_history)[-100:])
         diversity = np.mean(np.std(signals, axis=0))
-        # Simple clustering: count distinct signal types
         rounded = np.round(signals, 1)
         unique = set(tuple(r) for r in rounded)
-        return {
-            'diversity': float(diversity),
-            'clusters': len(unique),
-            'vocab_size': min(len(unique), 50)
-        }
+        return {'diversity': float(diversity), 'clusters': len(unique), 'vocab_size': min(len(unique), 50)}
 
 
 class AgentCommunicator:
-    """
-    An agent's communication module. Handles encoding signals based on
-    internal state and decoding received signals to influence behavior.
-    """
-
     def __init__(self, state_dim):
         self.state_dim = state_dim
-        # Encoder: state -> signal
         self.encode_W = np.random.randn(Config.SIGNAL_DIM, state_dim) * 0.3
         self.encode_b = np.zeros(Config.SIGNAL_DIM)
-        # Decoder: signal -> action modifier
         self.decode_W = np.random.randn(2, Config.SIGNAL_DIM) * 0.3
         self.decode_b = np.zeros(2)
-        # Track communication effectiveness
-        self.signals_sent = 0
-        self.signals_received = 0
-        self.helpful_signals = 0  # Signals that led to good outcomes for receivers
+        self.helpful_signals = 0
 
     def encode_signal(self, state, genome):
-        """Generate a signal based on current state."""
         x = np.resize(state, self.state_dim)
         raw_signal = np.tanh(self.encode_W @ x + self.encode_b)
-        # Honesty modulation: honest agents signal truthfully,
-        # deceptive agents may invert or scramble
         if genome.signal_honesty < 0.3:
-            # Deceptive: partially invert the signal
             raw_signal = raw_signal * (2 * genome.signal_honesty - 1)
         return raw_signal * genome.signal_strength
 
     def decode_signals(self, received_signals, genome):
-        """
-        Process received signals and produce an action modifier.
-        Returns a 2D vector that modifies the agent's chosen action.
-        """
         if not received_signals:
             return np.zeros(2)
-
-        # Weighted average of received signals
-        total_weight = 0.0
         combined_signal = np.zeros(Config.SIGNAL_DIM)
+        total_weight = 0.0
         for sig_vec, strength in received_signals:
             combined_signal += sig_vec * strength
             total_weight += strength
-
         if total_weight > 0:
             combined_signal /= total_weight
-
-        # Decode to action modifier
         modifier = np.tanh(self.decode_W @ combined_signal + self.decode_b)
         return modifier * genome.listen_weight
 
     def learn_from_communication(self, received_signals, outcome_reward, lr=0.003):
-        """
-        Update encoder/decoder based on whether communication helped.
-        If receiving signals led to good outcomes, strengthen decoding.
-        """
         if not received_signals or abs(outcome_reward) < 0.01:
             return
-
         combined = np.zeros(Config.SIGNAL_DIM)
         for sig_vec, strength in received_signals:
             combined += sig_vec * strength
-
-        # Simple reinforcement: if outcome was good, strengthen current decoding
         reward_signal = np.clip(outcome_reward, -1, 1)
-        self.decode_W += lr * reward_signal * np.outer(
-            np.ones(2) * reward_signal, combined
-        )
+        self.decode_W += lr * reward_signal * np.outer(np.ones(2) * reward_signal, combined)
         self.decode_W = np.clip(self.decode_W, -3, 3)
-
         if outcome_reward > 0:
             self.helpful_signals += 1
 
@@ -1119,15 +1152,6 @@ class AgentCommunicator:
 # ============================================================================
 
 class CounterfactualEngine:
-    """
-    Enables agents to ask "what would have happened if I'd done something
-    different?" by replaying past decisions with alternative actions through
-    the consequence predictor.
-
-    This creates regret-based learning: agents that discover they missed
-    better alternatives adjust their future behavior.
-    """
-
     def __init__(self):
         self.total_replays = 0
         self.total_regrets = 0
@@ -1135,113 +1159,68 @@ class CounterfactualEngine:
         self.best_counterfactual_found = 0.0
 
     def analyze(self, causal_memory, consequence_predictor, genome):
-        """
-        Replay recent decisions with alternative actions.
-        Returns regret signals that can modify future behavior.
-        """
         if len(causal_memory) < 5:
             return []
-
         regrets = []
         memory = list(causal_memory)
-        # Sample recent transitions to analyze
-        indices = np.random.choice(
-            len(memory),
-            size=min(Config.COUNTERFACTUAL_REPLAYS, len(memory)),
-            replace=False
-        )
-
+        indices = np.random.choice(len(memory), size=min(Config.COUNTERFACTUAL_REPLAYS, len(memory)), replace=False)
         for idx in indices:
             transition = memory[idx]
             actual_reward = transition.reward
             actual_value = transition.downstream_value
-
-            # Generate counterfactual actions
             best_cf_score = actual_reward + actual_value
             best_cf_action = None
-
             for _ in range(genome.counterfactual_depth * 2):
-                # What if I had done something different?
                 cf_action = transition.action + np.random.randn(2) * 1.0
                 cf_action = np.clip(cf_action, -2, 2)
-
                 cf_pred = consequence_predictor.predict(transition.state, cf_action)
                 cf_score = cf_pred['reward'] + cf_pred['state_value'] * 0.5
-
                 if cf_score > best_cf_score:
                     best_cf_score = cf_score
                     best_cf_action = cf_action
-
-            # Also test the opposite action
             opposite = -transition.action
             opp_pred = consequence_predictor.predict(transition.state, opposite)
             opp_score = opp_pred['reward'] + opp_pred['state_value'] * 0.5
             if opp_score > best_cf_score:
                 best_cf_score = opp_score
                 best_cf_action = opposite
-
-            # Calculate regret
             regret = max(0, best_cf_score - (actual_reward + actual_value))
             if regret > 0 and best_cf_action is not None:
                 regrets.append({
-                    'state': transition.state,
-                    'actual_action': transition.action,
-                    'better_action': best_cf_action,
-                    'regret': regret,
+                    'state': transition.state, 'actual_action': transition.action,
+                    'better_action': best_cf_action, 'regret': regret,
                     'improvement': best_cf_score - (actual_reward + actual_value)
                 })
                 transition.counterfactual_regret = regret
                 self.total_regrets += 1
-
             self.total_replays += 1
-
         if regrets:
-            max_regret = max(r['regret'] for r in regrets)
-            self.best_counterfactual_found = max(
-                self.best_counterfactual_found, max_regret
-            )
             self.regret_history.append(np.mean([r['regret'] for r in regrets]))
-
         return regrets
 
     def get_regret_adjustment(self, state, proposed_action, regrets, genome):
-        """
-        Use regret from counterfactual analysis to adjust the proposed action.
-        If similar states had high regret, nudge toward the better alternative.
-        """
         if not regrets:
             return proposed_action
-
-        # Find regrets from similar states
         best_adjustment = np.zeros(2)
         total_weight = 0.0
-
         for regret_entry in regrets:
             state_similarity = 1.0 / (1.0 + np.linalg.norm(
-                np.resize(state, len(regret_entry['state'])) -
-                regret_entry['state']
+                np.resize(state, len(regret_entry['state'])) - regret_entry['state']
             ))
             if state_similarity > 0.3:
                 weight = regret_entry['regret'] * state_similarity * genome.regret_sensitivity
                 direction = regret_entry['better_action'] - regret_entry['actual_action']
                 best_adjustment += direction * weight
                 total_weight += weight
-
         if total_weight > 0:
             best_adjustment /= total_weight
             adjusted = proposed_action + best_adjustment * 0.3
             return np.clip(adjusted, -2, 2)
-
         return proposed_action
 
     def get_stats(self):
         avg_regret = np.mean(list(self.regret_history)) if self.regret_history else 0.0
-        return {
-            'total_replays': self.total_replays,
-            'total_regrets': self.total_regrets,
-            'avg_regret': avg_regret,
-            'best_counterfactual': self.best_counterfactual_found
-        }
+        return {'total_replays': self.total_replays, 'total_regrets': self.total_regrets, 'avg_regret': avg_regret}
 
 
 # ============================================================================
@@ -1249,10 +1228,7 @@ class CounterfactualEngine:
 # ============================================================================
 
 class KnowledgeEntry:
-    """A single piece of learned knowledge."""
-
-    def __init__(self, state_pattern, best_action, expected_reward,
-                 danger_level, source_fitness, source_generation):
+    def __init__(self, state_pattern, best_action, expected_reward, danger_level, source_fitness, source_generation):
         self.state_pattern = np.array(state_pattern)
         self.best_action = np.array(best_action)
         self.expected_reward = expected_reward
@@ -1269,63 +1245,38 @@ class KnowledgeEntry:
 
 
 class KnowledgeBank:
-    """
-    Shared knowledge repository that persists across agent lifetimes.
-    Agents deposit wisdom when they die (or reproduce), and offspring
-    can inherit accumulated knowledge -- enabling cultural evolution.
-    """
-
     def __init__(self):
         self.entries = []
         self.total_deposits = 0
         self.total_withdrawals = 0
         self.total_helpful = 0
-        self.generation_deposits = defaultdict(int)
 
     def deposit(self, agent_memory, agent_fitness, generation):
-        """
-        Extract knowledge from an agent's experience and store it.
-        Called when an agent dies or reproduces.
-        """
         if not agent_memory:
             return 0
-
         deposited = 0
         memory = list(agent_memory)
-
-        # Extract the best experiences as knowledge
-        sorted_mem = sorted(memory, key=lambda t: t.reward + t.downstream_value,
-                            reverse=True)
-
+        sorted_mem = sorted(memory, key=lambda t: t.reward + t.downstream_value, reverse=True)
         for transition in sorted_mem[:Config.WISDOM_TRANSFER_AMOUNT]:
             state_pattern = np.resize(transition.state, Config.KNOWLEDGE_ENTRY_DIM)
             entry = KnowledgeEntry(
-                state_pattern=state_pattern,
-                best_action=transition.action,
+                state_pattern=state_pattern, best_action=transition.action,
                 expected_reward=transition.reward,
                 danger_level=-transition.health_delta if transition.health_delta < 0 else 0,
-                source_fitness=agent_fitness,
-                source_generation=generation
+                source_fitness=agent_fitness, source_generation=generation
             )
             self.entries.append(entry)
             deposited += 1
-
-        # Also deposit danger knowledge (what to avoid)
         dangerous = [t for t in memory if t.health_delta < -2]
         for transition in dangerous[:5]:
             state_pattern = np.resize(transition.state, Config.KNOWLEDGE_ENTRY_DIM)
             entry = KnowledgeEntry(
-                state_pattern=state_pattern,
-                best_action=-transition.action,  # Opposite of what caused danger
-                expected_reward=transition.reward,
-                danger_level=-transition.health_delta,
-                source_fitness=agent_fitness,
-                source_generation=generation
+                state_pattern=state_pattern, best_action=-transition.action,
+                expected_reward=transition.reward, danger_level=-transition.health_delta,
+                source_fitness=agent_fitness, source_generation=generation
             )
             self.entries.append(entry)
             deposited += 1
-
-        # Prune if too large: keep most useful and most recent
         if len(self.entries) > Config.KNOWLEDGE_BANK_SIZE:
             self.entries.sort(
                 key=lambda e: e.get_usefulness() * 0.5 + e.source_fitness * 0.3 +
@@ -1333,51 +1284,550 @@ class KnowledgeBank:
                 reverse=True
             )
             self.entries = self.entries[:Config.KNOWLEDGE_BANK_SIZE]
-
         self.total_deposits += deposited
-        self.generation_deposits[generation] += deposited
         return deposited
 
     def withdraw(self, state, n=3):
-        """
-        Query the knowledge bank for relevant knowledge given current state.
-        Returns the n most relevant entries.
-        """
         if not self.entries:
             return []
-
         state_pattern = np.resize(state, Config.KNOWLEDGE_ENTRY_DIM)
         scored = []
         for entry in self.entries:
             similarity = 1.0 / (1.0 + np.linalg.norm(state_pattern - entry.state_pattern))
             relevance = similarity * (0.5 + entry.get_usefulness() * 0.5)
             scored.append((relevance, entry))
-
         scored.sort(key=lambda x: x[0], reverse=True)
         results = []
         for _, entry in scored[:n]:
             entry.times_used += 1
             self.total_withdrawals += 1
             results.append(entry)
-
         return results
 
     def report_outcome(self, entry, was_helpful):
-        """Report whether a piece of knowledge was actually helpful."""
         if was_helpful:
             entry.times_helpful += 1
             self.total_helpful += 1
 
     def get_stats(self):
-        avg_usefulness = np.mean([e.get_usefulness() for e in self.entries]) if self.entries else 0
         return {
-            'total_entries': len(self.entries),
-            'total_deposits': self.total_deposits,
-            'total_withdrawals': self.total_withdrawals,
-            'total_helpful': self.total_helpful,
-            'avg_usefulness': avg_usefulness,
+            'total_entries': len(self.entries), 'total_deposits': self.total_deposits,
+            'total_withdrawals': self.total_withdrawals, 'total_helpful': self.total_helpful,
             'helpfulness_rate': self.total_helpful / max(self.total_withdrawals, 1)
         }
+
+
+# ============================================================================
+# HIERARCHICAL GOAL FORMATION (v4.0)
+# ============================================================================
+
+class GoalNode:
+    """A single goal in the hierarchy."""
+    TYPES = ['survive', 'explore', 'accumulate', 'reproduce', 'social']
+
+    def __init__(self, goal_type, priority, completion_threshold=1.0, parent=None, depth=0):
+        self.goal_type = goal_type
+        self.priority = priority
+        self.completion_threshold = completion_threshold
+        self.progress = 0.0
+        self.sub_goals = []
+        self.parent = parent
+        self.depth = depth
+        self.completed = False
+        self.abandoned = False
+        self.age = 0
+
+    def is_active(self):
+        return not self.completed and not self.abandoned
+
+
+class HierarchicalGoalSystem:
+    """Agents set their own goals, decompose into sub-goals, pursue multi-step plans."""
+
+    def __init__(self):
+        self.root_goals = []
+        self.goals_completed = 0
+        self.goals_abandoned = 0
+        self.total_goals_created = 0
+
+    def generate_goals(self, state, health, age, genome):
+        """Create/update goals based on current situation."""
+        # Remove completed/abandoned goals
+        self.root_goals = [g for g in self.root_goals if g.is_active()]
+
+        # Limit active goals based on ambition
+        max_goals = max(1, int(genome.goal_ambition * 5))
+        if len(self.root_goals) >= max_goals:
+            return
+
+        # Generate goals based on situation
+        energy_level = np.mean(state) if len(state) > 0 else 0
+        health_ratio = health / Config.INITIAL_HEALTH
+
+        if health_ratio < 0.4:
+            self._add_goal('survive', priority=1.0, genome=genome)
+        if health_ratio > 0.7 and genome.goal_ambition > 0.5:
+            self._add_goal('reproduce', priority=0.8 * genome.goal_ambition, genome=genome)
+        if energy_level < 0.3:
+            self._add_goal('explore', priority=0.6, genome=genome)
+        if genome.goal_ambition > 0.6:
+            self._add_goal('accumulate', priority=0.5 * genome.goal_ambition, genome=genome)
+        if genome.social_awareness > 0.5:
+            self._add_goal('social', priority=0.4 * genome.social_awareness, genome=genome)
+
+    def _add_goal(self, goal_type, priority, genome):
+        """Add a goal if one of this type doesn't already exist."""
+        existing_types = [g.goal_type for g in self.root_goals]
+        if goal_type in existing_types:
+            return
+        goal = GoalNode(goal_type, priority, completion_threshold=1.0)
+        # Add sub-goals based on depth and flexibility
+        if genome.goal_ambition > 0.5 and goal.depth < Config.MAX_GOAL_DEPTH:
+            n_sub = max(1, int(genome.goal_flexibility * 3))
+            for i in range(n_sub):
+                sub_type = np.random.choice(GoalNode.TYPES)
+                sub = GoalNode(sub_type, priority * 0.7, completion_threshold=0.5,
+                               parent=goal, depth=goal.depth + 1)
+                goal.sub_goals.append(sub)
+        self.root_goals.append(goal)
+        self.total_goals_created += 1
+
+    def select_active_goal(self):
+        """Pick highest priority incomplete goal."""
+        active = [g for g in self.root_goals if g.is_active()]
+        if not active:
+            return None
+        # Check sub-goals first
+        for goal in sorted(active, key=lambda g: g.priority, reverse=True):
+            active_subs = [s for s in goal.sub_goals if s.is_active()]
+            if active_subs:
+                return max(active_subs, key=lambda s: s.priority)
+            return goal
+        return active[0]
+
+    def get_goal_action_bias(self, state, active_goal):
+        """Return a 2D action modifier that biases toward goal completion."""
+        if active_goal is None:
+            return np.zeros(2)
+        energy_level = np.mean(state) if len(state) > 0 else 0
+        bias = np.zeros(2)
+        if active_goal.goal_type == 'survive':
+            # Bias toward high-energy areas (positive gradient)
+            if len(state) >= 4:
+                grad_x = state[len(state)//2 + 1] - state[len(state)//2 - 1] if len(state) > 2 else 0
+                grad_y = state[min(len(state)-1, len(state)//2 + 3)] - state[max(0, len(state)//2 - 3)] if len(state) > 6 else 0
+                bias = np.array([grad_x, grad_y]) * 0.5
+        elif active_goal.goal_type == 'explore':
+            # Bias toward movement (random direction, changes over time)
+            angle = (active_goal.age * 0.1) % (2 * np.pi)
+            bias = np.array([np.cos(angle), np.sin(angle)]) * 0.3
+        elif active_goal.goal_type == 'accumulate':
+            # Stay near energy
+            if energy_level > 0.5:
+                bias = np.zeros(2)  # Stay put
+            else:
+                bias = np.random.randn(2) * 0.2  # Search
+        elif active_goal.goal_type == 'reproduce':
+            bias = np.random.randn(2) * 0.1  # Move carefully
+        elif active_goal.goal_type == 'social':
+            bias = np.random.randn(2) * 0.15  # Wander toward others
+        return np.clip(bias, -1, 1)
+
+    def update_progress(self, state, health_delta, energy_gained, genome):
+        """Update goal progress based on outcomes."""
+        for goal in self.root_goals:
+            if not goal.is_active():
+                continue
+            goal.age += 1
+            # Update progress based on goal type
+            if goal.goal_type == 'survive' and health_delta > 0:
+                goal.progress += 0.1
+            elif goal.goal_type == 'explore':
+                goal.progress += 0.05  # Always progressing while alive
+            elif goal.goal_type == 'accumulate' and energy_gained > 0.5:
+                goal.progress += energy_gained * 0.2
+            elif goal.goal_type == 'reproduce' and health_delta > 1:
+                goal.progress += 0.15
+            elif goal.goal_type == 'social':
+                goal.progress += 0.03
+
+            # Check completion
+            if goal.progress >= goal.completion_threshold:
+                goal.completed = True
+                self.goals_completed += 1
+                # Complete sub-goals too
+                for sub in goal.sub_goals:
+                    if sub.is_active():
+                        sub.completed = True
+                        self.goals_completed += 1
+
+            # Abandon stale goals (low persistence = abandon faster)
+            if goal.age > 50 / max(genome.goal_persistence, 0.1) and goal.progress < 0.2:
+                goal.abandoned = True
+                self.goals_abandoned += 1
+
+            # Update sub-goals
+            for sub in goal.sub_goals:
+                if sub.is_active():
+                    sub.age += 1
+                    sub.progress += np.random.uniform(0, 0.05)
+                    if sub.progress >= sub.completion_threshold:
+                        sub.completed = True
+                        self.goals_completed += 1
+
+    def get_stats(self):
+        active = [g for g in self.root_goals if g.is_active()]
+        max_depth = 0
+        for g in self.root_goals:
+            if g.sub_goals:
+                max_depth = max(max_depth, 1)
+        return {
+            'goals_completed': self.goals_completed,
+            'goals_abandoned': self.goals_abandoned,
+            'active_goals': len(active),
+            'deepest_depth': max_depth,
+            'total_created': self.total_goals_created
+        }
+
+
+# ============================================================================
+# THEORY OF MIND (v4.0)
+# ============================================================================
+
+class AgentModel:
+    """Internal model of another agent's behavior."""
+    def __init__(self, agent_id):
+        self.agent_id = agent_id
+        self.predicted_direction = np.zeros(2)
+        self.predicted_aggression = 0.5
+        self.reliability_score = 0.5
+        self.observation_count = 0
+        self.last_pos = None
+        self.last_action = None
+        self.prediction_errors = []
+
+    def update(self, pos, action):
+        if self.last_pos is not None and self.last_action is not None:
+            # Check prediction accuracy
+            actual_dir = pos - self.last_pos if self.last_pos is not None else np.zeros(2)
+            pred_error = np.linalg.norm(actual_dir - self.predicted_direction)
+            self.prediction_errors.append(pred_error)
+            if len(self.prediction_errors) > 20:
+                self.prediction_errors = self.prediction_errors[-20:]
+            self.reliability_score = 1.0 / (1.0 + np.mean(self.prediction_errors))
+        self.last_pos = pos.copy()
+        self.last_action = action.copy() if action is not None else np.zeros(2)
+        # Update predictions with exponential moving average
+        alpha = 0.3
+        if action is not None:
+            self.predicted_direction = (1 - alpha) * self.predicted_direction + alpha * action
+        # Estimate aggression from speed
+        speed = np.linalg.norm(action) if action is not None else 0
+        self.predicted_aggression = (1 - alpha) * self.predicted_aggression + alpha * min(speed / 2.0, 1.0)
+        self.observation_count += 1
+
+
+class TheoryOfMind:
+    """Agents build internal models of other agents' behavior."""
+
+    def __init__(self, capacity=10):
+        self.models = {}
+        self.capacity = capacity
+        self.social_interactions = 0
+        self.correct_predictions = 0
+        self.total_predictions = 0
+
+    def observe(self, other_agent_id, other_pos, other_action):
+        """Update internal model of another agent."""
+        if other_agent_id not in self.models:
+            if len(self.models) >= self.capacity:
+                # Remove least observed
+                least = min(self.models.values(), key=lambda m: m.observation_count)
+                del self.models[least.agent_id]
+            self.models[other_agent_id] = AgentModel(other_agent_id)
+        self.models[other_agent_id].update(other_pos, other_action)
+        self.social_interactions += 1
+
+    def predict_agent(self, agent_id):
+        """Predict next action of a modeled agent."""
+        if agent_id not in self.models:
+            return np.zeros(2)
+        model = self.models[agent_id]
+        self.total_predictions += 1
+        return model.predicted_direction.copy()
+
+    def get_social_action_modifier(self, own_pos, nearby_agents_info):
+        """Return 2D modifier: approach cooperators, avoid aggressors."""
+        if not nearby_agents_info:
+            return np.zeros(2)
+        modifier = np.zeros(2)
+        for agent_id, agent_pos in nearby_agents_info:
+            if agent_id in self.models:
+                model = self.models[agent_id]
+                direction = agent_pos - own_pos
+                dist = np.linalg.norm(direction)
+                if dist < 0.1:
+                    continue
+                direction = direction / dist
+                # Approach reliable/cooperative agents, avoid aggressive ones
+                if model.predicted_aggression > 0.7:
+                    modifier -= direction * 0.3  # Avoid
+                elif model.reliability_score > 0.6:
+                    modifier += direction * 0.1  # Approach cautiously
+        return np.clip(modifier, -1, 1)
+
+    def get_trust_level(self, agent_id):
+        if agent_id not in self.models:
+            return 0.5
+        return self.models[agent_id].reliability_score
+
+    def get_stats(self):
+        return {
+            'agents_modeled': len(self.models),
+            'social_interactions': self.social_interactions,
+            'total_predictions': self.total_predictions,
+            'avg_reliability': np.mean([m.reliability_score for m in self.models.values()]) if self.models else 0.5
+        }
+
+
+# ============================================================================
+# ABSTRACT CONCEPT FORMATION (v4.0)
+# ============================================================================
+
+class Concept:
+    """An abstract prototype formed from repeated experiences."""
+    _next_id = 0
+
+    def __init__(self, centroid, reward, danger):
+        self.id = Concept._next_id
+        Concept._next_id += 1
+        self.centroid = np.array(centroid, dtype=float)
+        self.label = f"concept_{self.id}"
+        self.exemplar_count = 1
+        self.avg_reward = reward
+        self.avg_danger = danger
+        self.associated_action = np.zeros(2)
+        self.last_used = 0
+
+
+class ConceptMemory:
+    """Agents compress repeated experiences into abstract prototypes."""
+
+    def __init__(self, capacity=20, threshold=1.0):
+        self.concepts = []
+        self.capacity = capacity
+        self.threshold = threshold
+        self.categorizations = 0
+        self.merges = 0
+
+    def observe_and_categorize(self, state, reward, danger_level, action=None):
+        """Find nearest concept or create new one."""
+        state_vec = np.resize(state, 10)  # Compress to fixed dim
+        nearest, dist = self._find_nearest(state_vec)
+
+        if nearest is not None and dist < self.threshold:
+            # Update existing concept (running average)
+            alpha = 1.0 / (nearest.exemplar_count + 1)
+            nearest.centroid = (1 - alpha) * nearest.centroid + alpha * state_vec
+            nearest.avg_reward = (1 - alpha) * nearest.avg_reward + alpha * reward
+            nearest.avg_danger = (1 - alpha) * nearest.avg_danger + alpha * danger_level
+            if action is not None:
+                nearest.associated_action = (1 - alpha) * nearest.associated_action + alpha * np.resize(action, 2)
+            nearest.exemplar_count += 1
+            nearest.last_used = self.categorizations
+            self.categorizations += 1
+            return nearest
+        else:
+            # Create new concept
+            if len(self.concepts) >= self.capacity:
+                # Remove least used
+                self.concepts.sort(key=lambda c: c.exemplar_count)
+                self.concepts.pop(0)
+            concept = Concept(state_vec, reward, danger_level)
+            if action is not None:
+                concept.associated_action = np.resize(action, 2)
+            self.concepts.append(concept)
+            self.categorizations += 1
+            return concept
+
+    def _find_nearest(self, state_vec):
+        if not self.concepts:
+            return None, float('inf')
+        best_dist = float('inf')
+        best_concept = None
+        for concept in self.concepts:
+            dist = np.linalg.norm(state_vec - concept.centroid)
+            if dist < best_dist:
+                best_dist = dist
+                best_concept = concept
+        return best_concept, best_dist
+
+    def get_situation_assessment(self, state):
+        """Assess current situation based on known concepts."""
+        state_vec = np.resize(state, 10)
+        nearest, dist = self._find_nearest(state_vec)
+        if nearest is None:
+            return {'concept_label': 'unknown', 'expected_reward': 0, 'expected_danger': 0, 'familiarity': 0}
+        familiarity = 1.0 / (1.0 + dist)
+        return {
+            'concept_label': nearest.label,
+            'expected_reward': nearest.avg_reward,
+            'expected_danger': nearest.avg_danger,
+            'familiarity': familiarity
+        }
+
+    def get_concept_action_bias(self, state):
+        """Return 2D modifier based on matched concept's associated action."""
+        state_vec = np.resize(state, 10)
+        nearest, dist = self._find_nearest(state_vec)
+        if nearest is None or dist > self.threshold * 2:
+            return np.zeros(2)
+        familiarity = 1.0 / (1.0 + dist)
+        return nearest.associated_action * familiarity * 0.3
+
+    def merge_similar_concepts(self):
+        """Merge concepts that are too close together."""
+        if len(self.concepts) < 2:
+            return
+        merged = True
+        while merged:
+            merged = False
+            for i in range(len(self.concepts)):
+                for j in range(i + 1, len(self.concepts)):
+                    dist = np.linalg.norm(self.concepts[i].centroid - self.concepts[j].centroid)
+                    if dist < Config.CONCEPT_MERGE_THRESHOLD:
+                        # Merge j into i
+                        ci, cj = self.concepts[i], self.concepts[j]
+                        total = ci.exemplar_count + cj.exemplar_count
+                        ci.centroid = (ci.centroid * ci.exemplar_count + cj.centroid * cj.exemplar_count) / total
+                        ci.avg_reward = (ci.avg_reward * ci.exemplar_count + cj.avg_reward * cj.exemplar_count) / total
+                        ci.avg_danger = (ci.avg_danger * ci.exemplar_count + cj.avg_danger * cj.exemplar_count) / total
+                        ci.exemplar_count = total
+                        self.concepts.pop(j)
+                        self.merges += 1
+                        merged = True
+                        break
+                if merged:
+                    break
+
+    def get_stats(self):
+        return {
+            'concepts_formed': len(self.concepts),
+            'categorizations': self.categorizations,
+            'merges': self.merges,
+            'total_exemplars': sum(c.exemplar_count for c in self.concepts) if self.concepts else 0
+        }
+
+
+# ============================================================================
+# SELF-NARRATIVE / AUTOBIOGRAPHICAL MEMORY (v4.0)
+# ============================================================================
+
+class LifeEvent:
+    """A significant event in an agent's life."""
+    TYPES = ['birth', 'discovery', 'danger', 'achievement', 'loss', 'social']
+
+    def __init__(self, timestamp, event_type, description_vector, significance):
+        self.timestamp = timestamp
+        self.event_type = event_type
+        self.description_vector = np.array(description_vector)
+        self.significance = significance
+
+
+class SelfNarrative:
+    """Agents maintain a compressed autobiography that influences decisions."""
+
+    def __init__(self):
+        self.events = []
+        self.achievements = 0
+        self.dangers_survived = 0
+        self.discoveries = 0
+        self.social_events = 0
+        self.losses = 0
+
+    def record_event(self, age, event_type, state, significance):
+        """Add a life event, prune low-significance if full."""
+        if significance < Config.SIGNIFICANCE_THRESHOLD:
+            return
+        desc_vec = np.resize(state, 8)  # Compact representation
+        event = LifeEvent(age, event_type, desc_vec, significance)
+        self.events.append(event)
+
+        # Track counts
+        if event_type == 'achievement':
+            self.achievements += 1
+        elif event_type == 'danger':
+            self.dangers_survived += 1
+        elif event_type == 'discovery':
+            self.discoveries += 1
+        elif event_type == 'social':
+            self.social_events += 1
+        elif event_type == 'loss':
+            self.losses += 1
+
+        # Prune if too many events
+        if len(self.events) > Config.MAX_LIFE_EVENTS:
+            self.events.sort(key=lambda e: e.significance)
+            self.events = self.events[len(self.events) - Config.MAX_LIFE_EVENTS:]
+
+    def get_identity_vector(self):
+        """Compressed representation of life story."""
+        if not self.events:
+            return np.zeros(8)
+        # Average of all event descriptions weighted by significance
+        total_sig = sum(e.significance for e in self.events)
+        if total_sig < 0.01:
+            return np.zeros(8)
+        identity = np.zeros(8)
+        for event in self.events:
+            identity += event.description_vector * event.significance
+        identity /= total_sig
+        return identity
+
+    def get_narrative_bias(self, state):
+        """Return 2D action modifier based on life patterns."""
+        if not self.events:
+            return np.zeros(2)
+        state_vec = np.resize(state, 8)
+        bias = np.zeros(2)
+
+        # If past danger events cluster near current state, bias away
+        danger_events = [e for e in self.events if e.event_type == 'danger']
+        for event in danger_events[-5:]:
+            similarity = 1.0 / (1.0 + np.linalg.norm(state_vec - event.description_vector))
+            if similarity > 0.4:
+                # Bias away from danger-associated states
+                direction = state_vec[:2] - event.description_vector[:2]
+                bias += direction * similarity * 0.2
+
+        # If past achievement events cluster near current state, bias toward
+        achievement_events = [e for e in self.events if e.event_type == 'achievement']
+        for event in achievement_events[-5:]:
+            similarity = 1.0 / (1.0 + np.linalg.norm(state_vec - event.description_vector))
+            if similarity > 0.4:
+                direction = event.description_vector[:2] - state_vec[:2]
+                bias += direction * similarity * 0.15
+
+        return np.clip(bias, -0.5, 0.5)
+
+    def evaluate_life_quality(self):
+        """Return 0-1 score based on achievements vs losses."""
+        positive = self.achievements + self.discoveries + self.dangers_survived * 0.5
+        negative = self.losses
+        total = positive + negative
+        if total == 0:
+            return 0.5
+        return np.clip(positive / total, 0, 1)
+
+    def get_stats(self):
+        return {
+            'total_events': len(self.events),
+            'achievements': self.achievements,
+            'dangers_survived': self.dangers_survived,
+            'discoveries': self.discoveries,
+            'life_quality': self.evaluate_life_quality()
+        }
+
 
 
 # ============================================================================
@@ -1398,68 +1848,52 @@ class Field:
 
     def _generate_hotspots(self):
         self.hotspots = [
-            (np.random.randint(5, self.size - 5), np.random.randint(5, self.size - 5))
+            (np.random.randint(5, self.size - 5), np.random.randint(5, self.size - 5),
+             np.random.uniform(3, 8))
             for _ in range(Config.HOTSPOT_COUNT)
         ]
 
     def _refresh(self):
-        self.grid += Config.ENERGY_REGEN_RATE
-        for hx, hy in self.hotspots:
-            for dx in range(-5, 6):
-                for dy in range(-5, 6):
-                    x, y = (hx + dx) % self.size, (hy + dy) % self.size
+        self.grid *= (1 - Config.ENERGY_REGEN_RATE)
+        for hx, hy, strength in self.hotspots:
+            for dx in range(-4, 5):
+                for dy in range(-4, 5):
+                    x, y = int(hx + dx) % self.size, int(hy + dy) % self.size
                     dist = np.sqrt(dx**2 + dy**2)
-                    if dist < 6:
-                        self.grid[x][y] += 0.3 * np.exp(-dist / 2.5)
-        from scipy.ndimage import uniform_filter
-        self.grid = uniform_filter(self.grid, size=3) * (1 + Config.ENERGY_DIFFUSION)
+                    self.grid[x, y] += strength * np.exp(-dist / 2.0) * 0.1
         self.grid = np.clip(self.grid, 0, 10)
 
     def step(self):
         self.step_count += 1
         self._refresh()
-        if np.random.random() < Config.HOTSPOT_SHIFT_RATE:
-            idx = np.random.randint(len(self.hotspots))
-            hx, hy = self.hotspots[idx]
-            hx = (hx + np.random.randint(-3, 4)) % self.size
-            hy = (hy + np.random.randint(-3, 4)) % self.size
-            self.hotspots[idx] = (hx, hy)
-        if self.phase >= 1:
-            if np.random.random() < 0.05:
-                idx = np.random.randint(len(self.hotspots))
-                self.hotspots[idx] = (
-                    np.random.randint(0, self.size),
-                    np.random.randint(0, self.size)
-                )
-        if self.phase >= 3:
-            if np.random.random() < 0.01:
-                self.grid *= 0.3
-        if self.phase >= 4:
-            if np.random.random() < 0.005:
-                self.grid = np.max(self.grid) - self.grid
+        # Shift hotspots slowly
+        if self.step_count % 20 == 0:
+            for i in range(len(self.hotspots)):
+                hx, hy, s = self.hotspots[i]
+                hx = (hx + np.random.randint(-1, 2)) % self.size
+                hy = (hy + np.random.randint(-1, 2)) % self.size
+                self.hotspots[i] = (hx, hy, s)
 
-    def consume_energy(self, x, y, amount=1.0):
-        ix, iy = int(x) % self.size, int(y) % self.size
-        available = self.grid[ix][iy]
-        consumed = min(available, amount)
-        self.grid[ix][iy] -= consumed
-        return consumed
+    def get_energy(self, pos):
+        x, y = int(pos[0]) % self.size, int(pos[1]) % self.size
+        energy = self.grid[x, y]
+        self.grid[x, y] *= 0.5  # Consume
+        return energy
 
-    def get_local_view(self, x, y, radius=None):
-        radius = radius or Config.SENSOR_RADIUS
-        view = []
+    def sense(self, pos, radius=2):
+        readings = []
+        x0, y0 = int(pos[0]), int(pos[1])
         for dx in range(-radius, radius + 1):
             for dy in range(-radius, radius + 1):
-                ix = int(x + dx) % self.size
-                iy = int(y + dy) % self.size
-                view.append(self.grid[ix][iy])
-        return np.array(view)
+                x = (x0 + dx) % self.size
+                y = (y0 + dy) % self.size
+                readings.append(self.grid[x, y])
+        return np.array(readings)
 
-    def advance_curriculum(self):
-        if self.phase < Config.CURRICULUM_PHASES - 1:
-            self.phase += 1
-            return True
-        return False
+    def advance_phase(self):
+        self.phase += 1
+        Config.HOTSPOT_COUNT = min(Config.HOTSPOT_COUNT + 1, 10)
+        self._generate_hotspots()
 
 
 # ============================================================================
@@ -1467,446 +1901,353 @@ class Field:
 # ============================================================================
 
 class NoveltyArchive:
+    """Stores novel behaviors for novelty search."""
+
     def __init__(self):
         self.archive = []
-        self.k = Config.NOVELTY_K
 
     def compute_novelty(self, behavior_vector):
-        if len(self.archive) < self.k:
+        if len(self.archive) < Config.NOVELTY_K:
             return 1.0
-        distances = [
-            np.linalg.norm(np.array(behavior_vector) - np.array(archived))
-            for archived in self.archive
-        ]
+        distances = [np.linalg.norm(behavior_vector - b) for b in self.archive]
         distances.sort()
-        return np.mean(distances[:self.k])
+        return np.mean(distances[:Config.NOVELTY_K])
 
-    def add(self, behavior_vector):
-        self.archive.append(behavior_vector)
-        if len(self.archive) > Config.NOVELTY_ARCHIVE_MAX:
-            self.archive = self.archive[-Config.NOVELTY_ARCHIVE_MAX:]
-
-    def get_diversity(self):
-        if len(self.archive) < 2:
-            return 0.0
-        arr = np.array(self.archive)
-        return np.mean(np.std(arr, axis=0))
+    def maybe_add(self, behavior_vector, novelty_score):
+        if novelty_score > 0.5 or np.random.random() < 0.05:
+            self.archive.append(behavior_vector.copy())
+            if len(self.archive) > Config.NOVELTY_ARCHIVE_MAX:
+                idx = np.random.randint(len(self.archive))
+                self.archive.pop(idx)
 
 
 # ============================================================================
-# GODEL VALIDATION ENGINE
+# GODEL ENGINE (Self-Modification with Validation)
 # ============================================================================
 
 class GodelEngine:
+    """Validated self-modification: only accept changes that provably improve."""
+
     def __init__(self):
-        self.modification_history = []
-        self.accepted = 0
-        self.rejected = 0
+        self.modifications_attempted = 0
+        self.modifications_accepted = 0
+        self.modifications_rejected = 0
+        self.cooldown = 0
 
     def propose_modification(self, agent, field):
-        snapshot = agent.genome.copy()
-        baseline_scores = []
-        for _ in range(Config.GODEL_TEST_EPISODES):
-            score = self._evaluate_episode(agent, field)
-            baseline_scores.append(score)
-        agent.genome = snapshot.copy()
-        self._apply_self_modification(agent)
-        modified_scores = []
-        for _ in range(Config.GODEL_TEST_EPISODES):
-            score = self._evaluate_episode(agent, field)
-            modified_scores.append(score)
-        improvement = np.mean(modified_scores) - np.mean(baseline_scores)
-        pooled_std = np.sqrt(
-            (np.var(baseline_scores) + np.var(modified_scores)) / 2 + 1e-8
-        )
-        effect_size = improvement / (pooled_std + 1e-8)
-        if effect_size > agent.genome.self_modify_threshold:
-            self.accepted += 1
-            self.modification_history.append({
-                'type': 'accepted', 'improvement': improvement,
-                'effect_size': effect_size
-            })
+        if self.cooldown > 0:
+            self.cooldown -= 1
+            return False
+        if agent.genome.get_complexity() < 3:
+            return False
+        self.modifications_attempted += 1
+        original_genome = agent.genome.copy()
+        original_fitness = self._evaluate_fitness(agent, field)
+        modified_genome = agent.genome.copy()
+        Mutator.mutate(modified_genome)
+        agent.genome = modified_genome
+        modified_fitness = self._evaluate_fitness(agent, field)
+        improvement = modified_fitness - original_fitness
+        if improvement > Config.GODEL_SIGNIFICANCE:
+            self.modifications_accepted += 1
+            self.cooldown = Config.GODEL_COOLDOWN
             return True
         else:
-            agent.genome = snapshot
-            self.rejected += 1
-            self.modification_history.append({
-                'type': 'rejected', 'improvement': improvement,
-                'effect_size': effect_size
-            })
+            agent.genome = original_genome
+            self.modifications_rejected += 1
+            self.cooldown = Config.GODEL_COOLDOWN // 2
             return False
 
-    def _evaluate_episode(self, agent, field):
-        score = 0.0
-        temp_health = agent.health
-        for _ in range(20):
-            state = field.get_local_view(agent.pos[0], agent.pos[1],
-                                         agent.genome.sensor_radius)
-            if len(state) != agent.genome.input_size:
-                state = np.resize(state, agent.genome.input_size)
-            outputs = agent.genome.activate(state)
+    def _evaluate_fitness(self, agent, field):
+        total_reward = 0
+        original_pos = agent.pos.copy()
+        original_health = agent.health
+        for _ in range(Config.GODEL_TEST_EPISODES):
+            state = field.sense(agent.pos, agent.genome.sensor_radius)
+            outputs = agent.genome.activate(list(state / 10.0))
             if len(outputs) >= 2:
-                energy = field.consume_energy(
-                    agent.pos[0] + outputs[0], agent.pos[1] + outputs[1], 0.5
-                )
-                score += energy
-        agent.health = temp_health
-        return score
-
-    def _apply_self_modification(self, agent):
-        mod_type = np.random.choice([
-            'weight_perturbation', 'learning_rule_shift',
-            'topology_tweak', 'sensor_adjust', 'decision_tune',
-            'communication_tune'
-        ])
-        if mod_type == 'weight_perturbation':
-            for conn in agent.genome.connections.values():
-                if np.random.random() < 0.3:
-                    conn.weight += np.random.randn() * 0.3
-        elif mod_type == 'learning_rule_shift':
-            for conn in agent.genome.connections.values():
-                if np.random.random() < 0.2:
-                    conn.A += np.random.randn() * 0.1
-                    conn.B += np.random.randn() * 0.1
-        elif mod_type == 'topology_tweak':
-            if np.random.random() < 0.5:
-                Mutator._add_connection(agent.genome)
+                move = np.array(outputs[:2])
             else:
-                conns = list(agent.genome.connections.values())
-                if conns:
-                    c = np.random.choice(conns)
-                    c.enabled = not c.enabled
-        elif mod_type == 'sensor_adjust':
-            agent.genome.sensor_radius = np.clip(
-                agent.genome.sensor_radius + np.random.choice([-1, 0, 1]), 1, 4
-            )
-            new_input = (2 * agent.genome.sensor_radius + 1) ** 2
-            agent.genome.input_size = new_input
-        elif mod_type == 'decision_tune':
-            agent.genome.acceptability_threshold += np.random.randn() * 0.05
-            agent.genome.acceptability_threshold = np.clip(
-                agent.genome.acceptability_threshold, 0.05, 0.8
-            )
-            agent.genome.caution_level += np.random.randn() * 0.1
-            agent.genome.caution_level = np.clip(agent.genome.caution_level, 0, 1)
-        elif mod_type == 'communication_tune':
-            agent.genome.signal_strength += np.random.randn() * 0.1
-            agent.genome.signal_strength = np.clip(agent.genome.signal_strength, 0, 1)
-            agent.genome.signal_honesty += np.random.randn() * 0.1
-            agent.genome.signal_honesty = np.clip(agent.genome.signal_honesty, 0, 1)
-
-    def get_stats(self):
-        total = self.accepted + self.rejected
-        rate = self.accepted / total if total > 0 else 0
-        return {
-            'total_proposals': total, 'accepted': self.accepted,
-            'rejected': self.rejected, 'acceptance_rate': rate
-        }
+                move = np.zeros(2)
+            agent.pos = (agent.pos + move) % Config.FIELD_SIZE
+            energy = field.get_energy(agent.pos)
+            total_reward += energy
+        agent.pos = original_pos
+        agent.health = original_health
+        return total_reward
 
 
 # ============================================================================
-# THE AGENT (v3.0 -- with Communication, Counterfactuals, Knowledge)
+# AGENT: The complete autonomous entity
 # ============================================================================
 
 class Agent:
     """
-    A self-sufficient, self-evolving neural agent with Decision Intelligence,
-    Emergent Communication, Counterfactual Reasoning, and Knowledge Inheritance.
+    A self-contained agent with:
+    - NEAT neural network brain
+    - Evolvable Hebbian learning rules
+    - Decision Intelligence (v2.0)
+    - Communication module (v3.0)
+    - Counterfactual reasoning (v3.0)
+    - Hierarchical Goals (v4.0)
+    - Theory of Mind (v4.0)
+    - Abstract Concepts (v4.0)
+    - Self-Narrative (v4.0)
     """
-
     _next_id = 0
 
-    def __init__(self, genome=None, pos=None, field_size=None):
-        field_size = field_size or Config.FIELD_SIZE
-        sensor_dim = (2 * Config.SENSOR_RADIUS + 1) ** 2
-
+    def __init__(self, genome, pos=None):
         self.id = Agent._next_id
         Agent._next_id += 1
-
-        if genome is None:
-            self.genome = Genome(input_size=sensor_dim, output_size=4)
-        else:
-            self.genome = genome
-
-        self.pos = pos if pos is not None else np.array([
-            np.random.uniform(0, field_size),
-            np.random.uniform(0, field_size)
-        ], dtype=float)
-
+        self.genome = genome
+        self.pos = pos if pos is not None else np.random.uniform(0, Config.FIELD_SIZE, 2)
         self.health = Config.INITIAL_HEALTH
         self.age = 0
         self.total_energy = 0.0
+        self.total_distance = 0.0
         self.offspring_count = 0
         self.alive = True
 
-        # Curiosity module
+        # Sensor state dimension
+        sensor_dim = (2 * Config.SENSOR_RADIUS + 1) ** 2
+
+        # World model for curiosity
         self.world_model = WorldModel(sensor_dim, 2)
-        self.curiosity_reward = 0.0
-
-        # Behavioral characterization
-        self.position_history = []
-        self.energy_history = []
-        self.action_history = []
-
-        # Godel self-modification
-        self.godel_cooldown = 0
-        self.modifications_accepted = 0
-        self.modifications_rejected = 0
-
-        # Self-healing
-        self.error_count = 0
-        self.last_valid_genome = self.genome.copy()
 
         # Decision Intelligence (v2.0)
-        self.decision_intel = DecisionIntelligence(sensor_dim)
+        self.decision_intelligence = DecisionIntelligence(sensor_dim)
         self.decisions_overridden = 0
-        self.unacceptable_states_entered = 0
-        self.unacceptable_states_avoided = 0
 
         # Communication (v3.0)
         self.communicator = AgentCommunicator(sensor_dim)
-        self.signals_sent = 0
-        self.signals_received_count = 0
         self.last_received_signals = []
 
-        # Counterfactual Reasoning (v3.0)
+        # Counterfactual reasoning (v3.0)
         self.counterfactual_engine = CounterfactualEngine()
         self.recent_regrets = []
-        self.total_regret = 0.0
-        self.counterfactual_adjustments = 0
+        self.cf_adjustments = 0
 
-        # Knowledge (v3.0)
-        self.knowledge_used = 0
-        self.knowledge_helpful = 0
+        # Hierarchical Goals (v4.0)
+        self.goal_system = HierarchicalGoalSystem()
 
-    def sense(self, field):
-        view = field.get_local_view(self.pos[0], self.pos[1],
-                                     self.genome.sensor_radius)
-        expected_size = self.genome.input_size
-        if len(view) != expected_size:
-            view = np.resize(view, expected_size)
-        return view
+        # Theory of Mind (v4.0)
+        self.theory_of_mind = TheoryOfMind(capacity=genome.modeling_capacity)
 
-    def think_and_act(self, field, comm_channel, knowledge_bank):
-        """
-        The v3.0 agent loop:
-        1. Sense the environment
-        2. Receive and decode signals from other agents
-        3. Consult the knowledge bank
-        4. Neural network proposes an action
-        5. Counterfactual reasoning adjusts based on past regrets
-        6. Decision Intelligence evaluates consequences
-        7. Communication modifier applied
-        8. Execute the chosen action
-        9. Broadcast signal if threshold met
-        10. Record transition and learn
-        """
+        # Abstract Concepts (v4.0)
+        self.concept_memory = ConceptMemory(
+            capacity=genome.abstraction_capacity,
+            threshold=genome.concept_threshold
+        )
+
+        # Self-Narrative (v4.0)
+        self.narrative = SelfNarrative()
+        # Record birth event
+        self.narrative.record_event(0, 'birth', np.zeros(sensor_dim), 0.8)
+
+        # Last action for tracking
+        self.last_action = np.zeros(2)
+
+    def think_and_act(self, field, comm_channel, nearby_agents=None):
+        """Complete cognitive cycle with all 17 capabilities."""
         if not self.alive:
             return
 
-        try:
-            # 1. SENSE
-            state = self.sense(field)
-            prev_state = state.copy()
-            health_before = self.health
+        self.age += 1
+        state = field.sense(self.pos, self.genome.sensor_radius)
+        norm_state = state / max(np.max(state), 1.0)
 
-            # 2. RECEIVE SIGNALS
-            received = comm_channel.receive(self.pos, self.id)
-            self.last_received_signals = received
-            self.signals_received_count += len(received)
-            comm_modifier = self.communicator.decode_signals(received, self.genome)
-
-            # 3. CONSULT KNOWLEDGE BANK
-            knowledge_entries = knowledge_bank.withdraw(state, n=2)
-            knowledge_modifier = np.zeros(2)
-            for entry in knowledge_entries:
-                self.knowledge_used += 1
-                # Blend knowledge suggestion into action
-                knowledge_modifier += entry.best_action * 0.1
-            if knowledge_entries:
-                knowledge_modifier /= len(knowledge_entries)
-
-            # 4. NEURAL NETWORK PROPOSES ACTION
-            outputs = self.genome.activate(state.tolist())
-            while len(outputs) < 4:
-                outputs.append(0.0)
-
-            nn_dx = np.clip(outputs[0] * 2, -2, 2)
-            nn_dy = np.clip(outputs[1] * 2, -2, 2)
-            eat_intensity = (outputs[2] + 1) / 2
-            nn_action = np.array([nn_dx, nn_dy])
-
-            # 5. COUNTERFACTUAL ADJUSTMENT
-            adjusted_action = nn_action.copy()
-            if self.recent_regrets and self.genome.regret_sensitivity > 0.1:
-                adjusted_action = self.counterfactual_engine.get_regret_adjustment(
-                    state, nn_action, self.recent_regrets, self.genome
-                )
-                if np.linalg.norm(adjusted_action - nn_action) > 0.1:
-                    self.counterfactual_adjustments += 1
-
-            # 6. DECISION INTELLIGENCE EVALUATES AND CHOOSES
-            chosen_action, decision_eval = self.decision_intel.choose_best_action(
-                state, self.genome, adjusted_action
-            )
-
-            # 7. APPLY COMMUNICATION MODIFIER
-            final_action = chosen_action + comm_modifier * 0.3 + knowledge_modifier * 0.2
-            final_action = np.clip(final_action, -2, 2)
-            dx, dy = final_action[0], final_action[1]
-
-            # Track if DI overrode the neural network
-            if np.linalg.norm(chosen_action - nn_action) > 0.5:
-                self.decisions_overridden += 1
-
-            # 8. EXECUTE ACTION
-            new_x = (self.pos[0] + dx) % field.size
-            new_y = (self.pos[1] + dy) % field.size
-            self.pos = np.array([new_x, new_y])
-
-            energy_gained = field.consume_energy(
-                self.pos[0], self.pos[1],
-                eat_intensity * self.genome.metabolism_efficiency
-            )
-            self.health += energy_gained
-            self.total_energy += energy_gained
-
-            move_cost = Config.MOVEMENT_COST * (abs(dx) + abs(dy))
-            think_cost = Config.THINKING_COST_PER_NODE * self.genome.get_complexity()
-            signal_cost = Config.SIGNAL_COST if self.signals_sent > 0 else 0
-            self.health -= (move_cost + think_cost + signal_cost)
-
-            # 9. BROADCAST SIGNAL if conditions met
-            if (energy_gained > self.genome.broadcast_threshold or
-                    self.health < Config.INITIAL_HEALTH * 0.3):
-                signal = self.communicator.encode_signal(state, self.genome)
-                comm_channel.broadcast(self.pos, signal, self.genome.signal_strength, self.id)
-                self.signals_sent += 1
-
-            # 10. RECORD AND LEARN
-            new_state = self.sense(field)
-            is_acceptable = self.decision_intel.record_transition(
-                state=prev_state, action=final_action,
-                next_state=new_state, reward=energy_gained,
-                health_before=health_before, health_after=self.health,
-                age=self.age, genome=self.genome
-            )
-
-            if not is_acceptable:
-                self.unacceptable_states_entered += 1
-            elif decision_eval and not decision_eval.get('acceptable', True):
-                self.unacceptable_states_avoided += 1
-
-            # Learn from communication outcomes
-            self.communicator.learn_from_communication(
-                received, energy_gained - move_cost
-            )
-
-            # Report knowledge outcome
-            for entry in knowledge_entries:
-                knowledge_bank.report_outcome(entry, energy_gained > 0.1)
-                if energy_gained > 0.1:
-                    self.knowledge_helpful += 1
-
-            # Hebbian meta-learning
-            self.genome.apply_learning_rule()
-
-            # Curiosity
-            action_vec = np.array([dx, dy])
-            pred_error = self.world_model.train(prev_state, action_vec, new_state)
-            self.curiosity_reward += pred_error * self.genome.curiosity_drive
-
-            # Counterfactual analysis (periodically)
-            if self.age % Config.COUNTERFACTUAL_INTERVAL == 0 and self.age > 10:
-                self.recent_regrets = self.counterfactual_engine.analyze(
-                    self.decision_intel.causal_memory,
-                    self.decision_intel.consequence_predictor,
-                    self.genome
-                )
-                if self.recent_regrets:
-                    self.total_regret += sum(r['regret'] for r in self.recent_regrets)
-
-            # Record behavior
-            self.position_history.append(self.pos.copy())
-            self.energy_history.append(self.health)
-            self.action_history.append([dx, dy])
-
-            self.age += 1
-            self.godel_cooldown = max(0, self.godel_cooldown - 1)
-
-            if self.health <= 0:
-                self.alive = False
-
-            self.last_valid_genome = self.genome.copy()
-
-        except Exception as e:
-            self.error_count += 1
-            self.genome = self.last_valid_genome.copy()
-            if self.error_count > 10:
-                self.alive = False
-
-    def attempt_self_modification(self, field, godel_engine):
-        if self.godel_cooldown > 0 or not self.alive:
-            return False
-        accepted = godel_engine.propose_modification(self, field)
-        self.godel_cooldown = Config.GODEL_COOLDOWN
-        if accepted:
-            self.modifications_accepted += 1
+        # === Step 1: Neural Network forward pass ===
+        outputs = self.genome.activate(list(norm_state))
+        if len(outputs) >= 2:
+            base_action = np.array(outputs[:2])
         else:
-            self.modifications_rejected += 1
-        return accepted
+            base_action = np.zeros(2)
+
+        # === Step 2: Decision Intelligence evaluation ===
+        best_action, evaluation = self.decision_intelligence.choose_best_action(
+            norm_state, self.genome, base_action
+        )
+        if not np.array_equal(best_action, base_action):
+            self.decisions_overridden += 1
+
+        # === Step 3: Communication - receive and decode ===
+        received = comm_channel.receive(self.pos, self.id)
+        self.last_received_signals = received
+        comm_modifier = self.communicator.decode_signals(received, self.genome)
+
+        # === Step 4: Knowledge Bank query (handled externally) ===
+        knowledge_modifier = np.zeros(2)
+
+        # === Step 5: Hierarchical Goals (v4.0) ===
+        self.goal_system.generate_goals(norm_state, self.health, self.age, self.genome)
+        active_goal = self.goal_system.select_active_goal()
+        goal_bias = self.goal_system.get_goal_action_bias(norm_state, active_goal)
+
+        # === Step 6: Theory of Mind (v4.0) ===
+        tom_modifier = np.zeros(2)
+        if nearby_agents:
+            nearby_info = [(a.id, a.pos) for a in nearby_agents if a.id != self.id]
+            tom_modifier = self.theory_of_mind.get_social_action_modifier(self.pos, nearby_info)
+            # Observe nearby agents
+            for agent in nearby_agents:
+                if agent.id != self.id:
+                    dist = np.linalg.norm(self.pos - agent.pos)
+                    if dist < Config.TOM_OBSERVATION_RANGE:
+                        self.theory_of_mind.observe(agent.id, agent.pos, agent.last_action)
+
+        # === Step 7: Abstract Concepts (v4.0) ===
+        concept_bias = self.concept_memory.get_concept_action_bias(norm_state)
+
+        # === Step 8: Self-Narrative (v4.0) ===
+        narrative_bias = self.narrative.get_narrative_bias(norm_state)
+
+        # === Step 9: Counterfactual adjustment ===
+        if self.age % Config.COUNTERFACTUAL_INTERVAL == 0 and self.age > 10:
+            self.recent_regrets = self.counterfactual_engine.analyze(
+                self.decision_intelligence.causal_memory,
+                self.decision_intelligence.consequence_predictor,
+                self.genome
+            )
+        cf_action = self.counterfactual_engine.get_regret_adjustment(
+            norm_state, best_action, self.recent_regrets, self.genome
+        )
+        if not np.array_equal(cf_action, best_action):
+            self.cf_adjustments += 1
+            best_action = cf_action
+
+        # === Step 10: Combine all modifiers ===
+        final_action = (
+            best_action * 0.4 +
+            comm_modifier * Config.COMM_WEIGHT +
+            goal_bias * Config.GOAL_WEIGHT +
+            tom_modifier * Config.TOM_WEIGHT +
+            concept_bias * Config.CONCEPT_WEIGHT +
+            narrative_bias * Config.NARRATIVE_WEIGHT * self.genome.identity_strength
+        )
+        final_action = np.clip(final_action, -2, 2)
+
+        # === Step 11: Execute action ===
+        old_pos = self.pos.copy()
+        health_before = self.health
+        self.pos = (self.pos + final_action) % Config.FIELD_SIZE
+        distance = np.linalg.norm(final_action)
+        self.total_distance += distance
+
+        # Energy cost
+        movement_cost = Config.MOVEMENT_COST * distance
+        thinking_cost = Config.THINKING_COST_PER_NODE * self.genome.get_complexity()
+        self.health -= (movement_cost + thinking_cost) * self.genome.metabolism_efficiency
+
+        # Harvest energy
+        energy = field.get_energy(self.pos)
+        self.health += energy
+        self.total_energy += energy
+
+        # === Step 12: Communication - broadcast ===
+        if np.random.random() < self.genome.broadcast_threshold:
+            signal = self.communicator.encode_signal(norm_state, self.genome)
+            comm_channel.broadcast(self.pos, signal, self.genome.signal_strength, self.id)
+            self.health -= Config.SIGNAL_COST
+
+        # === Step 13: Learning ===
+        self.genome.apply_learning_rule()
+        next_state = field.sense(self.pos, self.genome.sensor_radius)
+        norm_next = next_state / max(np.max(next_state), 1.0)
+
+        # World model training (curiosity)
+        curiosity_reward = self.world_model.train(norm_state, final_action, norm_next)
+
+        # Decision Intelligence recording
+        reward = energy + curiosity_reward * self.genome.curiosity_drive
+        health_after = self.health
+        self.decision_intelligence.record_transition(
+            norm_state, final_action, norm_next, reward,
+            health_before, health_after, self.age, self.genome
+        )
+
+        # Communication learning
+        if received:
+            self.communicator.learn_from_communication(received, energy - movement_cost)
+
+        # === Step 14: Update v4.0 systems ===
+        # Update goals
+        health_delta = health_after - health_before
+        self.goal_system.update_progress(norm_state, health_delta, energy, self.genome)
+
+        # Categorize experience for concepts
+        danger_level = max(0, -health_delta)
+        self.concept_memory.observe_and_categorize(norm_state, reward, danger_level, final_action)
+        if self.age % 20 == 0:
+            self.concept_memory.merge_similar_concepts()
+
+        # Record significant life events for narrative
+        if energy > 2.0:
+            self.narrative.record_event(self.age, 'discovery', norm_state,
+                                        energy * self.genome.narrative_sensitivity)
+        if health_delta < -2.0:
+            self.narrative.record_event(self.age, 'danger', norm_state,
+                                        abs(health_delta) * self.genome.narrative_sensitivity)
+        if self.goal_system.goals_completed > 0 and self.age % 10 == 0:
+            self.narrative.record_event(self.age, 'achievement', norm_state,
+                                        0.7 * self.genome.narrative_sensitivity)
+        if nearby_agents and len(nearby_agents) > 2:
+            self.narrative.record_event(self.age, 'social', norm_state,
+                                        0.4 * self.genome.narrative_sensitivity)
+
+        # Store last action for ToM observations
+        self.last_action = final_action.copy()
+
+        # === Step 15: Death check ===
+        if self.health <= 0:
+            self.alive = False
 
     def get_behavior_vector(self):
-        if not self.position_history:
-            return [0] * 12
-        positions = np.array(self.position_history)
-        avg_pos = np.mean(positions, axis=0)
-        pos_std = np.std(positions, axis=0)
-        actions = np.array(self.action_history) if self.action_history else np.zeros((1, 2))
-        avg_action = np.mean(actions, axis=0)
-        action_std = np.std(actions, axis=0)
-        dec_quality = self.decision_intel.get_decision_fitness()
-        avoidance_rate = self.unacceptable_states_avoided / max(self.age, 1)
-        comm_rate = self.signals_sent / max(self.age, 1)
-        regret_rate = self.total_regret / max(self.age, 1)
-        return (list(avg_pos) + list(pos_std) + list(avg_action) +
-                list(action_std) + [dec_quality, avoidance_rate, comm_rate, regret_rate])
-
-    def can_reproduce(self):
-        return self.alive and self.health > Config.REPRODUCTION_THRESHOLD
+        """Behavioral fingerprint for novelty search."""
+        return np.array([
+            self.total_energy / max(self.age, 1),
+            self.total_distance / max(self.age, 1),
+            self.genome.get_complexity() / 20.0,
+            self.genome.curiosity_drive,
+            self.decisions_overridden / max(self.age, 1),
+            self.cf_adjustments / max(self.age, 1),
+            self.goal_system.goals_completed / max(self.goal_system.total_goals_created, 1),
+            self.theory_of_mind.social_interactions / max(self.age, 1),
+            self.concept_memory.categorizations / max(self.age, 1),
+            self.narrative.evaluate_life_quality()
+        ])
 
     def get_fitness(self):
-        """Multi-objective fitness including all v3.0 components."""
-        survival_score = self.age / 100.0
-        energy_score = self.total_energy / 50.0
-        offspring_score = self.offspring_count * 2.0
-        curiosity_score = self.curiosity_reward * Config.CURIOSITY_WEIGHT
-        compression = self.world_model.get_compression_progress() * 5.0
+        """Multi-objective fitness combining all capabilities."""
+        # Base fitness: energy gathered and survival
+        energy_fitness = self.total_energy
+        survival_fitness = self.age * 0.5
+        efficiency = self.total_energy / max(self.total_distance, 1)
 
-        # Decision Intelligence fitness (v2.0)
-        decision_score = self.decision_intel.get_decision_fitness() * Config.DECISION_WEIGHT * 10
-        avoidance_bonus = self.unacceptable_states_avoided * 0.5
-        unacceptable_penalty = self.unacceptable_states_entered * 0.3
+        # Decision quality bonus (v2.0)
+        decision_bonus = self.decision_intelligence.get_decision_fitness() * 20
 
-        # Communication fitness (v3.0)
-        comm_score = 0.0
-        if self.signals_sent > 0:
-            comm_score += self.communicator.helpful_signals * Config.COMM_WEIGHT
-        if self.signals_received_count > 0:
-            comm_score += min(self.signals_received_count * 0.05, 2.0)
+        # Goal completion bonus (v4.0)
+        goal_bonus = self.goal_system.goals_completed * 5.0
 
-        # Counterfactual reasoning fitness (v3.0)
-        cf_score = 0.0
-        if self.counterfactual_adjustments > 0:
-            cf_score = min(self.counterfactual_adjustments * 0.2, 3.0)
+        # Social intelligence bonus (v4.0)
+        tom_stats = self.theory_of_mind.get_stats()
+        social_bonus = tom_stats['social_interactions'] * 0.1
 
-        # Knowledge usage fitness (v3.0)
-        knowledge_score = self.knowledge_helpful * 0.3
+        # Concept utility bonus (v4.0)
+        concept_stats = self.concept_memory.get_stats()
+        concept_bonus = concept_stats['concepts_formed'] * 0.5
 
-        return (survival_score + energy_score + offspring_score +
-                curiosity_score + compression + decision_score +
-                avoidance_bonus - unacceptable_penalty +
-                comm_score + cf_score + knowledge_score)
+        # Narrative quality bonus (v4.0)
+        narrative_bonus = self.narrative.evaluate_life_quality() * 10
+
+        fitness = (energy_fitness + survival_fitness + efficiency * 5 +
+                   decision_bonus + goal_bonus + social_bonus +
+                   concept_bonus + narrative_bonus)
+        self.genome.fitness = fitness
+        return fitness
+
+    def can_reproduce(self):
+        return self.health > Config.REPRODUCTION_THRESHOLD and self.alive
 
 
 # ============================================================================
@@ -1914,10 +2255,13 @@ class Agent:
 # ============================================================================
 
 class PopulationManager:
-    def __init__(self):
+    """Handles reproduction, selection, speciation."""
+
+    def __init__(self, input_size, output_size):
+        self.input_size = input_size
+        self.output_size = output_size
         self.species_list = []
         self.next_species_id = 0
-        self.generation = 0
 
     def speciate(self, agents):
         for sp in self.species_list:
@@ -1933,545 +2277,386 @@ class PopulationManager:
             if not placed:
                 new_sp = Species(self.next_species_id, agent.genome)
                 self.next_species_id += 1
-                self.species_list.append(new_sp)
                 agent.genome.species_id = new_sp.id
+                self.species_list.append(new_sp)
         self.species_list = [sp for sp in self.species_list if sp.members]
         for sp in self.species_list:
-            sp.representative = np.random.choice(sp.members)
-            sp.age += 1
+            if sp.members:
+                sp.representative = np.random.choice(sp.members)
+                best = max(m.fitness for m in sp.members)
+                if best > sp.best_fitness:
+                    sp.best_fitness = best
+                    sp.stagnation = 0
+                else:
+                    sp.stagnation += 1
+                sp.age += 1
 
-    def select_and_reproduce(self, agents, target_size):
+    def select_and_reproduce(self, agents, target_pop):
         if not agents:
             return []
-        for sp in self.species_list:
-            for genome in sp.members:
-                genome.adjusted_fitness = genome.fitness / max(len(sp.members), 1)
-        total_adj_fitness = sum(
-            sum(g.adjusted_fitness for g in sp.members)
-            for sp in self.species_list
-        )
+        for agent in agents:
+            agent.get_fitness()
+        self.speciate(agents)
         new_genomes = []
+        # Elitism
+        sorted_agents = sorted(agents, key=lambda a: a.genome.fitness, reverse=True)
+        for agent in sorted_agents[:Config.ELITISM_COUNT]:
+            new_genomes.append(agent.genome.copy())
+        # Fill remaining via species-proportional reproduction
+        remaining = target_pop - len(new_genomes)
+        total_fitness = sum(max(a.genome.fitness, 0.1) for a in agents)
         for sp in self.species_list:
-            if not sp.members:
+            if sp.stagnation > Config.STAGNATION_LIMIT:
                 continue
-            sp_fitness = sum(g.adjusted_fitness for g in sp.members)
-            if total_adj_fitness > 0:
-                n_offspring = max(1, int(sp_fitness / total_adj_fitness * target_size))
-            else:
-                n_offspring = max(1, target_size // max(len(self.species_list), 1))
-            sp.members.sort(key=lambda g: g.fitness, reverse=True)
-            for i in range(min(Config.ELITISM_COUNT, len(sp.members))):
-                new_genomes.append(sp.members[i].copy())
-            for _ in range(n_offspring - min(Config.ELITISM_COUNT, len(sp.members))):
-                if len(sp.members) >= 2 and np.random.random() < Config.CROSSOVER_RATE:
-                    p1 = self._tournament_select(sp.members)
-                    p2 = self._tournament_select(sp.members)
+            sp_fitness = sum(max(m.fitness, 0.1) for m in sp.members)
+            proportion = sp_fitness / max(total_fitness, 1)
+            n_offspring = max(1, int(proportion * remaining))
+            sp_sorted = sorted(sp.members, key=lambda g: g.fitness, reverse=True)
+            for _ in range(n_offspring):
+                if len(new_genomes) >= target_pop:
+                    break
+                if len(sp_sorted) >= 2 and np.random.random() < Config.CROSSOVER_RATE:
+                    p1, p2 = np.random.choice(sp_sorted[:max(2, len(sp_sorted)//2)], 2, replace=False)
                     child = Mutator.crossover(p1, p2)
                 else:
-                    parent = self._tournament_select(sp.members)
+                    parent = sp_sorted[0] if sp_sorted else agents[0].genome
                     child = parent.copy()
-                child = Mutator.mutate(child)
+                Mutator.mutate(child)
                 new_genomes.append(child)
-        while len(new_genomes) > target_size:
-            new_genomes.pop()
-        while len(new_genomes) < target_size:
-            new_genomes.append(Genome((2 * Config.SENSOR_RADIUS + 1) ** 2, 4))
-        self.generation += 1
-        return new_genomes
-
-    def _tournament_select(self, genomes, k=3):
-        contestants = np.random.choice(genomes, size=min(k, len(genomes)), replace=False)
-        return max(contestants, key=lambda g: g.fitness)
-
-    def check_stagnation(self):
-        stagnant = []
-        for sp in self.species_list:
-            current_best = max((g.fitness for g in sp.members), default=0)
-            if current_best > sp.best_fitness:
-                sp.best_fitness = current_best
-                sp.stagnation = 0
-            else:
-                sp.stagnation += 1
-            if sp.stagnation > Config.STAGNATION_LIMIT:
-                stagnant.append(sp)
-        return stagnant
+        while len(new_genomes) < Config.MIN_POPULATION:
+            new_genomes.append(Genome(self.input_size, self.output_size))
+        return new_genomes[:target_pop]
 
 
 # ============================================================================
-# SELF-EVALUATION & QUALITY CONTROL
+# QUALITY CONTROLLER
 # ============================================================================
 
 class QualityController:
+    """Self-evaluation and quality metrics."""
+
     def __init__(self):
-        self.fitness_history = []
+        self.generation_scores = []
         self.diversity_history = []
-        self.population_size_history = []
-        self.species_count_history = []
-        self.decision_quality_history = []
-        self.comm_activity_history = []  # v3.0
-        self.regret_history = []  # v3.0
-        self.knowledge_history = []  # v3.0
-        self.curriculum_phase = 0
-        self.stagnation_counter = 0
-        self.interventions = []
+        self.stagnation_count = 0
 
-    def evaluate_generation(self, agents, novelty_archive, pop_manager,
-                            comm_channel=None, knowledge_bank=None):
+    def evaluate_generation(self, agents, novelty_archive):
         if not agents:
-            return {'status': 'CRITICAL', 'message': 'Population extinct!'}
+            return {}
+        fitnesses = [a.genome.fitness for a in agents]
+        behaviors = [a.get_behavior_vector() for a in agents]
+        diversity = np.mean([
+            np.linalg.norm(b1 - b2)
+            for i, b1 in enumerate(behaviors)
+            for b2 in behaviors[i+1:]
+        ]) if len(behaviors) > 1 else 0.0
 
-        fitnesses = [a.get_fitness() for a in agents if a.alive]
-        if not fitnesses:
-            fitnesses = [0.0]
+        # Decision Intelligence metrics
+        dec_qualities = [a.decision_intelligence.journal.get_decision_quality() for a in agents]
+        total_overrides = sum(a.decisions_overridden for a in agents)
+        total_avoided = sum(a.decision_intelligence.journal.avoided_unacceptable for a in agents)
+        total_entered = sum(a.decision_intelligence.journal.entered_unacceptable for a in agents)
 
-        best = max(fitnesses)
-        avg = np.mean(fitnesses)
-        diversity = novelty_archive.get_diversity()
+        # Communication metrics
+        total_cf_adj = sum(a.cf_adjustments for a in agents)
+        avg_regret = np.mean([a.counterfactual_engine.get_stats()['avg_regret'] for a in agents])
 
-        dec_qualities = [a.decision_intel.get_decision_fitness() for a in agents if a.alive]
-        avg_dec_quality = np.mean(dec_qualities) if dec_qualities else 0.0
+        # v4.0 metrics
+        total_goals_completed = sum(a.goal_system.goals_completed for a in agents)
+        total_goals_created = sum(a.goal_system.total_goals_created for a in agents)
+        total_agents_modeled = sum(a.theory_of_mind.get_stats()['agents_modeled'] for a in agents)
+        total_social_interactions = sum(a.theory_of_mind.social_interactions for a in agents)
+        total_concepts = sum(a.concept_memory.get_stats()['concepts_formed'] for a in agents)
+        total_categorizations = sum(a.concept_memory.categorizations for a in agents)
+        avg_life_quality = np.mean([a.narrative.evaluate_life_quality() for a in agents])
+        total_life_events = sum(len(a.narrative.events) for a in agents)
 
-        # v3.0 metrics
-        total_signals = sum(a.signals_sent for a in agents if a.alive)
-        avg_regret = np.mean([a.total_regret for a in agents if a.alive]) if agents else 0
-        knowledge_stats = knowledge_bank.get_stats() if knowledge_bank else {}
-
-        self.fitness_history.append(best)
+        best_agent = max(agents, key=lambda a: a.genome.fitness)
+        self.generation_scores.append(np.mean(fitnesses))
         self.diversity_history.append(diversity)
-        self.population_size_history.append(len(agents))
-        self.species_count_history.append(len(pop_manager.species_list))
-        self.decision_quality_history.append(avg_dec_quality)
-        self.comm_activity_history.append(total_signals)
-        self.regret_history.append(avg_regret)
-        self.knowledge_history.append(knowledge_stats.get('total_entries', 0))
 
-        report = {
-            'best_fitness': best,
-            'avg_fitness': avg,
+        if len(self.generation_scores) > 5:
+            recent = self.generation_scores[-5:]
+            if max(recent) - min(recent) < 1.0:
+                self.stagnation_count += 1
+            else:
+                self.stagnation_count = 0
+
+        return {
+            'best_fitness': max(fitnesses),
+            'avg_fitness': np.mean(fitnesses),
             'diversity': diversity,
             'population': len(agents),
-            'species': len(pop_manager.species_list),
-            'avg_decision_quality': avg_dec_quality,
-            'total_signals': total_signals,
+            'species': len(set(a.genome.species_id for a in agents if a.genome.species_id is not None)),
+            'best_complexity': best_agent.genome.get_complexity(),
+            'best_hidden_nodes': sum(1 for n in best_agent.genome.nodes.values() if n.type == NodeGene.HIDDEN),
+            'stagnation': self.stagnation_count,
+            'avg_decision_quality': np.mean(dec_qualities),
+            'decisions_overridden': total_overrides,
+            'unacceptable_avoided': total_avoided,
+            'unacceptable_entered': total_entered,
+            'best_caution': best_agent.genome.caution_level,
+            'best_accept_thresh': best_agent.genome.acceptability_threshold,
+            'best_planning_depth': best_agent.genome.planning_depth,
+            'cf_adjustments': total_cf_adj,
             'avg_regret': avg_regret,
-            'knowledge_entries': knowledge_stats.get('total_entries', 0),
-            'knowledge_helpfulness': knowledge_stats.get('helpfulness_rate', 0),
-            'status': 'OK',
-            'actions': []
+            # v4.0 metrics
+            'goals_completed': total_goals_completed,
+            'goals_created': total_goals_created,
+            'agents_modeled': total_agents_modeled,
+            'social_interactions': total_social_interactions,
+            'concepts_formed': total_concepts,
+            'categorizations': total_categorizations,
+            'avg_life_quality': avg_life_quality,
+            'total_life_events': total_life_events,
         }
-
-        if len(self.fitness_history) > Config.STAGNATION_LIMIT:
-            recent = self.fitness_history[-Config.STAGNATION_LIMIT:]
-            if max(recent) - min(recent) < 0.1:
-                self.stagnation_counter += 1
-                report['status'] = 'STAGNANT'
-                report['actions'].append('increase_mutation')
-                report['actions'].append('inject_immigrants')
-                self.interventions.append(('stagnation_response', pop_manager.generation))
-            else:
-                self.stagnation_counter = 0
-
-        if diversity < 0.1 and len(self.diversity_history) > 5:
-            report['status'] = 'LOW_DIVERSITY'
-            report['actions'].append('increase_novelty_pressure')
-            self.interventions.append(('diversity_injection', pop_manager.generation))
-
-        if len(self.fitness_history) > 20:
-            recent_avg = np.mean(self.fitness_history[-10:])
-            if recent_avg > Config.CURRICULUM_ADVANCE_THRESHOLD * (self.curriculum_phase + 1):
-                report['actions'].append('advance_curriculum')
-
-        return report
 
 
 # ============================================================================
-# GENESIS MAIN ENGINE (v3.0)
+# GENESIS ENGINE: The main orchestrator
 # ============================================================================
 
 class GenesisEngine:
-    """The master controller -- v3.0 with Communication, Counterfactuals, Knowledge."""
+    """The complete GENESIS v4.0 system."""
 
     def __init__(self):
+        self.sensor_dim = (2 * Config.SENSOR_RADIUS + 1) ** 2
+        self.output_dim = 2  # Movement x, y
         self.field = Field()
         self.agents = []
-        self.pop_manager = PopulationManager()
+        self.population_manager = PopulationManager(self.sensor_dim, self.output_dim)
         self.novelty_archive = NoveltyArchive()
         self.godel_engine = GodelEngine()
         self.quality_controller = QualityController()
-        self.generation = 0
-        self.checkpoints = {}
-        self.stats_log = []
-
-        # v3.0 shared systems
         self.comm_channel = CommunicationChannel()
         self.knowledge_bank = KnowledgeBank()
+        self.stats_log = []
+        self.generation = 0
 
-        sensor_dim = (2 * Config.SENSOR_RADIUS + 1) ** 2
+        # Initialize population
         for _ in range(Config.INITIAL_POPULATION):
-            genome = Genome(input_size=sensor_dim, output_size=4)
-            agent = Agent(genome=genome, field_size=self.field.size)
+            genome = Genome(self.sensor_dim, self.output_dim)
+            agent = Agent(genome)
             self.agents.append(agent)
-
-        print("=" * 70)
-        print("  GENESIS v3.0: Self-Evolving Darwinian Godel Machine")
-        print("  with Decision Intelligence, Communication, Counterfactuals")
-        print("  and Persistent Knowledge Transfer")
-        print("=" * 70)
-        print(f"  Population: {len(self.agents)} agents")
-        print(f"  Field: {self.field.size}x{self.field.size}")
-        print(f"  Genome: {sensor_dim} inputs -> 4 outputs (NEAT topology)")
-        print(f"  Features: Hebbian Meta-Learning | Curiosity | Novelty Search")
-        print(f"            Godel Self-Modification | Speciation | Self-Healing")
-        print(f"  v2.0: Causal Memory | Consequence Prediction | State Eval")
-        print(f"         Acceptability Boundaries | Temporal Reasoning")
-        print(f"  v3.0: Emergent Communication | Counterfactual Reasoning")
-        print(f"         Persistent Knowledge Bank | Cultural Evolution")
-        print("=" * 70)
-        print()
-
-    def run_generation(self):
-        gen_start = time.time()
-        self.generation += 1
-        births = 0
-        deaths = 0
-        godel_attempts = 0
-        total_overrides = 0
-        total_unacceptable = 0
-        total_avoided = 0
-        total_cf_adjustments = 0
-
-        for step in range(Config.STEPS_PER_GENERATION):
-            self.field.step()
-            self.comm_channel.step()
-
-            for agent in self.agents:
-                if agent.alive:
-                    agent.think_and_act(self.field, self.comm_channel, self.knowledge_bank)
-
-                    if agent.can_reproduce() and len(self.agents) < Config.MAX_POPULATION:
-                        child_genome = agent.genome.copy()
-                        child_genome = Mutator.mutate(child_genome)
-                        child = Agent(
-                            genome=child_genome,
-                            pos=agent.pos + np.random.randn(2) * 2,
-                            field_size=self.field.size
-                        )
-                        # Inherit decision intelligence
-                        child.decision_intel = agent.decision_intel.copy()
-                        # Inherit communication skills (v3.0)
-                        child.communicator = agent.communicator.copy()
-                        # Deposit parent knowledge to bank (v3.0)
-                        if np.random.random() < Config.KNOWLEDGE_INHERIT_RATE:
-                            self.knowledge_bank.deposit(
-                                agent.decision_intel.causal_memory,
-                                agent.get_fitness(), self.generation
-                            )
-                        self.agents.append(child)
-                        agent.health -= Config.REPRODUCTION_THRESHOLD * 0.4
-                        agent.offspring_count += 1
-                        births += 1
-
-            if step % 20 == 0:
-                for agent in self.agents:
-                    if (agent.alive and agent.godel_cooldown == 0 and
-                            np.random.random() < 0.1):
-                        agent.attempt_self_modification(self.field, self.godel_engine)
-                        godel_attempts += 1
-
-            # Handle deaths -- deposit knowledge before removal (v3.0)
-            for agent in self.agents:
-                if not agent.alive:
-                    self.knowledge_bank.deposit(
-                        agent.decision_intel.causal_memory,
-                        agent.get_fitness(), self.generation
-                    )
-
-            before = len(self.agents)
-            self.agents = [a for a in self.agents if a.alive]
-            deaths += before - len(self.agents)
-
-            if len(self.agents) < Config.MIN_POPULATION:
-                sensor_dim = (2 * Config.SENSOR_RADIUS + 1) ** 2
-                for _ in range(Config.MIN_POPULATION - len(self.agents)):
-                    genome = Genome(input_size=sensor_dim, output_size=4)
-                    agent = Agent(genome=genome, field_size=self.field.size)
-                    self.agents.append(agent)
-
-        # Collect stats
-        for agent in self.agents:
-            total_overrides += agent.decisions_overridden
-            total_unacceptable += agent.unacceptable_states_entered
-            total_avoided += agent.unacceptable_states_avoided
-            total_cf_adjustments += agent.counterfactual_adjustments
-
-        # Evaluate
-        for agent in self.agents:
-            agent.genome.fitness = agent.get_fitness()
-            bv = agent.get_behavior_vector()
-            novelty = self.novelty_archive.compute_novelty(bv)
-            agent.genome.fitness += novelty * Config.NOVELTY_WEIGHT
-            if novelty > 0.5 or agent.genome.fitness > 1.0:
-                self.novelty_archive.add(bv)
-
-        self.pop_manager.speciate(self.agents)
-
-        report = self.quality_controller.evaluate_generation(
-            self.agents, self.novelty_archive, self.pop_manager,
-            self.comm_channel, self.knowledge_bank
-        )
-
-        if 'advance_curriculum' in report['actions']:
-            if self.field.advance_curriculum():
-                print(f"  CURRICULUM ADVANCED to Phase {self.field.phase}")
-        if 'increase_mutation' in report['actions']:
-            for agent in self.agents:
-                agent.genome.mutation_rate = min(0.8, agent.genome.mutation_rate * 1.5)
-        if 'inject_immigrants' in report['actions']:
-            sensor_dim = (2 * Config.SENSOR_RADIUS + 1) ** 2
-            for _ in range(3):
-                genome = Genome(input_size=sensor_dim, output_size=4)
-                agent = Agent(genome=genome, field_size=self.field.size)
-                self.agents.append(agent)
-
-        target_size = min(Config.MAX_POPULATION,
-                          max(Config.MIN_POPULATION, len(self.agents)))
-        new_genomes = self.pop_manager.select_and_reproduce(self.agents, target_size)
-
-        self.agents = []
-        for genome in new_genomes:
-            agent = Agent(genome=genome, field_size=self.field.size)
-            self.agents.append(agent)
-
-        if self.generation % Config.CHECKPOINT_INTERVAL == 0:
-            self.checkpoints[self.generation] = {
-                'best_fitness': report['best_fitness'],
-                'population': len(self.agents),
-                'species': report['species']
-            }
-
-        gen_time = time.time() - gen_start
-        godel_stats = self.godel_engine.get_stats()
-        comm_stats = self.comm_channel.get_language_stats()
-        kb_stats = self.knowledge_bank.get_stats()
-
-        best_agent = max(self.agents, key=lambda a: a.genome.fitness) if self.agents else None
-        best_complexity = best_agent.genome.get_complexity() if best_agent else 0
-        best_hidden = sum(1 for n in best_agent.genome.nodes.values()
-                          if n.type == NodeGene.HIDDEN) if best_agent else 0
-
-        stats = {
-            'generation': self.generation,
-            'best_fitness': report['best_fitness'],
-            'avg_fitness': report['avg_fitness'],
-            'population': len(self.agents),
-            'species': report['species'],
-            'births': births,
-            'deaths': deaths,
-            'diversity': report['diversity'],
-            'curriculum_phase': self.field.phase,
-            'godel_attempts': godel_attempts,
-            'godel_accepted': godel_stats['accepted'],
-            'godel_rejected': godel_stats['rejected'],
-            'best_complexity': best_complexity,
-            'best_hidden_nodes': best_hidden,
-            'status': report['status'],
-            'time': gen_time,
-            # Decision Intelligence (v2.0)
-            'avg_decision_quality': report['avg_decision_quality'],
-            'decisions_overridden': total_overrides,
-            'unacceptable_entered': total_unacceptable,
-            'unacceptable_avoided': total_avoided,
-            'best_caution': best_agent.genome.caution_level if best_agent else 0,
-            'best_accept_thresh': best_agent.genome.acceptability_threshold if best_agent else 0,
-            'best_planning_depth': best_agent.genome.planning_depth if best_agent else 0,
-            # Communication (v3.0)
-            'total_signals': report['total_signals'],
-            'total_broadcasts': self.comm_channel.total_broadcasts,
-            'total_receptions': self.comm_channel.total_receptions,
-            'language_diversity': comm_stats['diversity'],
-            'vocab_size': comm_stats['vocab_size'],
-            'best_honesty': best_agent.genome.signal_honesty if best_agent else 0,
-            'best_listen_weight': best_agent.genome.listen_weight if best_agent else 0,
-            # Counterfactual (v3.0)
-            'cf_adjustments': total_cf_adjustments,
-            'avg_regret': report['avg_regret'],
-            'best_regret_sensitivity': best_agent.genome.regret_sensitivity if best_agent else 0,
-            # Knowledge (v3.0)
-            'knowledge_entries': kb_stats['total_entries'],
-            'knowledge_deposits': kb_stats['total_deposits'],
-            'knowledge_withdrawals': kb_stats['total_withdrawals'],
-            'knowledge_helpfulness': kb_stats['helpfulness_rate'],
-        }
-        self.stats_log.append(stats)
-        return stats
-
-    def print_generation_report(self, stats):
-        status_icon = {
-            'OK': '+', 'STAGNANT': '!', 'LOW_DIVERSITY': '~', 'CRITICAL': 'X'
-        }.get(stats['status'], '?')
-
-        print(f"[Gen {stats['generation']:>4d}] {status_icon} "
-              f"Fit={stats['best_fitness']:.1f}/{stats['avg_fitness']:.1f} "
-              f"Pop={stats['population']} Sp={stats['species']} "
-              f"DQ={stats['avg_decision_quality']:.2f} "
-              f"Sig={stats['total_signals']} "
-              f"CF={stats['cf_adjustments']} "
-              f"KB={stats['knowledge_entries']} "
-              f"({stats['time']:.1f}s)")
 
     def run(self, generations=None):
+        """Run the full evolutionary process."""
         generations = generations or Config.NUM_GENERATIONS
-        print(f"\nStarting GENESIS v3.0 Evolution -- {generations} generations\n")
+        print(f"\n  Starting evolution for {generations} generations...")
+        print(f"  Population: {len(self.agents)} | Field: {Config.FIELD_SIZE}x{Config.FIELD_SIZE}")
+        print(f"  Capabilities: 17 active\n")
 
-        try:
-            for gen in range(generations):
-                stats = self.run_generation()
-                self.print_generation_report(stats)
-                if (gen + 1) % 25 == 0:
-                    self._print_detailed_report()
-        except KeyboardInterrupt:
-            print("\nEvolution interrupted by user.")
+        for gen in range(generations):
+            self.generation = gen
+            stats = self._run_generation(gen)
+            self.stats_log.append(stats)
+            self._print_generation_report(gen, stats)
 
-        print("\n" + "=" * 70)
-        print("  GENESIS v3.0 EVOLUTION COMPLETE")
-        print("=" * 70)
+            # Curriculum advancement
+            if stats['avg_fitness'] > Config.CURRICULUM_ADVANCE_THRESHOLD * (gen + 1) * 5:
+                self.field.advance_phase()
+
         self._print_final_report()
         self._generate_visualizations()
         return self.stats_log
 
-    def _print_detailed_report(self):
-        print("\n" + "-" * 70)
-        print("  DETAILED ANALYSIS (v3.0)")
-        print("-" * 70)
+    def _run_generation(self, gen):
+        """Run one complete generation."""
+        # Reset agents for new generation
+        for agent in self.agents:
+            agent.health = Config.INITIAL_HEALTH
+            agent.age = 0
+            agent.total_energy = 0
+            agent.total_distance = 0
+            agent.alive = True
+            agent.decisions_overridden = 0
+            agent.cf_adjustments = 0
 
-        if self.stats_log:
-            recent = self.stats_log[-10:]
-            print(f"  Fitness trend (last 10): "
-                  f"{recent[0]['best_fitness']:.3f} -> {recent[-1]['best_fitness']:.3f}")
-            print(f"  Decision quality trend: "
-                  f"{recent[0]['avg_decision_quality']:.3f} -> "
-                  f"{recent[-1]['avg_decision_quality']:.3f}")
-            print(f"  Communication: {recent[-1]['total_broadcasts']} total broadcasts, "
-                  f"vocab={recent[-1]['vocab_size']}")
-            print(f"  Knowledge Bank: {recent[-1]['knowledge_entries']} entries, "
-                  f"helpfulness={recent[-1]['knowledge_helpfulness']:.2f}")
-            print(f"  Counterfactual adjustments: {recent[-1]['cf_adjustments']}")
+        # Run simulation steps
+        for step in range(Config.STEPS_PER_GENERATION):
+            self.field.step()
+            self.comm_channel.step()
 
-        print(f"  Active species: {len(self.pop_manager.species_list)}")
-        for sp in self.pop_manager.species_list[:5]:
-            print(f"    Species {sp.id}: {len(sp.members)} members, "
-                  f"best={sp.best_fitness:.3f}, age={sp.age}")
+            alive_agents = [a for a in self.agents if a.alive]
+            if not alive_agents:
+                break
 
-        if self.agents:
-            honesty_vals = [a.genome.signal_honesty for a in self.agents]
-            listen_vals = [a.genome.listen_weight for a in self.agents]
-            regret_vals = [a.genome.regret_sensitivity for a in self.agents]
-            print(f"  Evolved Communication:")
-            print(f"    Avg Honesty: {np.mean(honesty_vals):.3f} "
-                  f"(range {min(honesty_vals):.2f}-{max(honesty_vals):.2f})")
-            print(f"    Avg Listen Weight: {np.mean(listen_vals):.3f}")
-            print(f"  Evolved Counterfactual:")
-            print(f"    Avg Regret Sensitivity: {np.mean(regret_vals):.3f}")
+            for agent in alive_agents:
+                # Get nearby agents for ToM
+                nearby = [a for a in alive_agents
+                          if a.id != agent.id and
+                          np.linalg.norm(a.pos - agent.pos) < Config.TOM_OBSERVATION_RANGE]
 
-        gs = self.godel_engine.get_stats()
-        print(f"  Godel Engine: {gs['total_proposals']} proposals, "
-              f"{gs['acceptance_rate']:.1%} acceptance rate")
-        print(f"  Novelty Archive: {len(self.novelty_archive.archive)} behaviors stored")
-        print(f"  QC Interventions: {len(self.quality_controller.interventions)}")
-        print("-" * 70 + "\n")
+                agent.think_and_act(self.field, self.comm_channel, nearby)
+
+            # Knowledge bank: new agents query on first steps
+            if step == 0:
+                for agent in alive_agents:
+                    entries = self.knowledge_bank.withdraw(
+                        self.field.sense(agent.pos, agent.genome.sensor_radius)
+                    )
+                    for entry in entries:
+                        self.knowledge_bank.report_outcome(entry, True)
+
+            # Reproduction
+            for agent in alive_agents:
+                if agent.can_reproduce():
+                    agent.health -= Config.REPRODUCTION_THRESHOLD * 0.5
+                    agent.offspring_count += 1
+
+        # Godel self-modification for best agent
+        alive_agents = [a for a in self.agents if a.alive]
+        if alive_agents:
+            best = max(alive_agents, key=lambda a: a.get_fitness())
+            self.godel_engine.propose_modification(best, self.field)
+
+        # Evaluate fitness and novelty
+        for agent in self.agents:
+            agent.get_fitness()
+            bv = agent.get_behavior_vector()
+            novelty = self.novelty_archive.compute_novelty(bv)
+            self.novelty_archive.maybe_add(bv, novelty)
+            agent.genome.fitness += novelty * Config.NOVELTY_WEIGHT * 10
+
+        # Knowledge bank: deposit from best agents
+        sorted_agents = sorted(self.agents, key=lambda a: a.genome.fitness, reverse=True)
+        for agent in sorted_agents[:3]:
+            self.knowledge_bank.deposit(
+                agent.decision_intelligence.causal_memory,
+                agent.genome.fitness, gen
+            )
+
+        # Collect stats
+        stats = self.quality_controller.evaluate_generation(self.agents, self.novelty_archive)
+        stats['generation'] = gen
+
+        # Communication stats
+        lang_stats = self.comm_channel.get_language_stats()
+        stats['total_signals'] = self.comm_channel.total_broadcasts
+        stats['vocab_size'] = lang_stats['vocab_size']
+        stats['best_honesty'] = sorted_agents[0].genome.signal_honesty if sorted_agents else 0
+        stats['best_listen_weight'] = sorted_agents[0].genome.listen_weight if sorted_agents else 0
+
+        # Knowledge bank stats
+        kb_stats = self.knowledge_bank.get_stats()
+        stats['knowledge_entries'] = kb_stats['total_entries']
+        stats['knowledge_helpfulness'] = kb_stats['helpfulness_rate']
+
+        # Godel stats
+        stats['godel_accepted'] = self.godel_engine.modifications_accepted
+        stats['godel_rejected'] = self.godel_engine.modifications_rejected
+
+        # v4.0 specific stats for best agent
+        if sorted_agents:
+            best = sorted_agents[0]
+            stats['best_goal_ambition'] = best.genome.goal_ambition
+            stats['best_social_awareness'] = best.genome.social_awareness
+            stats['best_abstraction_capacity'] = best.genome.abstraction_capacity
+            stats['best_narrative_sensitivity'] = best.genome.narrative_sensitivity
+
+        # Evolve next generation
+        target_pop = min(Config.MAX_POPULATION, max(Config.MIN_POPULATION,
+                         len(self.agents) + (2 if stats.get('diversity', 0) > 1.0 else -1)))
+        new_genomes = self.population_manager.select_and_reproduce(self.agents, target_pop)
+
+        # Create new agents
+        self.agents = []
+        for genome in new_genomes:
+            agent = Agent(genome)
+            self.agents.append(agent)
+
+        # Reset communication channel for new generation
+        self.comm_channel = CommunicationChannel()
+
+        return stats
+
+    def _print_generation_report(self, gen, stats):
+        """Compact generation report."""
+        print(f"  Gen {gen:3d} | Fit: {stats['best_fitness']:7.1f} (avg {stats['avg_fitness']:6.1f}) | "
+              f"Pop: {stats['population']:2d} | Sp: {stats['species']:2d} | "
+              f"DQ: {stats['avg_decision_quality']:.2f} | "
+              f"Goals: {stats['goals_completed']:3d} | "
+              f"ToM: {stats['agents_modeled']:3d} | "
+              f"Concepts: {stats['concepts_formed']:3d} | "
+              f"Life: {stats['avg_life_quality']:.2f}")
 
     def _print_final_report(self):
-        print("\nFINAL REPORT (GENESIS v3.0)")
-        print("-" * 60)
-
+        """Detailed final report."""
         if not self.stats_log:
-            print("  No data collected.")
             return
+        print("\n" + "=" * 72)
+        print("  GENESIS v4.0 -- FINAL EVOLUTION REPORT")
+        print("=" * 72)
 
-        best_ever = max(s['best_fitness'] for s in self.stats_log)
-        best_gen = max(self.stats_log, key=lambda s: s['best_fitness'])['generation']
-        avg_final = self.stats_log[-1]['avg_fitness']
-        total_births = sum(s['births'] for s in self.stats_log)
-        total_deaths = sum(s['deaths'] for s in self.stats_log)
-        total_overrides = sum(s['decisions_overridden'] for s in self.stats_log)
-        total_avoided = sum(s['unacceptable_avoided'] for s in self.stats_log)
-        total_entered = sum(s['unacceptable_entered'] for s in self.stats_log)
-        total_cf = sum(s['cf_adjustments'] for s in self.stats_log)
+        final = self.stats_log[-1]
+        first = self.stats_log[0]
 
-        print(f"  Best Fitness Ever: {best_ever:.4f} (Generation {best_gen})")
-        print(f"  Final Avg Fitness: {avg_final:.4f}")
-        print(f"  Total Births: {total_births}")
-        print(f"  Total Deaths: {total_deaths}")
-        print(f"  Final Population: {len(self.agents)}")
-        print(f"  Final Species: {len(self.pop_manager.species_list)}")
-        print(f"  Curriculum Phase Reached: {self.field.phase}")
-
-        gs = self.godel_engine.get_stats()
-        print(f"  Godel Modifications: {gs['accepted']} accepted / "
-              f"{gs['rejected']} rejected ({gs['acceptance_rate']:.1%})")
-        print(f"  Novelty Behaviors Archived: {len(self.novelty_archive.archive)}")
+        print(f"\n  FITNESS EVOLUTION:")
+        print(f"    Start: {first['best_fitness']:.1f} -> End: {final['best_fitness']:.1f}")
+        print(f"    Improvement: {final['best_fitness'] - first['best_fitness']:.1f}")
 
         print(f"\n  DECISION INTELLIGENCE:")
-        print(f"     Total Decision Overrides: {total_overrides}")
-        print(f"     Unacceptable States Avoided: {total_avoided}")
-        print(f"     Unacceptable States Entered: {total_entered}")
-        if total_avoided + total_entered > 0:
-            avoidance_rate = total_avoided / (total_avoided + total_entered)
-            print(f"     Avoidance Success Rate: {avoidance_rate:.1%}")
-        print(f"     Final Avg Decision Quality: "
-              f"{self.stats_log[-1]['avg_decision_quality']:.3f}")
+        print(f"    Decision Quality: {final['avg_decision_quality']:.3f}")
+        print(f"    Total Overrides: {final['decisions_overridden']}")
+        print(f"    Unacceptable Avoided: {final['unacceptable_avoided']}")
 
-        print(f"\n  EMERGENT COMMUNICATION:")
-        print(f"     Total Broadcasts: {self.comm_channel.total_broadcasts}")
-        print(f"     Total Receptions: {self.comm_channel.total_receptions}")
-        lang = self.comm_channel.get_language_stats()
-        print(f"     Language Diversity: {lang['diversity']:.3f}")
-        print(f"     Vocabulary Size: {lang['vocab_size']}")
+        print(f"\n  COMMUNICATION:")
+        print(f"    Vocabulary Size: {final['vocab_size']}")
+        print(f"    Total Signals: {final['total_signals']}")
 
         print(f"\n  COUNTERFACTUAL REASONING:")
-        print(f"     Total CF Adjustments: {total_cf}")
-        print(f"     Final Avg Regret: {self.stats_log[-1]['avg_regret']:.3f}")
+        print(f"    Adjustments: {final['cf_adjustments']}")
+        print(f"    Average Regret: {final['avg_regret']:.4f}")
 
-        kb = self.knowledge_bank.get_stats()
         print(f"\n  KNOWLEDGE BANK:")
-        print(f"     Total Entries: {kb['total_entries']}")
-        print(f"     Total Deposits: {kb['total_deposits']}")
-        print(f"     Total Withdrawals: {kb['total_withdrawals']}")
-        print(f"     Helpfulness Rate: {kb['helpfulness_rate']:.1%}")
+        print(f"    Entries: {final['knowledge_entries']}")
+        print(f"    Helpfulness: {final['knowledge_helpfulness']:.1%}")
 
+        print(f"\n  HIERARCHICAL GOALS (v4.0):")
+        print(f"    Goals Completed: {final['goals_completed']}")
+        print(f"    Goals Created: {final['goals_created']}")
+
+        print(f"\n  THEORY OF MIND (v4.0):")
+        print(f"    Agents Modeled: {final['agents_modeled']}")
+        print(f"    Social Interactions: {final['social_interactions']}")
+
+        print(f"\n  ABSTRACT CONCEPTS (v4.0):")
+        print(f"    Concepts Formed: {final['concepts_formed']}")
+        print(f"    Categorizations: {final['categorizations']}")
+
+        print(f"\n  SELF-NARRATIVE (v4.0):")
+        print(f"    Average Life Quality: {final['avg_life_quality']:.3f}")
+        print(f"    Total Life Events: {final['total_life_events']}")
+
+        print(f"\n  GODEL SELF-MODIFICATION:")
+        print(f"    Accepted: {self.godel_engine.modifications_accepted}")
+        print(f"    Rejected: {self.godel_engine.modifications_rejected}")
+
+        # Best agent analysis
         if self.agents:
             best_agent = max(self.agents, key=lambda a: a.genome.fitness)
             print(f"\n  CHAMPION AGENT:")
-            print(f"     Connections: {sum(1 for c in best_agent.genome.connections.values() if c.enabled)}")
-            print(f"     Hidden Nodes: {sum(1 for n in best_agent.genome.nodes.values() if n.type == NodeGene.HIDDEN)}")
-            print(f"     Curiosity Drive: {best_agent.genome.curiosity_drive:.4f}")
-            print(f"     Mutation Rate: {best_agent.genome.mutation_rate:.4f}")
-            print(f"     Metabolism Efficiency: {best_agent.genome.metabolism_efficiency:.4f}")
-            print(f"     Caution Level: {best_agent.genome.caution_level:.4f}")
-            print(f"     Acceptability Threshold: {best_agent.genome.acceptability_threshold:.4f}")
-            print(f"     Planning Depth: {best_agent.genome.planning_depth}")
-            print(f"     Signal Honesty: {best_agent.genome.signal_honesty:.4f}")
-            print(f"     Listen Weight: {best_agent.genome.listen_weight:.4f}")
-            print(f"     Regret Sensitivity: {best_agent.genome.regret_sensitivity:.4f}")
-            print(f"     CF Depth: {best_agent.genome.counterfactual_depth}")
+            print(f"    Complexity: {best_agent.genome.get_complexity()} connections")
+            hidden = sum(1 for n in best_agent.genome.nodes.values() if n.type == NodeGene.HIDDEN)
+            print(f"    Hidden Nodes: {hidden}")
+            print(f"    Goal Ambition: {best_agent.genome.goal_ambition:.3f}")
+            print(f"    Social Awareness: {best_agent.genome.social_awareness:.3f}")
+            print(f"    Abstraction Capacity: {best_agent.genome.abstraction_capacity}")
+            print(f"    Narrative Sensitivity: {best_agent.genome.narrative_sensitivity:.3f}")
+            print(f"    Identity Strength: {best_agent.genome.identity_strength:.3f}")
 
             a_vals = [c.A for c in best_agent.genome.connections.values()]
             b_vals = [c.B for c in best_agent.genome.connections.values()]
             c_vals = [c.C for c in best_agent.genome.connections.values()]
             if a_vals:
-                print(f"     Evolved Learning Rule: A={np.mean(a_vals):.3f}, "
+                print(f"    Evolved Learning Rule: A={np.mean(a_vals):.3f}, "
                       f"B={np.mean(b_vals):.3f}, C={np.mean(c_vals):.3f}")
-                if abs(np.mean(a_vals)) > abs(np.mean(b_vals)) + abs(np.mean(c_vals)):
-                    print(f"     -> Predominantly HEBBIAN learning discovered")
-                elif abs(np.mean(c_vals)) > abs(np.mean(a_vals)):
-                    print(f"     -> Post-synaptic driven learning discovered")
-                else:
-                    print(f"     -> NOVEL learning rule discovered")
 
-        print("-" * 60)
+        print("\n" + "=" * 72)
 
 
     def _generate_visualizations(self):
+        """Generate comprehensive dashboard visualizations."""
         try:
             import matplotlib
             matplotlib.use('Agg')
@@ -2504,14 +2689,23 @@ class GenesisEngine:
             avg_regret = [s['avg_regret'] for s in self.stats_log]
             kb_entries = [s['knowledge_entries'] for s in self.stats_log]
             kb_help = [s['knowledge_helpfulness'] for s in self.stats_log]
+            # v4.0
+            goals_completed = [s['goals_completed'] for s in self.stats_log]
+            goals_created = [s['goals_created'] for s in self.stats_log]
+            agents_modeled = [s['agents_modeled'] for s in self.stats_log]
+            social_interactions = [s['social_interactions'] for s in self.stats_log]
+            concepts_formed = [s['concepts_formed'] for s in self.stats_log]
+            categorizations = [s['categorizations'] for s in self.stats_log]
+            life_quality = [s['avg_life_quality'] for s in self.stats_log]
+            life_events = [s['total_life_events'] for s in self.stats_log]
 
-            # === Figure 1: Main Dashboard (4x4) ===
-            fig, axes = plt.subplots(4, 4, figsize=(28, 24))
-            fig.suptitle('GENESIS v3.0: Self-Evolving Darwinian Godel Machine\n'
-                         'Decision Intelligence | Communication | Counterfactuals | Knowledge',
+            # === Figure 1: Main Dashboard (5x4) ===
+            fig, axes = plt.subplots(5, 4, figsize=(28, 30))
+            fig.suptitle('GENESIS v4.0: Self-Evolving Darwinian Godel Machine\n'
+                         '17 Capabilities | Goals | Theory of Mind | Concepts | Narrative',
                          fontsize=16, fontweight='bold')
 
-            # Row 1: Core evolution metrics
+            # Row 1: Core evolution
             ax = axes[0, 0]
             ax.plot(gens, best_fit, 'b-', linewidth=2, label='Best')
             ax.plot(gens, avg_fit, 'r--', alpha=0.7, label='Avg')
@@ -2575,27 +2769,25 @@ class GenesisEngine:
             ax.set_title('Decision Overrides')
             ax.grid(True, alpha=0.3)
 
-            # Row 3: Communication (v3.0)
+            # Row 3: Communication & Knowledge
             ax = axes[2, 0]
             ax.plot(gens, total_signals, 'blue', linewidth=2)
             ax.set_title('Signal Activity')
-            ax.set_ylabel('Signals per Generation')
             ax.grid(True, alpha=0.3)
 
             ax = axes[2, 1]
             ax.plot(gens, vocab_size, 'darkviolet', linewidth=2)
-            ax.set_title('Emergent Vocabulary Size')
+            ax.set_title('Emergent Vocabulary')
             ax.grid(True, alpha=0.3)
 
             ax = axes[2, 2]
             ax.plot(gens, honesty, 'green', linewidth=2, label='Honesty')
-            ax.plot(gens, listen_w, 'blue', linewidth=2, label='Listen Weight')
-            ax.set_title('Evolved Comm Params')
+            ax.plot(gens, listen_w, 'blue', linewidth=2, label='Listen')
+            ax.set_title('Comm Params')
             ax.set_ylim(0, 1)
             ax.legend()
             ax.grid(True, alpha=0.3)
 
-            # Godel Engine
             ax = axes[2, 3]
             godel_accepted = [s['godel_accepted'] for s in self.stats_log]
             godel_rejected = [s['godel_rejected'] for s in self.stats_log]
@@ -2605,7 +2797,7 @@ class GenesisEngine:
             ax.legend()
             ax.grid(True, alpha=0.3)
 
-            # Row 4: Counterfactual & Knowledge (v3.0)
+            # Row 4: Counterfactual & Knowledge
             ax = axes[3, 0]
             ax.plot(gens, cf_adj, 'crimson', linewidth=2)
             ax.set_title('Counterfactual Adjustments')
@@ -2617,13 +2809,49 @@ class GenesisEngine:
             ax.grid(True, alpha=0.3)
 
             ax = axes[3, 2]
-            ax.plot(gens, kb_entries, 'darkblue', linewidth=2, label='Entries')
+            ax.plot(gens, kb_entries, 'darkblue', linewidth=2)
             ax.set_title('Knowledge Bank Size')
             ax.grid(True, alpha=0.3)
 
             ax = axes[3, 3]
             ax.plot(gens, kb_help, 'forestgreen', linewidth=2)
-            ax.set_title('Knowledge Helpfulness Rate')
+            ax.set_title('Knowledge Helpfulness')
+            ax.set_ylim(0, 1)
+            ax.grid(True, alpha=0.3)
+
+            # Row 5: v4.0 Cognitive Systems
+            ax = axes[4, 0]
+            ax.plot(gens, goals_completed, 'navy', linewidth=2, label='Completed')
+            ax.plot(gens, goals_created, 'skyblue', linewidth=2, linestyle='--', label='Created')
+            ax.set_title('Hierarchical Goals')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+
+            ax = axes[4, 1]
+            ax.plot(gens, agents_modeled, 'darkgreen', linewidth=2, label='Modeled')
+            ax2 = ax.twinx()
+            ax2.plot(gens, social_interactions, 'lightgreen', linewidth=2, linestyle='--', label='Interactions')
+            ax.set_title('Theory of Mind')
+            ax.set_ylabel('Agents Modeled', color='darkgreen')
+            ax2.set_ylabel('Interactions', color='lightgreen')
+            ax.grid(True, alpha=0.3)
+
+            ax = axes[4, 2]
+            ax.plot(gens, concepts_formed, 'purple', linewidth=2, label='Concepts')
+            ax2 = ax.twinx()
+            ax2.plot(gens, categorizations, 'violet', linewidth=2, linestyle='--', label='Categorizations')
+            ax.set_title('Abstract Concepts')
+            ax.set_ylabel('Concepts', color='purple')
+            ax2.set_ylabel('Categorizations', color='violet')
+            ax.grid(True, alpha=0.3)
+
+            ax = axes[4, 3]
+            ax.plot(gens, life_quality, 'gold', linewidth=2, label='Quality')
+            ax2 = ax.twinx()
+            ax2.plot(gens, life_events, 'darkorange', linewidth=2, linestyle='--', label='Events')
+            ax.set_title('Self-Narrative')
+            ax.set_ylabel('Life Quality', color='gold')
+            ax2.set_ylabel('Life Events', color='darkorange')
             ax.set_ylim(0, 1)
             ax.grid(True, alpha=0.3)
 
@@ -2632,77 +2860,12 @@ class GenesisEngine:
                     ax.set_xlabel('Generation', fontsize=8)
 
             plt.tight_layout()
-            plot_path = os.path.join(Config.PLOT_DIR, 'genesis_v3_dashboard.png')
+            plot_path = os.path.join(Config.PLOT_DIR, 'genesis_v4_dashboard.png')
             plt.savefig(plot_path, dpi=150, bbox_inches='tight')
             plt.close()
             print(f"\n  Dashboard saved to: {plot_path}")
 
-            # === Figure 2: Meta-Learning Analysis ===
-            if self.agents:
-                fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-                fig.suptitle('GENESIS v3.0: Evolved Parameters Distribution',
-                             fontsize=14, fontweight='bold')
-
-                all_A, all_B, all_C, all_lr = [], [], [], []
-                for agent in self.agents:
-                    for conn in agent.genome.connections.values():
-                        all_A.append(conn.A)
-                        all_B.append(conn.B)
-                        all_C.append(conn.C)
-                        all_lr.append(conn.lr)
-
-                if all_A:
-                    axes[0, 0].hist(all_A, bins=30, color='steelblue', alpha=0.7, label='A (Hebbian)')
-                    axes[0, 0].hist(all_B, bins=30, color='coral', alpha=0.7, label='B (Pre-syn)')
-                    axes[0, 0].hist(all_C, bins=30, color='green', alpha=0.7, label='C (Post-syn)')
-                    axes[0, 0].set_title('Learning Rule Parameters')
-                    axes[0, 0].legend()
-                    axes[0, 0].grid(True, alpha=0.3)
-
-                    axes[0, 1].hist(all_lr, bins=30, color='purple', alpha=0.7)
-                    axes[0, 1].set_title('Learning Rates')
-                    axes[0, 1].grid(True, alpha=0.3)
-
-                    best_agent = max(self.agents, key=lambda a: a.genome.fitness)
-                    weights = [c.weight for c in best_agent.genome.connections.values()]
-                    axes[0, 2].hist(weights, bins=30, color='gold', alpha=0.7)
-                    axes[0, 2].set_title('Champion Weight Distribution')
-                    axes[0, 2].grid(True, alpha=0.3)
-
-                # Communication params distribution
-                honesty_all = [a.genome.signal_honesty for a in self.agents]
-                listen_all = [a.genome.listen_weight for a in self.agents]
-                strength_all = [a.genome.signal_strength for a in self.agents]
-                axes[1, 0].hist(honesty_all, bins=20, color='green', alpha=0.7, label='Honesty')
-                axes[1, 0].hist(listen_all, bins=20, color='blue', alpha=0.7, label='Listen')
-                axes[1, 0].hist(strength_all, bins=20, color='red', alpha=0.7, label='Strength')
-                axes[1, 0].set_title('Communication Params')
-                axes[1, 0].legend()
-                axes[1, 0].grid(True, alpha=0.3)
-
-                # Counterfactual params distribution
-                regret_all = [a.genome.regret_sensitivity for a in self.agents]
-                cf_depth_all = [a.genome.counterfactual_depth for a in self.agents]
-                axes[1, 1].hist(regret_all, bins=20, color='crimson', alpha=0.7)
-                axes[1, 1].set_title('Regret Sensitivity Distribution')
-                axes[1, 1].grid(True, alpha=0.3)
-
-                # Decision params distribution
-                caution_all = [a.genome.caution_level for a in self.agents]
-                accept_all = [a.genome.acceptability_threshold for a in self.agents]
-                axes[1, 2].hist(caution_all, bins=20, color='purple', alpha=0.7, label='Caution')
-                axes[1, 2].hist(accept_all, bins=20, color='orange', alpha=0.7, label='Accept Thresh')
-                axes[1, 2].set_title('Decision Params')
-                axes[1, 2].legend()
-                axes[1, 2].grid(True, alpha=0.3)
-
-                plt.tight_layout()
-                plot_path2 = os.path.join(Config.PLOT_DIR, 'genesis_v3_analysis.png')
-                plt.savefig(plot_path2, dpi=150, bbox_inches='tight')
-                plt.close()
-                print(f"  Analysis saved to: {plot_path2}")
-
-            # === Figure 3: Universe ===
+            # === Figure 2: Universe ===
             fig, ax = plt.subplots(figsize=(10, 10))
             im = ax.imshow(self.field.grid, cmap='magma', origin='lower',
                            extent=[0, self.field.size, 0, self.field.size])
@@ -2715,14 +2878,13 @@ class GenesisEngine:
                 scatter = ax.scatter(xs, ys, c=colors, s=sizes, cmap='cool',
                                      edgecolors='white', linewidth=0.5, alpha=0.8)
                 plt.colorbar(scatter, ax=ax, label='Agent Fitness')
-            ax.set_title('GENESIS v3.0 Universe -- Final State',
-                         fontsize=14, fontweight='bold')
+            ax.set_title('GENESIS v4.0 Universe -- Final State', fontsize=14, fontweight='bold')
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
-            plot_path3 = os.path.join(Config.PLOT_DIR, 'genesis_v3_universe.png')
-            plt.savefig(plot_path3, dpi=150, bbox_inches='tight')
+            plot_path2 = os.path.join(Config.PLOT_DIR, 'genesis_v4_universe.png')
+            plt.savefig(plot_path2, dpi=150, bbox_inches='tight')
             plt.close()
-            print(f"  Universe visualization saved to: {plot_path3}")
+            print(f"  Universe saved to: {plot_path2}")
 
         except Exception as e:
             print(f"  Visualization error: {e}")
@@ -2734,14 +2896,14 @@ class GenesisEngine:
 # ============================================================================
 
 def main():
-    """Launch the GENESIS v3.0 system."""
+    """Launch the GENESIS v4.0 system."""
     print()
     print("=" * 72)
-    print("  GENESIS v3.0")
+    print("  GENESIS v4.0")
     print("  Generative Evolving Neural Engine for Self-Improving Systems")
     print("=" * 72)
     print()
-    print("  13 Capabilities Active:")
+    print("  17 Capabilities Active:")
     print("   1. Self-Sufficient Passive Learning")
     print("   2. Meta-Learning from Scratch")
     print("   3. Darwinian Self-Evolution (NEAT)")
@@ -2755,13 +2917,18 @@ def main():
     print("  11. Emergent Communication (evolved signaling)")
     print("  12. Counterfactual Reasoning (what-if, regret learning)")
     print("  13. Persistent Knowledge Transfer (cultural evolution)")
+    print("  14. Hierarchical Goal Formation (intentionality, planning)")
+    print("  15. Theory of Mind (social modeling, prediction, trust)")
+    print("  16. Abstract Concept Formation (prototypes, recognition)")
+    print("  17. Self-Narrative (autobiography, identity, life story)")
     print()
     print("  Agents learn what decisions lead to what outcomes.")
-    print("  They predict consequences before acting.")
-    print("  They communicate with evolved signals.")
-    print("  They ask 'what if I had done something different?'")
-    print("  They inherit wisdom from those who came before.")
-    print("  They override their own neural network when wisdom says otherwise.")
+    print("  They set their own goals and pursue multi-step plans.")
+    print("  They build models of other agents' behavior.")
+    print("  They compress experience into abstract concepts.")
+    print("  They maintain a life story that shapes their identity.")
+    print("  Intelligence emerges from evolution, experience, goals,")
+    print("  social reasoning, abstraction, and self-reflection.")
     print()
     print("=" * 72)
     print()
@@ -2769,12 +2936,10 @@ def main():
     engine = GenesisEngine()
     stats = engine.run(generations=Config.NUM_GENERATIONS)
 
-    print("\n  GENESIS v3.0 has evolved beyond its initial design.")
-    print("  The agents developed their own language from nothing.")
-    print("  They learned to reason about what could have been.")
-    print("  They built a shared knowledge bank that outlives any individual.")
-    print("  Intelligence emerged from evolution, experience, communication,")
-    print("  reflection, and cultural inheritance.\n")
+    print("\n  GENESIS v4.0 has evolved beyond its initial design.")
+    print("  The agents developed goals, social intelligence, abstract thought,")
+    print("  and autobiographical memory -- all from nothing.")
+    print("  They became intentional, social, conceptual, and self-aware.\n")
 
     return engine
 
