@@ -1,0 +1,31 @@
+name: Audit model training
+
+on:
+  push:
+    paths:
+      - 'audit_teachable_model/**'
+      - '.github/workflows/audit-model.yml'
+  workflow_dispatch:
+
+jobs:
+  train-audit-model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Train audit teachable model
+        working-directory: audit_teachable_model
+        run: python train_audit_model.py
+      - name: Smoke-test inference
+        working-directory: audit_teachable_model
+        run: |
+          printf 'try:\n    run()\nexcept:\n    pass\n' | python predict_audit_issue.py
+      - name: Upload trained model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-model-artifacts
+          path: |
+            audit_teachable_model/audit_model.json
+            audit_teachable_model/training_metrics.json
