@@ -1,0 +1,1 @@
+"""Safe defensive lab package."""
