@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+.venv/
+venv/
+quarantine/
+evidence-private/
+*.tar.gz
+*.zip
