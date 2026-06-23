@@ -1,0 +1,28 @@
+name: Audit teacher-student bridge
+
+on:
+  push:
+    paths:
+      - 'self_audit_improve.py'
+      - 'audit_teachable_model/**'
+      - '.github/workflows/audit-teacher-student.yml'
+  workflow_dispatch:
+
+jobs:
+  teacher-student:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run teacher-student bridge
+        run: python audit_teachable_model/teacher_student_bridge.py run
+      - name: Upload teacher-student artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: teacher-student-audit-artifacts
+          path: |
+            audit_teachable_model/teacher_labeled_examples.jsonl
+            audit_teachable_model/teacher_audit_model.json
+            audit_teachable_model/teacher_training_metrics.json
