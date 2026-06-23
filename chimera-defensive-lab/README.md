@@ -16,8 +16,9 @@ The original archive is intentionally not included. This folder contains only a 
 ## Safe local use
 
 ```bash
-python -m chimera_defensive_lab.src.chimera_defensive_simulator
-python -m pytest chimera_defensive_lab/tests
+cd chimera-defensive-lab
+python -m src.chimera_defensive_simulator
+python -m pytest
 ```
 
 The simulator only prints a defensive response timeline. It does not access networks, files outside its own code, credentials, processes, or system settings.
