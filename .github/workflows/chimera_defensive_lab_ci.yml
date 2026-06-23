@@ -1,0 +1,27 @@
+name: Chimera Defensive Lab CI
+
+on:
+  push:
+    paths:
+      - "chimera-defensive-lab/**"
+      - ".github/workflows/chimera_defensive_lab_ci.yml"
+  pull_request:
+    paths:
+      - "chimera-defensive-lab/**"
+      - ".github/workflows/chimera_defensive_lab_ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: chimera-defensive-lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test runner
+        run: python -m pip install pytest
+      - name: Run tests
+        run: python -m pytest
