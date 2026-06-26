@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node scripts/quality-check.mjs",
+    "verify:self-improve": "node scripts/verified-improve.mjs",
+    "verify:full": "npm run test && npm run build && npm run verify:self-improve && npm run test && npm run build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
