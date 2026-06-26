@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": null,
+  "purpose": "Track opportunity cost and verified progress with internal score units.",
+  "constraints": {
+    "timeIsValue": true,
+    "externalFinance": false,
+    "outsideActions": false,
+    "reviewRequired": true,
+    "use": "prioritization and learning measurement only"
+  },
+  "inputs": {
+    "verifiedRuns": 0,
+    "metaRuns": 0,
+    "valueRuns": 0,
+    "benchmarkPassed": false,
+    "skillSignals": []
+  },
+  "scoreUpdate": null,
+  "stateAfter": {
+    "virtualScoreBalance": 0,
+    "virtualRate": 1,
+    "bestEfficiencyScore": 0,
+    "totalBenchmarksRewarded": 0,
+    "totalSkillsRewarded": 0
+  },
+  "nextHumanStep": "Run the time value script or scheduled workflow, then review the score report."
+}
