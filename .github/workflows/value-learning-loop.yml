@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   learn:
-    name: Verify, learn, propose, and measure
+    name: Verify, learn, propose, measure, and score
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -50,6 +50,7 @@ jobs:
             - verified improvement proposal runs
             - value experiment proposal runs
             - meta-learning measurement runs
+            - time-value score update runs
             - tests and build pass again
 
             It does not auto-merge, send messages, deploy, or take external action. Human review remains required.
@@ -59,7 +60,10 @@ jobs:
             verified-coding-loop-dashboard/src/data/verifiedLearningState.json
             verified-coding-loop-dashboard/src/data/revenueLearningState.json
             verified-coding-loop-dashboard/src/data/metaLearningState.json
+            verified-coding-loop-dashboard/src/data/timeValueState.json
             verified-coding-loop-dashboard/verified-improvement-report.json
             verified-coding-loop-dashboard/proposals/latest-verified-proposal.json
             verified-coding-loop-dashboard/revenue/revenue-learning-report.json
             verified-coding-loop-dashboard/learning/meta-learning-report.json
+            verified-coding-loop-dashboard/learning/time-score-report.json
+            verified-coding-loop-dashboard/learning/time-value-report.json
