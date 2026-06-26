@@ -8,8 +8,9 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node scripts/quality-check.mjs",
+    "propose:improvement": "node scripts/propose-improvement.mjs",
     "verify:self-improve": "node scripts/verified-improve.mjs",
-    "verify:full": "npm run test && npm run build && npm run verify:self-improve && npm run test && npm run build"
+    "verify:full": "npm run test && npm run build && npm run propose:improvement && npm run verify:self-improve && npm run test && npm run build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
