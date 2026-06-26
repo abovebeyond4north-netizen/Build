@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": null,
+  "purpose": "24/7 zero-cost learning loop for ethical revenue experiment proposals",
+  "limits": {
+    "doesNotGuaranteeRevenue": true,
+    "noAutonomousPayments": true,
+    "noSpam": true,
+    "noExternalOutreach": true,
+    "noPaidTools": true,
+    "humanReviewRequired": true
+  },
+  "selectedExperiment": null,
+  "rankedExperiments": [],
+  "learningUpdate": null,
+  "nextHumanStep": "Trigger the revenue learning workflow or run npm run revenue:learn locally."
+}
