@@ -1,0 +1,62 @@
+name: Regular Value Learning Loop
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 */6 * * *'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: value-learning-loop
+  cancel-in-progress: false
+
+jobs:
+  learn:
+    name: Verify, learn, and propose
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: verified-coding-loop-dashboard
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run full verified iteration
+        run: npm run iterate:full
+
+      - name: Create pull request for reviewed learning update
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: 'Value learning: update proposal state'
+          title: 'Value learning update'
+          body: |
+            This pull request was created by the Regular Value Learning Loop.
+
+            It proposes only reviewed artifacts and state updates after:
+            - tests pass
+            - production build passes
+            - verified improvement proposal runs
+            - value experiment proposal runs
+            - tests and build pass again
+
+            It does not auto-merge, send messages, deploy, or take external action. Human review remains required.
+          branch: bot/value-learning-loop
+          delete-branch: true
+          add-paths: |
+            verified-coding-loop-dashboard/src/data/verifiedLearningState.json
+            verified-coding-loop-dashboard/src/data/revenueLearningState.json
+            verified-coding-loop-dashboard/verified-improvement-report.json
+            verified-coding-loop-dashboard/proposals/latest-verified-proposal.json
+            verified-coding-loop-dashboard/revenue/revenue-learning-report.json
