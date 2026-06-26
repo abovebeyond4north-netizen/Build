@@ -11,9 +11,10 @@
     "propose:improvement": "node scripts/propose-improvement.mjs",
     "value:learn": "node scripts/revenue-learning-loop.mjs",
     "meta:learn": "node scripts/meta-learning-loop.mjs",
+    "time:value": "node scripts/time-value-loop.mjs",
     "verify:self-improve": "node scripts/verified-improve.mjs",
     "verify:full": "npm run test && npm run build && npm run propose:improvement && npm run verify:self-improve && npm run test && npm run build",
-    "iterate:full": "npm run verify:full && npm run value:learn && npm run meta:learn && npm run test && npm run build"
+    "iterate:full": "npm run verify:full && npm run value:learn && npm run meta:learn && npm run time:value && npm run test && npm run build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
