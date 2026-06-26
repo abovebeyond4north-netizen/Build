@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": null,
+  "purpose": "Track internal compute credits for effort, attempts, failures, penalties, success rewards, and virtual rate gains.",
+  "latestEntry": null,
+  "guidance": "Run npm run compute:budget or the scheduled workflow to generate the first report.",
+  "hardBoundary": "Internal credits only for planning and scoring. No outside-world action."
+}
