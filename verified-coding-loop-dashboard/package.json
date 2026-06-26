@@ -20,6 +20,7 @@
     "process:focus": "node scripts/process-focus-loop.mjs",
     "efficiency:optimize": "node scripts/efficiency-optimizer-loop.mjs",
     "improve:general": "node scripts/general-improvement-loop.mjs",
+    "plan:implementation": "node scripts/implementation-planner-loop.mjs",
     "verify:self-improve": "node scripts/verified-improve.mjs",
     "verify:full": "npm run test && npm run build && npm run propose:improvement && npm run verify:self-improve && npm run test && npm run build",
     "iterate:full": "npm run verify:full && npm run value:learn && npm run meta:learn && npm run time:value && npm run compute:budget && npm run test && npm run build"
