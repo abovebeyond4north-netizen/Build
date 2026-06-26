@@ -10,10 +10,30 @@ export const DEFAULT_EXPERIENCE_WEIGHTS = {
   usefulness: 0.12
 };
 
+export function normalizeExperienceWeights(weights = DEFAULT_EXPERIENCE_WEIGHTS) {
+  const normalized = { ...DEFAULT_EXPERIENCE_WEIGHTS, ...weights };
+
+  if ('efficiency' in weights && !('costControl' in weights)) {
+    normalized.costControl = Number(weights.efficiency || DEFAULT_EXPERIENCE_WEIGHTS.costControl);
+  }
+
+  delete normalized.efficiency;
+  return normalized;
+}
+
+export function normalizeFactors(factors = {}) {
+  return {
+    ...factors,
+    costControl: Number(factors.costControl ?? factors.efficiency ?? 0)
+  };
+}
+
 export function scoreFactors(factors, weights = DEFAULT_EXPERIENCE_WEIGHTS) {
-  const weightTotal = Object.values(weights).reduce((sum, value) => sum + Number(value || 0), 0) || 1;
-  const weighted = Object.entries(weights).reduce((sum, [factor, weight]) => {
-    return sum + Number(factors[factor] || 0) * Number(weight || 0);
+  const normalizedWeights = normalizeExperienceWeights(weights);
+  const normalizedFactors = normalizeFactors(factors);
+  const weightTotal = Object.values(normalizedWeights).reduce((sum, value) => sum + Number(value || 0), 0) || 1;
+  const weighted = Object.entries(normalizedWeights).reduce((sum, [factor, weight]) => {
+    return sum + Number(normalizedFactors[factor] || 0) * Number(weight || 0);
   }, 0);
   return round2(weighted / weightTotal);
 }
@@ -21,6 +41,7 @@ export function scoreFactors(factors, weights = DEFAULT_EXPERIENCE_WEIGHTS) {
 export function scoreSubprocess(subprocess, weights = DEFAULT_EXPERIENCE_WEIGHTS) {
   return {
     ...subprocess,
+    factors: normalizeFactors(subprocess.factors || {}),
     experienceScore: scoreFactors(subprocess.factors || {}, weights)
   };
 }
@@ -51,7 +72,7 @@ export function weakestSubprocesses(scoredProcesses, limit = 5) {
 
 export function focusRecommendations(subprocesses) {
   return subprocesses.map(subprocess => {
-    const sortedFactors = Object.entries(subprocess.factors || {})
+    const sortedFactors = Object.entries(normalizeFactors(subprocess.factors || {}))
       .sort((a, b) => Number(a[1]) - Number(b[1]));
     const weakestFactor = sortedFactors[0]?.[0] || 'unknown';
 
