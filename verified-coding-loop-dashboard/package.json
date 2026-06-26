@@ -18,6 +18,7 @@
     "time:value": "node scripts/time-value-loop.mjs",
     "compute:budget": "node scripts/compute-budget-loop.mjs",
     "process:focus": "node scripts/process-focus-loop.mjs",
+    "efficiency:optimize": "node scripts/efficiency-optimizer-loop.mjs",
     "verify:self-improve": "node scripts/verified-improve.mjs",
     "verify:full": "npm run test && npm run build && npm run propose:improvement && npm run verify:self-improve && npm run test && npm run build",
     "iterate:full": "npm run verify:full && npm run value:learn && npm run meta:learn && npm run time:value && npm run compute:budget && npm run test && npm run build"
