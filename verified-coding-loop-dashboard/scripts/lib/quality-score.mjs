@@ -1,24 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { REQUIRED_SAFETY_CLAIMS, REQUIRED_SECTIONS } from './dashboard-contract.mjs';
 
 export const DASHBOARD_MARKERS = [
-  'System State',
-  'Awareness Ladder',
-  'Prediction Engine',
-  'Benchmark Runner',
-  'Patch Candidate Panel',
-  'Oracle Gate',
-  'Memory',
-  'Belief Tracker',
-  'Self-Model',
-  'Uncertainty + Calibration',
-  'Snapshots and Rollback',
-  'Curriculum Builder',
-  'Syntax Genome',
-  'Append-Only Event Log',
-  'does not claim consciousness',
-  'No real code execution',
-  'Simulated data only'
+  ...REQUIRED_SECTIONS,
+  ...REQUIRED_SAFETY_CLAIMS.filter(claim => claim !== 'external side effects')
 ];
 
 export const REQUIRED_SCRIPTS = ['test', 'build', 'verify:self-improve', 'verify:full'];
