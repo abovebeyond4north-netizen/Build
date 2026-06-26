@@ -1,37 +1,10 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import { projectPath, readJson, writeJson } from './lib/json-store.mjs';
+import { includesAll, rankByScore } from './lib/history-tools.mjs';
+import { readText } from './lib/quality-score.mjs';
 
 const root = process.cwd();
-const proposalDir = path.join(root, 'proposals');
-const proposalPath = path.join(proposalDir, 'latest-verified-proposal.json');
-const statePath = path.join(root, 'src/data/verifiedLearningState.json');
-
-function read(file) {
-  return fs.readFileSync(path.join(root, file), 'utf8');
-}
-
-function readJson(file, fallback) {
-  if (!fs.existsSync(file)) return fallback;
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
-}
-
-function writeJson(file, data) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
-}
-
-function includesAll(text, markers) {
-  return markers.every(marker => text.includes(marker));
-}
-
-const app = read('src/App.jsx');
-const state = readJson(statePath, {
-  verifiedRuns: 0,
-  bestQualityScore: 0,
-  learningHistory: []
-});
-
-const existingProposal = readJson(proposalPath, null);
+const proposalPath = projectPath(root, 'proposals/latest-verified-proposal.json');
+const statePath = projectPath(root, 'src/data/verifiedLearningState.json');
 
 const candidateImprovements = [
   {
@@ -39,7 +12,7 @@ const candidateImprovements = [
     title: 'Add calibration history visualization',
     target: 'src/App.jsx',
     reason: 'The dashboard tracks prediction error, but does not yet visualize calibration over time.',
-    expectedBenefit: 0.12,
+    score: 0.12,
     risk: 'low',
     requiredEvidence: ['Prediction Engine', 'Uncertainty + Calibration', 'Append-Only Event Log'],
     acceptanceTests: [
@@ -55,7 +28,7 @@ const candidateImprovements = [
     title: 'Split dashboard panels into reusable components',
     target: 'src/components',
     reason: 'The main App.jsx is large. Component separation would improve maintainability without changing behavior.',
-    expectedBenefit: 0.1,
+    score: 0.1,
     risk: 'medium',
     requiredEvidence: ['System State', 'Memory', 'Belief Tracker', 'Oracle Gate'],
     acceptanceTests: [
@@ -71,7 +44,7 @@ const candidateImprovements = [
     title: 'Add contradiction tracking to beliefs',
     target: 'belief model',
     reason: 'Truthful belief management should track evidence against a claim, not only evidence for it.',
-    expectedBenefit: 0.16,
+    score: 0.16,
     risk: 'low',
     requiredEvidence: ['Belief Tracker', 'confidence', 'Evidence'],
     acceptanceTests: [
@@ -83,18 +56,24 @@ const candidateImprovements = [
   }
 ];
 
+const app = readText(root, 'src/App.jsx');
+const state = readJson(statePath, { verifiedRuns: 0, bestQualityScore: 0, learningHistory: [] });
+const existingProposal = readJson(proposalPath, null);
 const eligible = candidateImprovements.filter(candidate => includesAll(app, candidate.requiredEvidence));
-const selected = eligible.sort((a, b) => b.expectedBenefit - a.expectedBenefit)[0];
+const selected = rankByScore(eligible)[0];
 
 if (!selected) {
   throw new Error('No eligible improvement proposal found. Required evidence markers were missing.');
 }
 
 const proposal = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   generatedAt: new Date().toISOString(),
   generator: 'deterministic-safe-proposal-engine',
-  selected,
+  selected: {
+    ...selected,
+    expectedBenefit: selected.score
+  },
   previousProposalId: existingProposal?.selected?.id || null,
   currentVerifiedRuns: state.verifiedRuns || 0,
   currentBestQualityScore: state.bestQualityScore || 0,
