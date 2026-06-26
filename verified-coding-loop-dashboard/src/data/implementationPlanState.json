@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "runs": 0,
+  "bestPlanScore": 0,
+  "planHistory": [],
+  "planRules": {
+    "smallestUsefulPatch": true,
+    "testsBeforeMerge": true,
+    "buildBeforeMerge": true,
+    "humanReviewRequired": true,
+    "rollbackRequired": true
+  }
+}
