@@ -15,13 +15,15 @@ const requiredJsonFiles = [
   'src/data/computeBudgetState.json',
   'src/data/processFocusState.json',
   'src/data/efficiencyOptimizerState.json',
+  'src/data/generalImprovementState.json',
   'proposals/latest-verified-proposal.json',
   'revenue/revenue-learning-report.json',
   'learning/meta-learning-report.json',
   'learning/time-score-report.json',
   'learning/compute-budget-report.json',
   'learning/process-focus-report.json',
-  'learning/efficiency-optimizer-report.json'
+  'learning/efficiency-optimizer-report.json',
+  'learning/general-improvement-report.json'
 ];
 
 function exists(relativePath) {
@@ -80,6 +82,11 @@ assert.equal(asNumber(efficiency.schemaVersion, 0) >= 1, true, 'efficiency optim
 assert.equal(typeof efficiency.weights, 'object', 'efficiency optimizer should track weights');
 assertArray(efficiency.selectedHistory, 'efficiency selectedHistory');
 
+const general = load('src/data/generalImprovementState.json');
+assert.equal(asNumber(general.schemaVersion, 0) >= 1, true, 'general improvement schemaVersion must be valid');
+assert.equal(typeof general.weights, 'object', 'general improvement should track weights');
+assertArray(general.decisionHistory, 'general decisionHistory');
+
 const proposal = load('proposals/latest-verified-proposal.json');
 assert.ok('safetyPolicy' in proposal, 'proposal should include safetyPolicy');
 assert.equal(proposal.safetyPolicy?.humanReviewRequired, true, 'proposal should require review');
@@ -97,6 +104,10 @@ const efficiencyReport = load('learning/efficiency-optimizer-report.json');
 assertArray(efficiencyReport.rankedCandidates, 'efficiency optimizer rankedCandidates');
 assert.equal(typeof efficiencyReport.stateAfter, 'object', 'efficiency optimizer report should track stateAfter');
 
+const generalReport = load('learning/general-improvement-report.json');
+assertArray(generalReport.rankedMoves, 'general improvement rankedMoves');
+assert.equal(typeof generalReport.stateAfter, 'object', 'general improvement report should track stateAfter');
+
 const packageJson = load('package.json');
 assert.ok(packageJson.scripts?.['schema:check'], 'package.json should expose schema:check');
 assert.ok(packageJson.scripts?.test?.includes('schema:check'), 'test script should include schema:check');
@@ -104,6 +115,6 @@ assert.ok(packageJson.scripts?.test?.includes('schema:check'), 'test script shou
 console.log(JSON.stringify({
   ok: true,
   checkedFiles: requiredJsonFiles.length,
-  states: ['verified', 'value', 'meta', 'timeValue', 'compute', 'processFocus', 'efficiency'],
-  reports: ['proposal', 'valueReport', 'metaReport', 'timeScoreReport', 'computeBudgetReport', 'processFocusReport', 'efficiencyReport']
+  states: ['verified', 'value', 'meta', 'timeValue', 'compute', 'processFocus', 'efficiency', 'general'],
+  reports: ['proposal', 'valueReport', 'metaReport', 'timeScoreReport', 'computeBudgetReport', 'processFocusReport', 'efficiencyReport', 'generalReport']
 }, null, 2));
