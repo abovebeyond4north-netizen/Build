@@ -13,11 +13,13 @@ const requiredJsonFiles = [
   'src/data/metaLearningState.json',
   'src/data/timeValueState.json',
   'src/data/computeBudgetState.json',
+  'src/data/processFocusState.json',
   'proposals/latest-verified-proposal.json',
   'revenue/revenue-learning-report.json',
   'learning/meta-learning-report.json',
   'learning/time-score-report.json',
-  'learning/compute-budget-report.json'
+  'learning/compute-budget-report.json',
+  'learning/process-focus-report.json'
 ];
 
 function exists(relativePath) {
@@ -66,6 +68,11 @@ assert.ok('startingCredits' in compute || 'startingFloat' in compute, 'compute s
 assert.ok('creditBalance' in compute || 'balance' in compute, 'compute state should track current credits');
 assertArray(compute.ledger, 'compute ledger');
 
+const processFocus = load('src/data/processFocusState.json');
+assert.equal(asNumber(processFocus.schemaVersion, 0) >= 1, true, 'process focus schemaVersion must be valid');
+assert.equal(typeof processFocus.factorWeights, 'object', 'process focus should track factorWeights');
+assertArray(processFocus.focusHistory, 'process focusHistory');
+
 const proposal = load('proposals/latest-verified-proposal.json');
 assert.ok('safetyPolicy' in proposal, 'proposal should include safetyPolicy');
 assert.equal(proposal.safetyPolicy?.humanReviewRequired, true, 'proposal should require review');
@@ -74,6 +81,11 @@ const valueReport = load('revenue/revenue-learning-report.json');
 assert.ok('limits' in valueReport, 'value report should include limits');
 assert.equal(valueReport.limits?.humanReviewRequired, true, 'value report should require review');
 
+const processReport = load('learning/process-focus-report.json');
+assertArray(processReport.focusFactors, 'process focus report focusFactors');
+assertArray(processReport.scoredProcesses, 'process focus report scoredProcesses');
+assertArray(processReport.recommendations, 'process focus report recommendations');
+
 const packageJson = load('package.json');
 assert.ok(packageJson.scripts?.['schema:check'], 'package.json should expose schema:check');
 assert.ok(packageJson.scripts?.test?.includes('schema:check'), 'test script should include schema:check');
@@ -81,6 +93,6 @@ assert.ok(packageJson.scripts?.test?.includes('schema:check'), 'test script shou
 console.log(JSON.stringify({
   ok: true,
   checkedFiles: requiredJsonFiles.length,
-  states: ['verified', 'value', 'meta', 'timeValue', 'compute'],
-  reports: ['proposal', 'valueReport', 'metaReport', 'timeScoreReport', 'computeBudgetReport']
+  states: ['verified', 'value', 'meta', 'timeValue', 'compute', 'processFocus'],
+  reports: ['proposal', 'valueReport', 'metaReport', 'timeScoreReport', 'computeBudgetReport', 'processFocusReport']
 }, null, 2));
