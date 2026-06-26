@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "runs": 0,
+  "bestEfficiencyScore": 0,
+  "selectedHistory": [],
+  "weights": {
+    "impact": 0.32,
+    "lowEffort": 0.18,
+    "verificationStrength": 0.2,
+    "lowRisk": 0.15,
+    "creditPreservation": 0.15
+  }
+}
