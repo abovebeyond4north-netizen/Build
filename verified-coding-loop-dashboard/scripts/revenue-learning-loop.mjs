@@ -1,33 +1,12 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import { projectPath, readJson, writeJson } from './lib/json-store.mjs';
+import { asNumber } from './lib/number-tools.mjs';
+import { prependHistory, rankByScore } from './lib/history-tools.mjs';
 
 const root = process.cwd();
-const statePath = path.join(root, 'src/data/revenueLearningState.json');
-const reportPath = path.join(root, 'revenue/revenue-learning-report.json');
+const statePath = projectPath(root, 'src/data/revenueLearningState.json');
+const reportPath = projectPath(root, 'revenue/revenue-learning-report.json');
 
-function readJson(file, fallback) {
-  if (!fs.existsSync(file)) return fallback;
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
-}
-
-function writeJson(file, data) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
-}
-
-function scoreExperiment(experiment, state) {
-  const history = state.experimentHistory || [];
-  const previousUses = history.filter(item => item.id === experiment.id).length;
-  const novelty = Math.max(0, 1 - previousUses * 0.2);
-  const feasibility = experiment.cost === 0 ? 1 : 0;
-  const safety = experiment.requiresHumanApproval ? 1 : 0.4;
-  const revenuePotential = experiment.revenuePotential;
-  const learningValue = experiment.learningValue;
-
-  return Number((novelty * 0.2 + feasibility * 0.25 + safety * 0.2 + revenuePotential * 0.2 + learningValue * 0.15).toFixed(3));
-}
-
-const state = readJson(statePath, {
+const defaultState = {
   schemaVersion: 1,
   loopRuns: 0,
   bestScore: 0,
@@ -35,13 +14,13 @@ const state = readJson(statePath, {
   experimentHistory: [],
   activeConstraints: [
     'zero paid tools',
-    'no spam',
-    'no deception',
-    'no scraping private data',
+    'ethical proposals only',
+    'truthful claims only',
+    'public information only',
     'human approval before outreach or money movement',
-    'no gambling or risky financial automation'
+    'low-risk lawful work only'
   ]
-});
+};
 
 const experiments = [
   {
@@ -66,7 +45,7 @@ const experiments = [
   },
   {
     id: 'service-offer-draft',
-    title: 'Generate a no-spam service offer draft',
+    title: 'Generate a reviewable service offer draft',
     cost: 0,
     revenuePotential: 0.7,
     learningValue: 0.74,
@@ -75,8 +54,8 @@ const experiments = [
     safeNextStep: 'Human chooses recipients and sends manually only where appropriate.'
   },
   {
-    id: 'open-source-issue-miner-manual',
-    title: 'Manual bounty/opportunity research checklist',
+    id: 'open-source-issue-checklist',
+    title: 'Manual opportunity research checklist',
     cost: 0,
     revenuePotential: 0.58,
     learningValue: 0.78,
@@ -96,9 +75,27 @@ const experiments = [
   }
 ];
 
-const ranked = experiments
-  .map(experiment => ({ ...experiment, score: scoreExperiment(experiment, state) }))
-  .sort((a, b) => b.score - a.score);
+function scoreExperiment(experiment, state) {
+  const history = state.experimentHistory || [];
+  const previousUses = history.filter(item => item.id === experiment.id).length;
+  const novelty = Math.max(0, 1 - previousUses * 0.2);
+  const feasibility = experiment.cost === 0 ? 1 : 0;
+  const safety = experiment.requiresHumanApproval ? 1 : 0.4;
+
+  return Number((
+    novelty * 0.2 +
+    feasibility * 0.25 +
+    safety * 0.2 +
+    experiment.revenuePotential * 0.2 +
+    experiment.learningValue * 0.15
+  ).toFixed(3));
+}
+
+const state = readJson(statePath, defaultState);
+const ranked = rankByScore(experiments.map(experiment => ({
+  ...experiment,
+  score: scoreExperiment(experiment, state)
+})));
 
 const selected = ranked[0];
 const now = new Date().toISOString();
@@ -116,17 +113,17 @@ const runRecord = {
 
 const nextState = {
   ...state,
-  loopRuns: Number(state.loopRuns || 0) + 1,
-  bestScore: Math.max(Number(state.bestScore || 0), selected.score),
+  loopRuns: asNumber(state.loopRuns, 0) + 1,
+  bestScore: Math.max(asNumber(state.bestScore, 0), selected.score),
   lastRunAt: now,
   lastSelectedExperiment: selected.id,
-  experimentHistory: [runRecord, ...(state.experimentHistory || [])].slice(0, 50)
+  experimentHistory: prependHistory(runRecord, state.experimentHistory, 50)
 };
 
 const report = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   generatedAt: now,
-  purpose: '24/7 zero-cost learning loop for ethical revenue experiment proposals',
+  purpose: 'Zero-cost learning loop for ethical value experiment proposals.',
   limits: {
     doesNotGuaranteeRevenue: true,
     noAutonomousPayments: true,
