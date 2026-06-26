@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": null,
+  "purpose": "Measure whether the learning loop is improving its own learning process.",
+  "learningScore": 0,
+  "dimensions": {
+    "diversity": 0,
+    "evidenceDepth": 0,
+    "reversibility": 1,
+    "safetyConsistency": 1,
+    "cadence": 0
+  },
+  "selectedStrategies": [],
+  "hardBoundaries": [
+    "proposals are not automatically applied to core logic",
+    "human review remains required",
+    "external actions remain disabled",
+    "income is not guaranteed or assumed"
+  ],
+  "nextHumanStep": "Run npm run meta:learn or trigger the scheduled workflow."
+}
