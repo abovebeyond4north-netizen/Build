@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "runs": 0,
+  "bestGeneralScore": 0,
+  "decisionHistory": [],
+  "weights": {
+    "provenQuality": 0.22,
+    "learningMomentum": 0.18,
+    "focusedTarget": 0.2,
+    "efficientNextStep": 0.2,
+    "reserveStrength": 0.1,
+    "proposalReadiness": 0.1
+  }
+}
