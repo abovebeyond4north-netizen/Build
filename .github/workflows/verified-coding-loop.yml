@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   verify:
-    name: Test, build, and gate
+    name: Test, build, propose, and gate
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -43,6 +43,9 @@ jobs:
       - name: Build dashboard
         run: npm run build
 
+      - name: Generate safe improvement proposal
+        run: npm run propose:improvement
+
       - name: Run verified improvement gate
         run: npm run verify:self-improve
 
@@ -56,13 +59,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: verified-improvement-report
-          path: verified-coding-loop-dashboard/verified-improvement-report.json
+          path: |
+            verified-coding-loop-dashboard/verified-improvement-report.json
+            verified-coding-loop-dashboard/proposals/latest-verified-proposal.json
 
       - name: Create pull request for verified updates
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: 'Verified coding loop: update learning state'
+          commit-message: 'Verified coding loop: update learning state and proposal'
           title: 'Verified coding loop update'
           body: |
             This pull request was created by the Verified Coding Loop workflow.
@@ -70,6 +75,7 @@ jobs:
             It only proposes updates after:
             - deterministic quality tests pass
             - production build passes
+            - safe improvement proposal is generated
             - verified improvement gate approves the change
             - tests and build pass again after the update
 
@@ -79,3 +85,4 @@ jobs:
           add-paths: |
             verified-coding-loop-dashboard/src/data/verifiedLearningState.json
             verified-coding-loop-dashboard/verified-improvement-report.json
+            verified-coding-loop-dashboard/proposals/latest-verified-proposal.json
