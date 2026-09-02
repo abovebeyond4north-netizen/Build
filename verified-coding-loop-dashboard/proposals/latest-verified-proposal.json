@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-02T14:42:37.903Z",
+  "generatedAt": "2026-09-02T14:48:03.117Z",
   "generator": "deterministic-safe-proposal-engine",
   "selected": {
     "id": "add-belief-contradiction-tracking",
@@ -25,9 +25,9 @@
     ],
     "expectedBenefit": 0.16
   },
-  "previousProposalId": null,
-  "currentVerifiedRuns": 0,
-  "currentBestQualityScore": 0,
+  "previousProposalId": "add-belief-contradiction-tracking",
+  "currentVerifiedRuns": 1,
+  "currentBestQualityScore": 130,
   "safetyPolicy": {
     "autoMerge": false,
     "realCodeExecution": false,
