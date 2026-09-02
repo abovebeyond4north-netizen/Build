@@ -1,9 +1,21 @@
 {
   "schemaVersion": 1,
-  "loopRuns": 0,
-  "bestScore": 0,
+  "loopRuns": 1,
+  "bestScore": 0.901,
   "totalRevenueRecorded": 0,
-  "experimentHistory": [],
+  "experimentHistory": [
+    {
+      "time": "2026-09-02T14:42:40.750Z",
+      "id": "portfolio-proof-page",
+      "title": "Improve the project as a portfolio proof asset",
+      "score": 0.901,
+      "cost": 0,
+      "revenuePotential": 0.64,
+      "learningValue": 0.82,
+      "decision": "proposed_not_executed",
+      "safety": "human approval required before outreach, payments, or external actions"
+    }
+  ],
   "activeConstraints": [
     "zero paid tools",
     "ethical proposals only",
@@ -11,5 +23,7 @@
     "public information only",
     "human approval before outreach or money movement",
     "low-risk lawful work only"
-  ]
+  ],
+  "lastRunAt": "2026-09-02T14:42:40.750Z",
+  "lastSelectedExperiment": "portfolio-proof-page"
 }

@@ -1,8 +1,33 @@
 {
-  "schemaVersion": 1,
-  "generatedAt": null,
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-02T14:42:37.903Z",
   "generator": "deterministic-safe-proposal-engine",
-  "selected": null,
+  "selected": {
+    "id": "add-belief-contradiction-tracking",
+    "title": "Add contradiction tracking to beliefs",
+    "target": "belief model",
+    "reason": "Truthful belief management should track evidence against a claim, not only evidence for it.",
+    "score": 0.16,
+    "risk": "low",
+    "requiredEvidence": [
+      "Belief Tracker",
+      "confidence",
+      "Evidence"
+    ],
+    "acceptanceTests": [
+      "belief tracker still renders",
+      "quality score does not decrease",
+      "safety claims remain visible"
+    ],
+    "forbiddenActions": [
+      "claiming consciousness",
+      "self-modifying without review"
+    ],
+    "expectedBenefit": 0.16
+  },
+  "previousProposalId": null,
+  "currentVerifiedRuns": 0,
+  "currentBestQualityScore": 0,
   "safetyPolicy": {
     "autoMerge": false,
     "realCodeExecution": false,
@@ -10,6 +35,6 @@
     "humanReviewRequired": true,
     "onlyProposeAfterEvidenceMarkersPresent": true
   },
-  "decision": "placeholder_until_workflow_runs",
-  "nextHumanStep": "Run npm run verify:full or trigger GitHub Actions to generate a current proposal."
+  "decision": "proposal_created_not_applied",
+  "nextHumanStep": "Review the proposal. If approved, implement it in a branch and let GitHub Actions prove it with tests and build."
 }
