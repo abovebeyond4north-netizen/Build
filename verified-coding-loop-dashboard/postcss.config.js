@@ -1,3 +1,6 @@
+import tailwindcss from '@tailwindcss/postcss';
+import autoprefixer from 'autoprefixer';
+
 /* postcss.config.js
    PostCSS configuration for verified-coding-loop-dashboard.
 
@@ -16,7 +19,7 @@
 
 export default {
   plugins: [
-    '@tailwindcss/postcss',
-    'autoprefixer',
+    tailwindcss,
+    autoprefixer,
   ],
 };
