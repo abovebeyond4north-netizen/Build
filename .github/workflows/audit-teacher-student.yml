@@ -8,6 +8,9 @@ on:
       - '.github/workflows/audit-teacher-student.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   teacher-student:
     runs-on: ubuntu-latest
