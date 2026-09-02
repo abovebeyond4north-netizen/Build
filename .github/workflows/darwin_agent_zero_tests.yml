@@ -10,6 +10,9 @@ on:
       - 'darwin_agent_zero/**'
       - '.github/workflows/darwin_agent_zero_tests.yml'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
