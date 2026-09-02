@@ -7,6 +7,9 @@ on:
       - '.github/workflows/audit-model.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   train-audit-model:
     runs-on: ubuntu-latest
