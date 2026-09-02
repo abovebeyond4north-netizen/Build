@@ -10,6 +10,9 @@ on:
       - "chimera-defensive-lab/**"
       - ".github/workflows/chimera_defensive_lab_ci.yml"
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
