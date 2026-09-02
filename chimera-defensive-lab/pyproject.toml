@@ -1,0 +1,10 @@
+[project]
+name = "chimera-defensive-lab"
+version = "0.1.0"
+description = "Safe defensive simulator and triage notes for a quarantined high-risk archive."
+requires-python = ">=3.10"
+readme = "README.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

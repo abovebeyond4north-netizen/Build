@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "runs": 0,
+  "virtualScoreBalance": 0,
+  "virtualRate": 1,
+  "bestEfficiencyScore": 0,
+  "totalBenchmarksRewarded": 0,
+  "totalSkillsRewarded": 0,
+  "ledger": [],
+  "rules": {
+    "realWorldFunds": false,
+    "automaticTransfers": false,
+    "humanReviewRequired": true,
+    "baseBenchmarkReward": 5,
+    "baseSkillReward": 3,
+    "raisePerPassedBenchmark": 0.25,
+    "raisePerSkillAcquired": 0.15,
+    "maxVirtualRate": 100
+  }
+}

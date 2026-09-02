@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "startingCredits": 1000,
+  "creditBalance": 1000,
+  "runCount": 0,
+  "hourlyCostRate": 2,
+  "attemptCost": 1.5,
+  "successCredit": 8,
+  "writePenalty": 12,
+  "testPenalty": 20,
+  "buildPenalty": 25,
+  "skillCredit": 5,
+  "rateGainPerBenchmark": 0.25,
+  "rateGainPerSkill": 0.1,
+  "virtualRate": 1,
+  "maxVirtualRate": 100,
+  "lowCreditThreshold": 100,
+  "ledger": []
+}

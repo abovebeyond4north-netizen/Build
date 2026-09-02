@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "loopRuns": 0,
+  "bestScore": 0,
+  "totalRevenueRecorded": 0,
+  "experimentHistory": [],
+  "activeConstraints": [
+    "zero paid tools",
+    "ethical proposals only",
+    "truthful claims only",
+    "public information only",
+    "human approval before outreach or money movement",
+    "low-risk lawful work only"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": null,
+  "purpose": "Optimize effective efficiency by ranking weak subprocesses by impact, effort, verification strength, risk, and credit preservation.",
+  "weights": {},
+  "selected": null,
+  "rankedCandidates": [],
+  "stateAfter": {
+    "runs": 0,
+    "bestEfficiencyScore": 0,
+    "lastDecision": "initialized"
+  },
+  "nextHumanStep": "Run npm run process:focus, then npm run efficiency:optimize."
+}

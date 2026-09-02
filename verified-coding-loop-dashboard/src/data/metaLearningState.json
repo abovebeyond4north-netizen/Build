@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "metaRuns": 0,
+  "bestLearningScore": 0,
+  "lastDecision": "initialized",
+  "strategyHistory": [],
+  "activePrinciples": [
+    "prefer verified evidence over assumptions",
+    "prefer small reversible changes",
+    "increase proposal variety over time",
+    "track rejected ideas for later review",
+    "require human review before outside-world action"
+  ]
+}

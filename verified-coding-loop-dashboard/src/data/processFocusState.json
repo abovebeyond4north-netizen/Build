@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "runs": 0,
+  "bestOverallExperienceScore": 0,
+  "factorWeights": {
+    "clarity": 0.14,
+    "feedback": 0.14,
+    "verification": 0.18,
+    "reversibility": 0.14,
+    "efficiency": 0.16,
+    "skillGrowth": 0.12,
+    "usefulness": 0.12
+  },
+  "focusHistory": []
+}

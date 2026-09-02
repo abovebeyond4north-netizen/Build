@@ -1,0 +1,41 @@
+{
+  "name": "verified-coding-loop-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "quality:check": "node scripts/quality-check.mjs",
+    "architecture:check": "node scripts/architecture-check.mjs",
+    "lib:check": "node scripts/lib-regression-check.mjs",
+    "schema:check": "node scripts/state-schema-check.mjs",
+    "test": "npm run quality:check && npm run architecture:check && npm run lib:check && npm run schema:check",
+    "propose:improvement": "node scripts/propose-improvement.mjs",
+    "value:learn": "node scripts/revenue-learning-loop.mjs",
+    "meta:learn": "node scripts/meta-learning-loop.mjs",
+    "time:value": "node scripts/time-value-loop.mjs",
+    "compute:budget": "node scripts/compute-budget-loop.mjs",
+    "process:focus": "node scripts/process-focus-loop.mjs",
+    "efficiency:optimize": "node scripts/efficiency-optimizer-loop.mjs",
+    "improve:general": "node scripts/general-improvement-loop.mjs",
+    "plan:implementation": "node scripts/implementation-planner-loop.mjs",
+    "verify:self-improve": "node scripts/verified-improve.mjs",
+    "verify:full": "npm run test && npm run build && npm run propose:improvement && npm run verify:self-improve && npm run test && npm run build",
+    "iterate:full": "npm run verify:full && npm run value:learn && npm run meta:learn && npm run time:value && npm run compute:budget && npm run test && npm run build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest"
+  },
+  "devDependencies": {
+    "tailwindcss": "latest",
+    "postcss": "latest",
+    "autoprefixer": "latest",
+    "@tailwindcss/postcss": "latest"
+  }
+}

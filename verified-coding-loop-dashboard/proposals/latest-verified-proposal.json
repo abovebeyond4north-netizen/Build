@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": null,
+  "generator": "deterministic-safe-proposal-engine",
+  "selected": null,
+  "safetyPolicy": {
+    "autoMerge": false,
+    "realCodeExecution": false,
+    "networkAutomation": false,
+    "humanReviewRequired": true,
+    "onlyProposeAfterEvidenceMarkersPresent": true
+  },
+  "decision": "placeholder_until_workflow_runs",
+  "nextHumanStep": "Run npm run verify:full or trigger GitHub Actions to generate a current proposal."
+}

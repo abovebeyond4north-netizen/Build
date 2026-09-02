@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": null,
+  "purpose": "Break the full learning system into processes and subprocesses, then focus improvement on weak factors.",
+  "focusFactors": [
+    "clarity",
+    "feedback",
+    "verification",
+    "reversibility",
+    "costControl",
+    "skillGrowth",
+    "usefulness"
+  ],
+  "factorWeights": {},
+  "overallExperienceScore": 0,
+  "scoredProcesses": [],
+  "weakestSubprocesses": [],
+  "recommendations": [],
+  "nextHumanStep": "Run npm run process:focus and review the weakest subprocesses."
+}

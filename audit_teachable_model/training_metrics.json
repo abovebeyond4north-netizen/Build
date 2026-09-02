@@ -1,0 +1,19 @@
+{
+  "accuracy": 1.0,
+  "correct": 111,
+  "total": 111,
+  "training_rows": 393,
+  "test_rows": 111,
+  "note": "Synthetic holdout from rule-shaped examples. Use as a teaching scaffold, not as real-world generalization proof.",
+  "per_label_accuracy": {
+    "bare_except": 1.0,
+    "broad_exception": 1.0,
+    "high_complexity": 1.0,
+    "long_line": 1.0,
+    "magic_number": 1.0,
+    "missing_docstring": 1.0,
+    "print_usage": 1.0,
+    "syntax_error": 1.0,
+    "todo_marker": 1.0
+  }
+}

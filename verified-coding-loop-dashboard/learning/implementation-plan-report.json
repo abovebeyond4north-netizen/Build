@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": null,
+  "purpose": "Turn the selected improvement target into a concrete, testable, reversible implementation plan.",
+  "selectedTarget": null,
+  "planScore": 0,
+  "plan": null,
+  "stateAfter": {
+    "runs": 0,
+    "bestPlanScore": 0,
+    "lastDecision": "initialized"
+  },
+  "nextHumanStep": "Run npm run plan:implementation after improve:general or efficiency:optimize."
+}
