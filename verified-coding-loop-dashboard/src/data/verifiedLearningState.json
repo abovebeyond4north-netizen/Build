@@ -1,7 +1,18 @@
 {
   "schemaVersion": 1,
-  "verifiedRuns": 0,
-  "bestQualityScore": 0,
-  "lastDecision": "initialized",
-  "learningHistory": []
+  "verifiedRuns": 1,
+  "bestQualityScore": 130,
+  "lastDecision": "approved",
+  "learningHistory": [
+    {
+      "time": "2026-09-02T14:42:39.356Z",
+      "decision": "approved",
+      "beforeScore": 0,
+      "afterScore": 130,
+      "testsPassed": true,
+      "buildPassed": true,
+      "rule": "Only update learning state when tests pass, build passes, and quality score is not worse."
+    }
+  ],
+  "lastVerifiedAt": "2026-09-02T14:42:39.356Z"
 }

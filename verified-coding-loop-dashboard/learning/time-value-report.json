@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-02T14:42:40.983Z",
+  "purpose": "Apply a time-is-value constraint to reward verified learning progress with virtual credits and raises.",
+  "constraints": {
+    "timeIsValue": true,
+    "externalFinance": false,
+    "outsideActions": false,
+    "reviewRequired": true,
+    "use": "motivation, prioritization, and opportunity-cost scoring only"
+  },
+  "inputs": {
+    "verifiedRuns": 1,
+    "metaRuns": 1,
+    "valueRuns": 1,
+    "benchmarkPassed": true,
+    "skillSignals": [
+      "meta_learning_measurement",
+      "value_experiment_selection",
+      "quality_score_preserved"
+    ]
+  },
+  "rewards": {
+    "time": "2026-09-02T14:42:40.983Z",
+    "type": "virtual_time_value_update",
+    "benchmarkPassed": true,
+    "benchmarkReward": 5,
+    "skillSignals": [
+      "meta_learning_measurement",
+      "value_experiment_selection",
+      "quality_score_preserved"
+    ],
+    "skillReward": 9,
+    "raiseAmount": 0.7,
+    "virtualHourlyRateBefore": 1,
+    "virtualHourlyRateAfter": 1.7,
+    "payout": 14.17,
+    "efficiencyScore": 2.33,
+    "note": "Internal virtual credits only for prioritization."
+  },
+  "stateAfter": {
+    "virtualBalance": 14.17,
+    "virtualHourlyRate": 1.7,
+    "bestEfficiencyScore": 2.33,
+    "totalBenchmarksRewarded": 1,
+    "totalSkillsRewarded": 3
+  },
+  "nextHumanStep": "Review whether the virtual rewards match actual usefulness before changing any real-world offer, pricing, or budget."
+}

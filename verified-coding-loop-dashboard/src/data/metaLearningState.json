@@ -1,14 +1,31 @@
 {
   "schemaVersion": 1,
-  "metaRuns": 0,
-  "bestLearningScore": 0,
-  "lastDecision": "initialized",
-  "strategyHistory": [],
+  "metaRuns": 1,
+  "bestLearningScore": 0.685,
+  "lastDecision": "learning_state_improved_or_equal",
+  "strategyHistory": [
+    {
+      "time": "2026-09-02T14:42:40.868Z",
+      "learningScore": 0.685,
+      "diversity": 1,
+      "evidenceDepth": 0.1,
+      "reversibility": 1,
+      "safetyConsistency": 1,
+      "cadence": 0.1,
+      "selectedStrategyIds": [
+        "increase-evidence-depth",
+        "preserve-reversibility",
+        "add-human-outcome-feedback"
+      ],
+      "decision": "learning_state_improved_or_equal"
+    }
+  ],
   "activePrinciples": [
     "prefer verified evidence over assumptions",
     "prefer small reversible changes",
     "increase proposal variety over time",
     "track rejected ideas for later review",
     "require human review before outside-world action"
-  ]
+  ],
+  "lastRunAt": "2026-09-02T14:42:40.868Z"
 }

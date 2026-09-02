@@ -1,0 +1,13 @@
+{
+  "time": "2026-09-02T14:42:39.356Z",
+  "decision": "approved",
+  "beforeScore": 0,
+  "afterScore": 130,
+  "testsPassed": true,
+  "buildPassed": true,
+  "rule": "Only update learning state when tests pass, build passes, and quality score is not worse.",
+  "testCommand": "npm run test",
+  "buildCommand": "npm run build",
+  "testStatus": 0,
+  "buildStatus": 0
+}
