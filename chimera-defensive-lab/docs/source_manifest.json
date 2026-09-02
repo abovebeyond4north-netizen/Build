@@ -1,0 +1,23 @@
+{
+  "reviewed_archive_label": "quarantined_high_risk_archive",
+  "generated_at_utc": "2026-06-23T10:32:08Z",
+  "handling_note": "Original source was intentionally excluded. This manifest keeps neutral evidence metadata only.",
+  "files": [
+    {"id": "file_01", "size_bytes": 978, "sha256": "4eff4a1fd7c4c0b0e8bea8329d15a3b1c7aa18b38eafd828783bf5d782e4ebf3"},
+    {"id": "file_02", "size_bytes": 2900, "sha256": "a89ab05a865585efc79bd063f78ca3444b75cbc0f657903fc13b5b32c58a5663"},
+    {"id": "file_03", "size_bytes": 16869, "sha256": "7381e1a6b6a2daf9338455837f87b366c34ee781b81c6d50cfe26866b04de61b"},
+    {"id": "file_04", "size_bytes": 8027, "sha256": "01e0f6dd38630e78dcbb97a82e2d99c5048b1688ab36661342f41ad34f01048a"},
+    {"id": "file_05", "size_bytes": 10010, "sha256": "e3dfe2564e3b51914dc1bb4fd15c5dc12ae179416eaf38be98361b4846ee2513"},
+    {"id": "file_06", "size_bytes": 4478, "sha256": "32f74a50e775495fa09afb3c16c4ffa3f449e91a77d23b46879f48982b480056"},
+    {"id": "file_07", "size_bytes": 6177, "sha256": "474a8641dfc1fca7afa5643fa2dfddef0dee755a93c7c58dca1fc4acfc30821f"},
+    {"id": "file_08", "size_bytes": 712, "sha256": "f1fa0b4e2a46938b093667c745c6ffc13f5377a1d8b8f14c77e4432715a7589f"},
+    {"id": "file_09", "size_bytes": 6713, "sha256": "0db013ad67618fce759bcbc266423e721f4d9d7b0689fef24603ddf23ba74b69"},
+    {"id": "file_10", "size_bytes": 712, "sha256": "a7c751496ba1b8feb51041eed6cf081a09e14cd4bcbb00a16649c2c9f5cb4996"},
+    {"id": "file_11", "size_bytes": 712, "sha256": "35ace6192ce7dca379f3efb75731befedb569b7432759cbf0fc80389f8dbe7fc"},
+    {"id": "file_12", "size_bytes": 1718, "sha256": "e9cba71f76be4a515913e55fd71453ad99f0ecf60193a7509f9f33914544dad3"},
+    {"id": "file_13", "size_bytes": 2118, "sha256": "43d14aefb0319acc47e88a332da9cb6e8704ddeff1d218586aadcfc86a26dc96"},
+    {"id": "file_14", "size_bytes": 4385, "sha256": "949fef7fd63721249a5bf3977535841137d586c440de4927b5bd14f78821ef55"},
+    {"id": "file_15", "size_bytes": 8075, "sha256": "115f5c6e6c53f58d717d2e8dfed0a89e69ada46efdde6466d9cfd45dfb4a2e1b"},
+    {"id": "file_16", "size_bytes": 3886, "sha256": "0c2e822331df1747aacf1f207be8308a8531752f35fe6e6d14fb9adbd81edd46"}
+  ]
+}
