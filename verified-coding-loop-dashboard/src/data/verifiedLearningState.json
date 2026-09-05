@@ -1,9 +1,18 @@
 {
   "schemaVersion": 1,
-  "verifiedRuns": 2,
+  "verifiedRuns": 3,
   "bestQualityScore": 130,
   "lastDecision": "approved",
   "learningHistory": [
+    {
+      "time": "2026-09-05T15:18:58.463Z",
+      "decision": "approved",
+      "beforeScore": 130,
+      "afterScore": 130,
+      "testsPassed": true,
+      "buildPassed": true,
+      "rule": "Only update learning state when tests pass, build passes, and quality score is not worse."
+    },
     {
       "time": "2026-09-02T14:48:04.676Z",
       "decision": "approved",
@@ -23,5 +32,5 @@
       "rule": "Only update learning state when tests pass, build passes, and quality score is not worse."
     }
   ],
-  "lastVerifiedAt": "2026-09-02T14:48:04.676Z"
+  "lastVerifiedAt": "2026-09-05T15:18:58.463Z"
 }

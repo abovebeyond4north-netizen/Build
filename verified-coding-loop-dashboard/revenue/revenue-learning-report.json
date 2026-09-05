@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-02T14:42:40.750Z",
+  "generatedAt": "2026-09-05T15:18:59.468Z",
   "purpose": "Zero-cost learning loop for ethical value experiment proposals.",
   "limits": {
     "doesNotGuaranteeRevenue": true,
@@ -11,28 +11,17 @@
     "humanReviewRequired": true
   },
   "selectedExperiment": {
-    "id": "portfolio-proof-page",
-    "title": "Improve the project as a portfolio proof asset",
+    "id": "service-offer-draft",
+    "title": "Generate a reviewable service offer draft",
     "cost": 0,
-    "revenuePotential": 0.64,
-    "learningValue": 0.82,
+    "revenuePotential": 0.7,
+    "learningValue": 0.74,
     "requiresHumanApproval": true,
-    "output": "Create a clearer project pitch and demo checklist that a human can share with potential clients.",
-    "safeNextStep": "Draft a one-page offer explaining the dashboard and invite manual review.",
+    "output": "Draft a manual outreach message for ethical consulting around verified automation dashboards.",
+    "safeNextStep": "Human chooses recipients and sends manually only where appropriate.",
     "score": 0.901
   },
   "rankedExperiments": [
-    {
-      "id": "portfolio-proof-page",
-      "title": "Improve the project as a portfolio proof asset",
-      "cost": 0,
-      "revenuePotential": 0.64,
-      "learningValue": 0.82,
-      "requiresHumanApproval": true,
-      "output": "Create a clearer project pitch and demo checklist that a human can share with potential clients.",
-      "safeNextStep": "Draft a one-page offer explaining the dashboard and invite manual review.",
-      "score": 0.901
-    },
     {
       "id": "service-offer-draft",
       "title": "Generate a reviewable service offer draft",
@@ -67,6 +56,17 @@
       "score": 0.883
     },
     {
+      "id": "portfolio-proof-page",
+      "title": "Improve the project as a portfolio proof asset",
+      "cost": 0,
+      "revenuePotential": 0.64,
+      "learningValue": 0.82,
+      "requiresHumanApproval": true,
+      "output": "Create a clearer project pitch and demo checklist that a human can share with potential clients.",
+      "safeNextStep": "Draft a one-page offer explaining the dashboard and invite manual review.",
+      "score": 0.861
+    },
+    {
       "id": "github-sponsors-readiness",
       "title": "Prepare GitHub Sponsors readiness checklist",
       "cost": 0,
@@ -79,15 +79,15 @@
     }
   ],
   "learningUpdate": {
-    "time": "2026-09-02T14:42:40.750Z",
-    "id": "portfolio-proof-page",
-    "title": "Improve the project as a portfolio proof asset",
+    "time": "2026-09-05T15:18:59.468Z",
+    "id": "service-offer-draft",
+    "title": "Generate a reviewable service offer draft",
     "score": 0.901,
     "cost": 0,
-    "revenuePotential": 0.64,
-    "learningValue": 0.82,
+    "revenuePotential": 0.7,
+    "learningValue": 0.74,
     "decision": "proposed_not_executed",
     "safety": "human approval required before outreach, payments, or external actions"
   },
-  "nextHumanStep": "Draft a one-page offer explaining the dashboard and invite manual review."
+  "nextHumanStep": "Human chooses recipients and sends manually only where appropriate."
 }

@@ -1,9 +1,20 @@
 {
   "schemaVersion": 1,
-  "loopRuns": 1,
+  "loopRuns": 2,
   "bestScore": 0.901,
   "totalRevenueRecorded": 0,
   "experimentHistory": [
+    {
+      "time": "2026-09-05T15:18:59.468Z",
+      "id": "service-offer-draft",
+      "title": "Generate a reviewable service offer draft",
+      "score": 0.901,
+      "cost": 0,
+      "revenuePotential": 0.7,
+      "learningValue": 0.74,
+      "decision": "proposed_not_executed",
+      "safety": "human approval required before outreach, payments, or external actions"
+    },
     {
       "time": "2026-09-02T14:42:40.750Z",
       "id": "portfolio-proof-page",
@@ -24,6 +35,6 @@
     "human approval before outreach or money movement",
     "low-risk lawful work only"
   ],
-  "lastRunAt": "2026-09-02T14:42:40.750Z",
-  "lastSelectedExperiment": "portfolio-proof-page"
+  "lastRunAt": "2026-09-05T15:18:59.468Z",
+  "lastSelectedExperiment": "service-offer-draft"
 }
