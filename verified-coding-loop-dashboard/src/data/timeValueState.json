@@ -1,12 +1,30 @@
 {
   "schemaVersion": 2,
-  "runs": 1,
-  "virtualBalance": 14.17,
-  "virtualHourlyRate": 1.7,
+  "runs": 2,
+  "virtualBalance": 28.41,
+  "virtualHourlyRate": 2.4,
   "bestEfficiencyScore": 2.33,
-  "totalBenchmarksRewarded": 1,
-  "totalSkillsRewarded": 3,
+  "totalBenchmarksRewarded": 2,
+  "totalSkillsRewarded": 6,
   "ledger": [
+    {
+      "time": "2026-09-05T15:18:59.639Z",
+      "type": "virtual_time_value_update",
+      "benchmarkPassed": true,
+      "benchmarkReward": 5,
+      "skillSignals": [
+        "meta_learning_measurement",
+        "value_experiment_selection",
+        "quality_score_preserved"
+      ],
+      "skillReward": 9,
+      "raiseAmount": 0.7,
+      "virtualHourlyRateBefore": 1.7,
+      "virtualHourlyRateAfter": 2.4,
+      "payout": 14.24,
+      "efficiencyScore": 2.33,
+      "note": "Internal virtual credits only for prioritization."
+    },
     {
       "time": "2026-09-02T14:42:40.983Z",
       "type": "virtual_time_value_update",
@@ -38,5 +56,5 @@
   },
   "virtualScoreBalance": 0,
   "virtualRate": 1,
-  "lastRunAt": "2026-09-02T14:42:40.983Z"
+  "lastRunAt": "2026-09-05T15:18:59.639Z"
 }
