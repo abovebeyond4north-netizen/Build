@@ -10,6 +10,7 @@ on:
       - main
       - passive-income-production-hardening
       - passive-income-paypal-checkout
+      - passive-income-release-automation
     paths:
       - "passive-income-engine/**"
       - ".github/workflows/passive-income-engine.yml"
@@ -75,8 +76,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build production image
         run: docker build -t passive-income-engine-ci passive-income-engine
-      - name: Validate production compose
+      - name: Validate production compose configurations
         working-directory: passive-income-engine
         run: |
           cp .env.example .env
           docker compose -f docker-compose.production.yml config >/dev/null
+          docker compose -f docker-compose.registry.yml config >/dev/null

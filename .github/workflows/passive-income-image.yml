@@ -1,0 +1,105 @@
+name: Passive Income Engine Release
+
+on:
+  pull_request:
+    paths:
+      - "passive-income-engine/**"
+      - ".github/workflows/passive-income-image.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "passive-income-engine/**"
+      - ".github/workflows/passive-income-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/abovebeyond4north-netizen/passive-income-engine
+
+jobs:
+  validate-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build image
+        run: docker build --tag passive-income-engine-release:${GITHUB_SHA} passive-income-engine
+
+      - name: Smoke-test image
+        shell: bash
+        run: |
+          set -euo pipefail
+          name=passive-income-engine-smoke
+          cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          docker run --detach \
+            --name "$name" \
+            --publish 127.0.0.1:18000:8000 \
+            --env DATABASE_PATH=/tmp/passive_income.db \
+            --env PUBLIC_BASE_URL=http://127.0.0.1:18000 \
+            --tmpfs /tmp:rw,mode=1777,size=64m \
+            passive-income-engine-release:${GITHUB_SHA} >/dev/null
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18000/health >health.json; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs "$name"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          python - <<'PY'
+          import json
+          with open("health.json", encoding="utf-8") as f:
+              health = json.load(f)
+          assert health["status"] == "ok", health
+          assert health["version"] == "3.0.0", health
+          PY
+
+          curl --fail --silent --show-error http://127.0.0.1:18000/sitemap.xml >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:18000/products/compound-growth-calculator \
+            | grep --quiet "Checkout is in setup mode"
+
+  publish-image:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: validate-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Log in to GitHub Container Registry
+        shell: bash
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Build immutable release image
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA:0:12}"
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --tag "${IMAGE}:sha-${short_sha}" \
+            --tag "${IMAGE}:latest" \
+            passive-income-engine
+
+      - name: Publish image
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA:0:12}"
+          docker push "${IMAGE}:sha-${short_sha}"
+          docker push "${IMAGE}:latest"
+          echo "Published ${IMAGE}:sha-${short_sha}"
