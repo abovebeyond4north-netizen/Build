@@ -34,7 +34,7 @@ The application binds to `127.0.0.1:8000` by default so a TLS reverse proxy can 
 
 ## Pin to an immutable release
 
-For reproducible production, set `IMAGE_TAG` to the published revision tag before running Compose, for example:
+For reproducible production, set `IMAGE_TAG` to the published revision tag before running Compose. The current PayPal-checkout baseline, once this release workflow is merged and publishes from `main`, is identified by Git commit `e9fa16bb0ff083d8e8ef0388a00a037e8071da25`; release tags use the first 12 characters of the publishing commit.
 
 ```bash
 export IMAGE_TAG=sha-e9fa16bb0ff0
@@ -42,7 +42,7 @@ docker compose -f docker-compose.registry.yml pull
 docker compose -f docker-compose.registry.yml up -d
 ```
 
-Use the SHA tag emitted by the release workflow for the revision you actually intend to run. `latest` is convenient but moves when a new validated `main` image is published.
+For later releases, use the exact SHA tag emitted by the release workflow for the revision you intend to run. `latest` is convenient but moves when a new validated `main` image is published.
 
 ## Unattended update procedure
 
@@ -64,10 +64,10 @@ Persistent `engine_data` and `engine_backups` volumes survive image replacement.
 
 ## Rollback
 
-Set `IMAGE_TAG` to the previously known-good SHA tag and recreate the services:
+Record the active SHA tag before every upgrade. To demonstrate the rollback mechanism using the current PayPal-checkout baseline:
 
 ```bash
-export IMAGE_TAG=sha-PREVIOUS_VALIDATED_SHA
+export IMAGE_TAG=sha-e9fa16bb0ff0
 docker compose -f docker-compose.registry.yml pull
 docker compose -f docker-compose.registry.yml up -d
 ```
