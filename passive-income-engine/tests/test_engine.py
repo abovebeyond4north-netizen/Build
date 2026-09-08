@@ -19,16 +19,24 @@ os.environ["TAX_RESERVE_BPS"] = "2500"
 os.environ["REFUND_RESERVE_BPS"] = "500"
 os.environ["OPERATING_RESERVE_CENTS"] = "10000"
 os.environ["MAX_DOWNLOADS"] = "2"
+os.environ["PAYPAL_MODE"] = "sandbox"
+os.environ["PAYPAL_CLIENT_ID"] = ""
+os.environ["PAYPAL_CLIENT_SECRET"] = ""
+os.environ["PAYPAL_WEBHOOK_ID"] = ""
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 import engine
+import checkout_app
 
 
 class EngineTests(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(engine.app)
+        self.client = TestClient(checkout_app.app)
         with engine.db() as con:
             for table in (
+                "paypal_events",
+                "paypal_orders",
                 "sale_attribution",
                 "visitor_sessions",
                 "product_views",
@@ -51,11 +59,19 @@ class EngineTests(unittest.TestCase):
         )
 
     def test_health_and_discovery_pages(self):
-        self.assertEqual(self.client.get("/health").status_code, 200)
+        health = self.client.get("/health")
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(health.json()["version"], "3.0.0")
+        self.assertFalse(health.json()["paypal_checkout"])
         self.assertEqual(self.client.get("/sitemap.xml").status_code, 200)
         self.assertEqual(self.client.get("/robots.txt").status_code, 200)
         self.assertEqual(self.client.get("/feed.xml").status_code, 200)
         self.assertEqual(self.client.get("/guides").status_code, 200)
+
+    def test_product_page_has_checkout_setup_state_without_credentials(self):
+        response = self.client.get("/products/compound-growth-calculator")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Checkout is in setup mode", response.text)
 
     def test_product_view_is_deduplicated_per_visitor_per_day(self):
         url = "/products/compound-growth-calculator?utm_source=search&utm_medium=organic&utm_campaign=evergreen"
@@ -125,6 +141,56 @@ class EngineTests(unittest.TestCase):
             }
         )
         self.assertEqual(response.status_code, 409)
+
+    def paypal_order_fixture(self, amount="9.00"):
+        return {
+            "id": "ORDER-1",
+            "status": "COMPLETED",
+            "purchase_units": [{
+                "reference_id": "compound-growth-calculator",
+                "custom_id": "compound-growth-calculator",
+                "payments": {"captures": [{
+                    "id": "CAPTURE-1",
+                    "status": "COMPLETED",
+                    "amount": {"currency_code": "CAD", "value": amount},
+                    "seller_receivable_breakdown": {
+                        "net_amount": {"currency_code": "CAD", "value": "8.55"},
+                        "paypal_fee": {"currency_code": "CAD", "value": "0.45"},
+                    },
+                }]},
+            }],
+        }
+
+    def test_paypal_capture_fulfills_only_server_catalog_amount(self):
+        with engine.db() as con:
+            con.execute(
+                "INSERT INTO paypal_orders(order_id,product_id,visitor_hash,status,created_at) VALUES(?,?,?,?,?)",
+                ("ORDER-1", "compound-growth-calculator", "visitor-hash", "CREATED", engine.utcnow()),
+            )
+        order = self.paypal_order_fixture()
+        capture = checkout_app._capture_from_order(order)
+        token = checkout_app.fulfill_paypal_capture("ORDER-1", order, capture)
+        self.assertEqual(self.client.get(f"/download/{token}").status_code, 200)
+        with engine.db() as con:
+            sale = con.execute("SELECT * FROM sales WHERE id='CAPTURE-1'").fetchone()
+            local_order = con.execute("SELECT * FROM paypal_orders WHERE order_id='ORDER-1'").fetchone()
+        self.assertEqual(sale["net_cents"], 855)
+        self.assertEqual(local_order["status"], "COMPLETED")
+
+    def test_paypal_capture_rejects_amount_mismatch(self):
+        with engine.db() as con:
+            con.execute(
+                "INSERT INTO paypal_orders(order_id,product_id,visitor_hash,status,created_at) VALUES(?,?,?,?,?)",
+                ("ORDER-1", "compound-growth-calculator", "visitor-hash", "CREATED", engine.utcnow()),
+            )
+        order = self.paypal_order_fixture(amount="0.01")
+        capture = checkout_app._capture_from_order(order)
+        with self.assertRaises(HTTPException) as raised:
+            checkout_app.fulfill_paypal_capture("ORDER-1", order, capture)
+        self.assertEqual(raised.exception.status_code, 409)
+        with engine.db() as con:
+            count = con.execute("SELECT COUNT(*) v FROM sales").fetchone()["v"]
+        self.assertEqual(count, 0)
 
     def test_treasury_reserves_before_payout_ready(self):
         with engine.db() as con:
