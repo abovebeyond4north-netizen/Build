@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - passive-income-production-hardening
+      - passive-income-paypal-checkout
     paths:
       - "passive-income-engine/**"
       - ".github/workflows/passive-income-engine.yml"
@@ -31,7 +32,7 @@ jobs:
           cache-dependency-path: passive-income-engine/requirements.txt
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements.txt
-      - run: python -m compileall -q engine.py scripts tests
+      - run: python -m compileall -q engine.py checkout_app.py scripts tests
       - run: python -m unittest discover -s tests -v
       - name: Exercise backup and restore workers
         run: |
