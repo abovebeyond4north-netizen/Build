@@ -33,22 +33,25 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m compileall -q engine.py scripts tests
       - run: python -m unittest discover -s tests -v
-      - name: Exercise backup worker
+      - name: Exercise backup and restore workers
         run: |
           python - <<'PY'
           import sqlite3, tempfile
           from pathlib import Path
           from scripts.backup_db import backup_once
+          from scripts.restore_db import restore
 
           with tempfile.TemporaryDirectory() as d:
               root = Path(d)
               source = root / "source.db"
               target = root / "backups"
+              restored = root / "restored.db"
               with sqlite3.connect(source) as con:
                   con.execute("CREATE TABLE t(v INTEGER)")
                   con.execute("INSERT INTO t VALUES(42)")
               created = backup_once(source, target, retention=3)
-              with sqlite3.connect(created) as con:
+              restore(created, restored)
+              with sqlite3.connect(restored) as con:
                   assert con.execute("SELECT v FROM t").fetchone()[0] == 42
           PY
 
