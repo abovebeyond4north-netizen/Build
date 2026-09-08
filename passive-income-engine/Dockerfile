@@ -11,7 +11,7 @@ RUN groupadd --system app && useradd --system --gid app --home /srv app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY engine.py .
+COPY engine.py checkout_app.py ./
 COPY scripts ./scripts
 
 RUN mkdir -p /data /backups && chown -R app:app /srv /data /backups
@@ -23,4 +23,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()" || exit 1
 
-CMD ["uvicorn", "engine:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers"]
+CMD ["uvicorn", "checkout_app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers"]
