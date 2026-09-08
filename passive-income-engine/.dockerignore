@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.db
+backups/
+.git/
+.github/
+tests/__pycache__/

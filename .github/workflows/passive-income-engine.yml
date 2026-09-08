@@ -7,7 +7,8 @@ on:
       - ".github/workflows/passive-income-engine.yml"
   push:
     branches:
-      - passive-income-engine-v1
+      - main
+      - passive-income-production-hardening
     paths:
       - "passive-income-engine/**"
       - ".github/workflows/passive-income-engine.yml"
@@ -30,5 +31,51 @@ jobs:
           cache-dependency-path: passive-income-engine/requirements.txt
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements.txt
-      - run: python -m compileall -q engine.py tests
+      - run: python -m compileall -q engine.py scripts tests
       - run: python -m unittest discover -s tests -v
+      - name: Exercise backup and restore workers
+        run: |
+          python - <<'PY'
+          import sqlite3, tempfile
+          from pathlib import Path
+          from scripts.backup_db import backup_once
+          from scripts.restore_db import restore
+
+          with tempfile.TemporaryDirectory() as d:
+              root = Path(d)
+              source = root / "source.db"
+              target = root / "backups"
+              restored = root / "restored.db"
+              with sqlite3.connect(source) as con:
+                  con.execute("CREATE TABLE t(v INTEGER)")
+                  con.execute("INSERT INTO t VALUES(42)")
+              created = backup_once(source, target, retention=3)
+              restore(created, restored)
+              with sqlite3.connect(restored) as con:
+                  assert con.execute("SELECT v FROM t").fetchone()[0] == 42
+          PY
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: passive-income-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip pip-audit
+      - run: pip-audit -r requirements.txt
+
+  container-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build -t passive-income-engine-ci passive-income-engine
+      - name: Validate production compose
+        working-directory: passive-income-engine
+        run: |
+          cp .env.example .env
+          docker compose -f docker-compose.production.yml config >/dev/null
