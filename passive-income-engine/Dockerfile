@@ -1,5 +1,9 @@
 FROM python:3.12-slim
 
+LABEL org.opencontainers.image.source="https://github.com/abovebeyond4north-netizen/Build" \
+      org.opencontainers.image.title="Passive Income Engine" \
+      org.opencontainers.image.description="Hardened customer-initiated PayPal checkout, digital fulfillment, accounting, optimization, and backup service"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
