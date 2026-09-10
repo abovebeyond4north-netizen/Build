@@ -9,6 +9,18 @@ from .capability_model import CapabilitySpec
 from .capability_sandbox import SkillSandbox
 from .checkpoint import CheckpointManager
 from .evolver import DarwinAgentZero, EvolutionConfig
+from .objective import ObjectiveCompiler
+
+
+def add_acquisition_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--workspace",
+        type=Path,
+        default=Path(".dgm_workspace"),
+    )
+    parser.add_argument("--max-candidates", type=int, default=96)
+    parser.add_argument("--validation-budget", type=int, default=12)
+    parser.add_argument("--timeout", type=float, default=2.0)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,14 +53,21 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="path to a capability JSON specification",
     )
-    acquire.add_argument(
-        "--workspace",
-        type=Path,
-        default=Path(".dgm_workspace"),
+    add_acquisition_options(acquire)
+
+    objective = sub.add_parser(
+        "acquire-objective",
+        help=(
+            "compile a supported natural-language objective into a sealed "
+            "benchmark and attempt capability acquisition"
+        ),
     )
-    acquire.add_argument("--max-candidates", type=int, default=96)
-    acquire.add_argument("--validation-budget", type=int, default=12)
-    acquire.add_argument("--timeout", type=float, default=2.0)
+    objective.add_argument(
+        "objective",
+        nargs="+",
+        help="objective text, for example: Improve Python debugging ability",
+    )
+    add_acquisition_options(objective)
 
     restore = sub.add_parser(
         "restore",
@@ -60,6 +79,31 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path(".dgm_workspace"),
     )
     return parser
+
+
+def run_acquisition(args: argparse.Namespace, spec: CapabilitySpec) -> int:
+    acquirer = CapabilityAcquirer(
+        args.workspace,
+        sandbox=SkillSandbox(timeout_seconds=args.timeout),
+    )
+    report = acquirer.acquire(
+        spec,
+        max_candidates=args.max_candidates,
+        validation_budget=args.validation_budget,
+    )
+    print("Darwin Agent Zero capability acquisition complete")
+    print(f"capability: {report.capability}")
+    print(f"status: {report.status}")
+    print(f"baseline score: {report.baseline_score:.3f}")
+    print(f"final score: {report.final_score}")
+    print(f"train score: {report.train_score}")
+    print(f"validation score: {report.validation_score}")
+    print(f"holdout score: {report.holdout_score}")
+    print(f"holdout evaluations: {report.holdout_evaluations}")
+    print(f"candidates generated: {report.candidates_generated}")
+    print(f"installed skill: {report.installed_path}")
+    print(f"report: {report.report_path}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -89,33 +133,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "acquire":
         try:
-            spec = CapabilitySpec.load(args.spec)
-            acquirer = CapabilityAcquirer(
-                args.workspace,
-                sandbox=SkillSandbox(timeout_seconds=args.timeout),
-            )
-            report = acquirer.acquire(
-                spec,
-                max_candidates=args.max_candidates,
-                validation_budget=args.validation_budget,
-            )
+            return run_acquisition(args, CapabilitySpec.load(args.spec))
         except ValueError as exc:
             print(f"Capability acquisition error: {exc}", file=sys.stderr)
             return 2
 
-        print("Darwin Agent Zero capability acquisition complete")
-        print(f"capability: {report.capability}")
-        print(f"status: {report.status}")
-        print(f"baseline score: {report.baseline_score:.3f}")
-        print(f"final score: {report.final_score}")
-        print(f"train score: {report.train_score}")
-        print(f"validation score: {report.validation_score}")
-        print(f"holdout score: {report.holdout_score}")
-        print(f"holdout evaluations: {report.holdout_evaluations}")
-        print(f"candidates generated: {report.candidates_generated}")
-        print(f"installed skill: {report.installed_path}")
-        print(f"report: {report.report_path}")
-        return 0
+    if args.command == "acquire-objective":
+        try:
+            spec = ObjectiveCompiler().compile(" ".join(args.objective))
+            return run_acquisition(args, spec)
+        except ValueError as exc:
+            print(f"Capability acquisition error: {exc}", file=sys.stderr)
+            return 2
 
     if args.command == "restore":
         manager = CheckpointManager(args.workspace)
