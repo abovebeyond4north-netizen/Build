@@ -1,9 +1,20 @@
 {
   "schemaVersion": 1,
-  "loopRuns": 2,
+  "loopRuns": 3,
   "bestScore": 0.901,
   "totalRevenueRecorded": 0,
   "experimentHistory": [
+    {
+      "time": "2026-09-10T04:50:59.050Z",
+      "id": "template-product-roadmap",
+      "title": "Turn the dashboard into a reusable template product roadmap",
+      "score": 0.894,
+      "cost": 0,
+      "revenuePotential": 0.62,
+      "learningValue": 0.8,
+      "decision": "proposed_not_executed",
+      "safety": "human approval required before outreach, payments, or external actions"
+    },
     {
       "time": "2026-09-08T21:14:19.334Z",
       "id": "service-offer-draft",
@@ -35,6 +46,6 @@
     "human approval before outreach or money movement",
     "low-risk lawful work only"
   ],
-  "lastRunAt": "2026-09-08T21:14:19.334Z",
-  "lastSelectedExperiment": "service-offer-draft"
+  "lastRunAt": "2026-09-10T04:50:59.050Z",
+  "lastSelectedExperiment": "template-product-roadmap"
 }

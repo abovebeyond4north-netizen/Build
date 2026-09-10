@@ -1,9 +1,24 @@
 {
   "schemaVersion": 1,
-  "metaRuns": 2,
-  "bestLearningScore": 0.755,
+  "metaRuns": 3,
+  "bestLearningScore": 0.79,
   "lastDecision": "learning_state_improved_or_equal",
   "strategyHistory": [
+    {
+      "time": "2026-09-10T04:50:59.186Z",
+      "learningScore": 0.79,
+      "diversity": 1,
+      "evidenceDepth": 0.4,
+      "reversibility": 1,
+      "safetyConsistency": 1,
+      "cadence": 0.4,
+      "selectedStrategyIds": [
+        "increase-evidence-depth",
+        "preserve-reversibility",
+        "add-human-outcome-feedback"
+      ],
+      "decision": "learning_state_improved_or_equal"
+    },
     {
       "time": "2026-09-08T21:14:19.425Z",
       "learningScore": 0.755,
@@ -42,5 +57,5 @@
     "track rejected ideas for later review",
     "require human review before outside-world action"
   ],
-  "lastRunAt": "2026-09-08T21:14:19.425Z"
+  "lastRunAt": "2026-09-10T04:50:59.186Z"
 }

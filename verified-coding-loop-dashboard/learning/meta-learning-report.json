@@ -1,14 +1,14 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-08T21:14:19.425Z",
-  "purpose": "Measure whether the learning loop is improving its own learning process.",
-  "learningScore": 0.755,
+  "generatedAt": "2026-09-10T04:50:59.186Z",
+  "purpose": "Measure process activity and declared safeguards; not demonstrated capability improvement.",
+  "learningScore": 0.79,
   "dimensions": {
     "diversity": 1,
-    "evidenceDepth": 0.3,
+    "evidenceDepth": 0.4,
     "reversibility": 1,
     "safetyConsistency": 1,
-    "cadence": 0.3
+    "cadence": 0.4
   },
   "selectedStrategies": [
     {
@@ -33,5 +33,12 @@
     "external actions remain disabled",
     "income is not guaranteed or assumed"
   ],
-  "nextHumanStep": "Review selected strategies and mark whether the generated proposal was useful."
+  "nextHumanStep": "Review selected strategies and mark whether the generated proposal was useful.",
+  "metricKind": "process_activity_proxy",
+  "limitations": [
+    "History length and cadence measure activity",
+    "Reversibility is assumed",
+    "Safety consistency checks a declaration",
+    "No independent capability or outcome evaluation"
+  ]
 }

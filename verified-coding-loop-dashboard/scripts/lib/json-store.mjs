@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 export function readJson(filePath, fallback) {
@@ -13,4 +14,13 @@ export function writeJson(filePath, data) {
 
 export function projectPath(root, relativePath) {
   return path.join(root, relativePath);
+}
+
+export function writeJsonAtomic(file, data) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = `${file}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temp, `${JSON.stringify(data, null, 2)}\n`, { flag: 'wx' });
+    fs.renameSync(temp, file);
+  } finally { fs.rmSync(temp, { force: true }); }
 }

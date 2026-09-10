@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { readJson } from './lib/json-store.mjs';
+import { validateRewardState, rewardReport } from './lib/reward-evidence.mjs';
 import { asNumber } from './lib/number-tools.mjs';
 
 const root = process.cwd();
@@ -21,6 +22,7 @@ const requiredJsonFiles = [
   'revenue/revenue-learning-report.json',
   'learning/meta-learning-report.json',
   'learning/time-score-report.json',
+  'learning/time-value-report.json',
   'learning/compute-budget-report.json',
   'learning/process-focus-report.json',
   'learning/efficiency-optimizer-report.json',
@@ -122,6 +124,9 @@ assert.ok('plan' in implementationReport, 'implementation plan report should exp
 const packageJson = load('package.json');
 assert.ok(packageJson.scripts?.['schema:check'], 'package.json should expose schema:check');
 assert.ok(packageJson.scripts?.test?.includes('schema:check'), 'test script should include schema:check');
+
+validateRewardState(timeValue);
+assert.deepEqual(load('learning/time-value-report.json'), rewardReport(timeValue), 'time-value report must reconcile with state');
 
 console.log(JSON.stringify({
   ok: true,

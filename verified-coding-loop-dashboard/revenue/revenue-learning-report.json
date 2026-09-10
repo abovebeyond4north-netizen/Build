@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-08T21:14:19.334Z",
+  "generatedAt": "2026-09-10T04:50:59.050Z",
   "purpose": "Zero-cost learning loop for ethical value experiment proposals.",
   "limits": {
     "doesNotGuaranteeRevenue": true,
@@ -11,28 +11,17 @@
     "humanReviewRequired": true
   },
   "selectedExperiment": {
-    "id": "service-offer-draft",
-    "title": "Generate a reviewable service offer draft",
+    "id": "template-product-roadmap",
+    "title": "Turn the dashboard into a reusable template product roadmap",
     "cost": 0,
-    "revenuePotential": 0.7,
-    "learningValue": 0.74,
+    "revenuePotential": 0.62,
+    "learningValue": 0.8,
     "requiresHumanApproval": true,
-    "output": "Draft a manual outreach message for ethical consulting around verified automation dashboards.",
-    "safeNextStep": "Human chooses recipients and sends manually only where appropriate.",
-    "score": 0.901
+    "output": "Create a product roadmap for a free starter template and optional paid customization work.",
+    "safeNextStep": "Human reviews pricing, terms, and legal obligations before offering services.",
+    "score": 0.894
   },
   "rankedExperiments": [
-    {
-      "id": "service-offer-draft",
-      "title": "Generate a reviewable service offer draft",
-      "cost": 0,
-      "revenuePotential": 0.7,
-      "learningValue": 0.74,
-      "requiresHumanApproval": true,
-      "output": "Draft a manual outreach message for ethical consulting around verified automation dashboards.",
-      "safeNextStep": "Human chooses recipients and sends manually only where appropriate.",
-      "score": 0.901
-    },
     {
       "id": "template-product-roadmap",
       "title": "Turn the dashboard into a reusable template product roadmap",
@@ -67,6 +56,17 @@
       "score": 0.861
     },
     {
+      "id": "service-offer-draft",
+      "title": "Generate a reviewable service offer draft",
+      "cost": 0,
+      "revenuePotential": 0.7,
+      "learningValue": 0.74,
+      "requiresHumanApproval": true,
+      "output": "Draft a manual outreach message for ethical consulting around verified automation dashboards.",
+      "safeNextStep": "Human chooses recipients and sends manually only where appropriate.",
+      "score": 0.861
+    },
+    {
       "id": "github-sponsors-readiness",
       "title": "Prepare GitHub Sponsors readiness checklist",
       "cost": 0,
@@ -79,15 +79,15 @@
     }
   ],
   "learningUpdate": {
-    "time": "2026-09-08T21:14:19.334Z",
-    "id": "service-offer-draft",
-    "title": "Generate a reviewable service offer draft",
-    "score": 0.901,
+    "time": "2026-09-10T04:50:59.050Z",
+    "id": "template-product-roadmap",
+    "title": "Turn the dashboard into a reusable template product roadmap",
+    "score": 0.894,
     "cost": 0,
-    "revenuePotential": 0.7,
-    "learningValue": 0.74,
+    "revenuePotential": 0.62,
+    "learningValue": 0.8,
     "decision": "proposed_not_executed",
     "safety": "human approval required before outreach, payments, or external actions"
   },
-  "nextHumanStep": "Human chooses recipients and sends manually only where appropriate."
+  "nextHumanStep": "Human reviews pricing, terms, and legal obligations before offering services."
 }
