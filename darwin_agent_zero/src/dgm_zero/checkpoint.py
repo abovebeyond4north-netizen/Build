@@ -20,6 +20,7 @@ SNAPSHOT_FILES = (
     "provenance.json",
     "champion.py",
 )
+SNAPSHOT_FILE_SET = frozenset(SNAPSHOT_FILES)
 
 
 @dataclass(frozen=True)
@@ -51,7 +52,7 @@ class CheckpointManager:
     def save_if_healthy(self, health_path: Path | None = None) -> CheckpointManifest:
         health_file = health_path or self.workspace / "health_report.json"
         healthy, reason = self._read_health(health_file)
-        checkpoint_id = str(int(time.time() * 1000))
+        checkpoint_id = str(time.time_ns())
         target = self.root / checkpoint_id
         copied: list[str] = []
         if healthy:
@@ -70,7 +71,6 @@ class CheckpointManager:
 
     def refresh(self, manifest: CheckpointManifest) -> CheckpointManifest:
         """Refresh a healthy checkpoint after final artifacts are written."""
-
         if not manifest.healthy:
             self._write_manifest(manifest)
             return manifest
@@ -81,7 +81,7 @@ class CheckpointManager:
             checkpoint_id=manifest.checkpoint_id,
             path=manifest.path,
             created_at=manifest.created_at,
-            healthy=manifest.healthy,
+            healthy=True,
             copied_files=copied,
             reason=manifest.reason,
         )
@@ -89,34 +89,78 @@ class CheckpointManager:
         return refreshed
 
     def restore_latest(self) -> RestoreReport:
-        manifest = self.latest_manifest()
+        """Restore the newest healthy checkpoint, ignoring later failed runs."""
+        manifest = self.latest_healthy_manifest()
         if manifest is None:
-            return RestoreReport(False, None, [], "no_checkpoint_found")
-        if not manifest.healthy:
-            return RestoreReport(False, manifest.checkpoint_id, [], "latest_checkpoint_not_healthy")
+            latest = self.latest_manifest()
+            if latest is None:
+                return RestoreReport(False, None, [], "no_checkpoint_found")
+            return RestoreReport(
+                False,
+                latest.checkpoint_id,
+                [],
+                "no_healthy_checkpoint_found",
+            )
+
         checkpoint_path = Path(manifest.path)
-        if not checkpoint_path.exists():
-            return RestoreReport(False, manifest.checkpoint_id, [], "checkpoint_path_missing")
+        if not checkpoint_path.exists() or not checkpoint_path.is_dir():
+            return RestoreReport(
+                False,
+                manifest.checkpoint_id,
+                [],
+                "checkpoint_path_missing",
+            )
+
         restored: list[str] = []
         for name in manifest.copied_files:
+            if name not in SNAPSHOT_FILE_SET:
+                continue
             src = checkpoint_path / name
             if src.exists() and src.is_file():
                 shutil.copy2(src, self.workspace / name)
                 restored.append(name)
-        report = RestoreReport(True, manifest.checkpoint_id, restored, "restored_latest_healthy_checkpoint")
-        (self.root / "last_restore.json").write_text(json.dumps(asdict(report), indent=2, sort_keys=True), encoding="utf-8")
+
+        if not restored:
+            report = RestoreReport(
+                False,
+                manifest.checkpoint_id,
+                [],
+                "checkpoint_has_no_restorable_files",
+            )
+        else:
+            report = RestoreReport(
+                True,
+                manifest.checkpoint_id,
+                restored,
+                "restored_latest_healthy_checkpoint",
+            )
+        self._write_json_atomic(self.root / "last_restore.json", asdict(report))
         return report
 
     def latest_manifest(self) -> CheckpointManifest | None:
-        latest = self.root / "latest.json"
-        if latest.exists():
-            data = json.loads(latest.read_text(encoding="utf-8"))
-            return CheckpointManifest(**data)
+        """Return the newest checkpoint attempt, healthy or unhealthy."""
+        latest = self._load_manifest_file(self.root / "latest.json")
+        if latest is not None:
+            return latest
         manifests = sorted(self.root.glob("*/manifest.json"), reverse=True)
-        if not manifests:
-            return None
-        data = json.loads(manifests[0].read_text(encoding="utf-8"))
-        return CheckpointManifest(**data)
+        for path in manifests:
+            manifest = self._load_manifest_file(path)
+            if manifest is not None:
+                return manifest
+        return None
+
+    def latest_healthy_manifest(self) -> CheckpointManifest | None:
+        """Return the newest valid healthy checkpoint available for rollback."""
+        pointer = self._load_manifest_file(self.root / "latest_healthy.json")
+        if pointer is not None and pointer.healthy:
+            return pointer
+
+        manifests = sorted(self.root.glob("*/manifest.json"), reverse=True)
+        for path in manifests:
+            manifest = self._load_manifest_file(path)
+            if manifest is not None and manifest.healthy:
+                return manifest
+        return None
 
     def _copy_snapshot_files(self, target: Path) -> list[str]:
         copied: list[str] = []
@@ -132,13 +176,46 @@ class CheckpointManager:
             return False, "health_report_missing"
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, OSError):
             return False, "health_report_invalid_json"
+        if not isinstance(data, dict):
+            return False, "health_report_invalid_shape"
         healthy = bool(data.get("passed", False))
-        return healthy, data.get("summary", "healthy" if healthy else "needs_attention")
+        summary = data.get("summary")
+        if not isinstance(summary, str) or not summary:
+            summary = "healthy" if healthy else "needs_attention"
+        return healthy, summary
+
+    @staticmethod
+    def _load_manifest_file(path: Path) -> CheckpointManifest | None:
+        if not path.exists() or not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            manifest = CheckpointManifest(**data)
+        except (OSError, json.JSONDecodeError, TypeError):
+            return None
+        if not isinstance(manifest.copied_files, list):
+            return None
+        if not all(isinstance(name, str) for name in manifest.copied_files):
+            return None
+        return manifest
+
+    @staticmethod
+    def _write_json_atomic(path: Path, data: dict[str, object]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = path.with_name(f".{path.name}.tmp")
+        temp_path.write_text(
+            json.dumps(data, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        temp_path.replace(path)
 
     def _write_manifest(self, manifest: CheckpointManifest) -> None:
         target = Path(manifest.path)
         target.mkdir(parents=True, exist_ok=True)
-        (target / "manifest.json").write_text(json.dumps(asdict(manifest), indent=2, sort_keys=True), encoding="utf-8")
-        (self.root / "latest.json").write_text(json.dumps(asdict(manifest), indent=2, sort_keys=True), encoding="utf-8")
+        data = asdict(manifest)
+        self._write_json_atomic(target / "manifest.json", data)
+        self._write_json_atomic(self.root / "latest.json", data)
+        if manifest.healthy:
+            self._write_json_atomic(self.root / "latest_healthy.json", data)
