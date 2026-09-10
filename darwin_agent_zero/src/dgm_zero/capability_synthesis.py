@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 import math
+import re
 
 from .capability_model import SkillCandidate, TrainingView, render_function
 
@@ -10,7 +11,8 @@ class TemplateSynthesizer:
     """Local starter synthesizer for small, pure, JSON-in/JSON-out functions.
 
     The synthesizer sees training examples only. Its grammar covers common string,
-    sequence, scalar, and small affine numeric transformations. The acquisition loop
+    sequence, scalar, small affine numeric transformations, and simple diagnostic
+    classifiers inferred from discriminative training tokens. The acquisition loop
     accepts any generator implementing the same ``generate`` protocol, so stronger
     synthesis/model providers can be plugged in without weakening evaluation.
     """
@@ -37,6 +39,7 @@ class TemplateSynthesizer:
         )
         if view.arity == 1:
             candidates.extend(self._single_argument_candidates(view))
+            candidates.extend(self._classification_candidates(view))
         candidates.extend(self._numeric_candidates(view))
 
         args = [f"x{i}" for i in range(view.arity)]
@@ -114,6 +117,71 @@ class TemplateSynthesizer:
                 label,
             )
             for expression, label in expressions
+        ]
+
+    def _classification_candidates(
+        self,
+        view: TrainingView,
+    ) -> list[SkillCandidate]:
+        rows: list[tuple[str, object]] = []
+        for case in view.cases:
+            if len(case.args) != 1 or not isinstance(case.args[0], str):
+                return []
+            if not isinstance(case.expected, (str, int, bool)):
+                return []
+            rows.append((case.args[0], case.expected))
+
+        labels = list(dict.fromkeys(label for _, label in rows))
+        if len(labels) < 2:
+            return []
+
+        token_sets = {
+            label: [
+                set(re.findall(r"[a-z0-9_]+", text.casefold()))
+                for text, row_label in rows
+                if row_label == label
+            ]
+            for label in labels
+        }
+        cues: dict[object, str] = {}
+        for label in labels:
+            own_sets = token_sets[label]
+            if not own_sets:
+                return []
+            common = set.intersection(*own_sets)
+            other = set().union(
+                *(
+                    token_set
+                    for other_label in labels
+                    if other_label != label
+                    for token_set in token_sets[other_label]
+                )
+            )
+            unique = [
+                token
+                for token in common - other
+                if len(token) >= 3
+            ]
+            if not unique:
+                return []
+            cues[label] = sorted(
+                unique,
+                key=lambda token: (-len(token), token),
+            )[0]
+
+        lines = [
+            f"def {view.entrypoint}(x0):",
+            "    text = x0.casefold()",
+        ]
+        for label in labels:
+            lines.append(f"    if {cues[label]!r} in text:")
+            lines.append(f"        return {label!r}")
+        lines.append("    return None")
+        return [
+            SkillCandidate(
+                "\n".join(lines) + "\n",
+                "keyword-classifier",
+            )
         ]
 
     def _numeric_candidates(
