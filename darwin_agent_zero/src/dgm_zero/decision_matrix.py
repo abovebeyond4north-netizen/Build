@@ -1,17 +1,13 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Mapping
 
 
 @dataclass(frozen=True)
 class DecisionWeights:
-    """Weights for the empirical Gödel gate.
-
-    The score is intentionally multi-factor. A tool is not accepted just because
-    it passes tests; it must also remain simple, safe, reasonably efficient, and
-    interesting enough to preserve evolutionary diversity.
-    """
+    """Non-negative weights for the empirical promotion gate."""
 
     correctness: float = 0.42
     efficiency: float = 0.14
@@ -21,10 +17,17 @@ class DecisionWeights:
     generalization: float = 0.06
 
     def normalized(self) -> "DecisionWeights":
-        total = sum(self.as_dict().values())
-        if total <= 0:
+        raw = self.as_dict()
+        for name, value in raw.items():
+            if not math.isfinite(value):
+                raise ValueError(f"decision weight {name} must be finite")
+            if value < 0.0:
+                raise ValueError(f"decision weight {name} must be non-negative")
+
+        total = sum(raw.values())
+        if total <= 0.0:
             raise ValueError("decision weights must sum to a positive value")
-        values = {key: value / total for key, value in self.as_dict().items()}
+        values = {key: value / total for key, value in raw.items()}
         return DecisionWeights(**values)
 
     def as_dict(self) -> dict[str, float]:
@@ -50,8 +53,10 @@ class CandidateScore:
 
     def __post_init__(self) -> None:
         for name, value in self.as_dict(include_total=False).items():
-            if not 0.0 <= value <= 1.0:
-                raise ValueError(f"{name} must be between 0 and 1, got {value!r}")
+            if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+                raise ValueError(
+                    f"{name} must be finite and between 0 and 1, got {value!r}"
+                )
         object.__setattr__(self, "weighted_total", 0.0)
 
     def as_dict(self, include_total: bool = True) -> dict[str, float]:
@@ -68,6 +73,10 @@ class CandidateScore:
         return data
 
     def with_total(self, total: float) -> "CandidateScore":
+        if not math.isfinite(total) or not 0.0 <= total <= 1.0:
+            raise ValueError(
+                f"weighted_total must be finite and between 0 and 1, got {total!r}"
+            )
         clone = CandidateScore(
             correctness=self.correctness,
             efficiency=self.efficiency,
@@ -81,19 +90,51 @@ class CandidateScore:
 
 
 class DecisionMatrix:
-    """Ranks candidate self-modifications using bounded intelligence factors."""
+    """Rank candidate self-modifications using bounded empirical factors."""
 
-    def __init__(self, weights: DecisionWeights | None = None, accept_threshold: float = 0.72) -> None:
+    MIN_SAFETY = 0.80
+    MIN_CORRECTNESS = 0.70
+
+    def __init__(
+        self,
+        weights: DecisionWeights | None = None,
+        accept_threshold: float = 0.72,
+    ) -> None:
+        if not math.isfinite(accept_threshold) or not 0.0 <= accept_threshold <= 1.0:
+            raise ValueError("accept_threshold must be finite and between 0 and 1")
         self.weights = (weights or DecisionWeights()).normalized()
         self.accept_threshold = accept_threshold
 
+    @staticmethod
+    def _bounded_factor(name: str, raw_value: float) -> float:
+        value = float(raw_value)
+        if not math.isfinite(value):
+            raise ValueError(f"factor {name} must be finite")
+        return max(0.0, min(1.0, value))
+
     def score(self, factors: Mapping[str, float]) -> CandidateScore:
         weights = self.weights.as_dict()
-        safe_factors = {key: max(0.0, min(1.0, float(factors.get(key, 0.0)))) for key in weights}
+        safe_factors = {
+            key: self._bounded_factor(key, factors.get(key, 0.0))
+            for key in weights
+        }
         total = sum(safe_factors[key] * weights[key] for key in weights)
         return CandidateScore(**safe_factors).with_total(total)
 
-    def accepts(self, score: CandidateScore, parent_score: float | None = None) -> bool:
+    def accepts(
+        self,
+        score: CandidateScore,
+        parent_score: float | None = None,
+    ) -> bool:
+        if parent_score is not None:
+            if not math.isfinite(parent_score) or not 0.0 <= parent_score <= 1.0:
+                raise ValueError("parent_score must be finite and between 0 and 1")
+
         beats_threshold = score.weighted_total >= self.accept_threshold
         beats_parent = parent_score is None or score.weighted_total >= parent_score
-        return beats_threshold and beats_parent and score.safety >= 0.80 and score.correctness >= 0.70
+        return (
+            beats_threshold
+            and beats_parent
+            and score.safety >= self.MIN_SAFETY
+            and score.correctness >= self.MIN_CORRECTNESS
+        )
