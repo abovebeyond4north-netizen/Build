@@ -1,0 +1,37 @@
+{
+  "name": "normalize_text",
+  "description": "Normalize text by lowercasing and collapsing surrounding/internal whitespace.",
+  "entrypoint": "solve",
+  "thresholds": {
+    "train": 1.0,
+    "validation": 1.0,
+    "holdout": 1.0,
+    "min_gain": 0.05
+  },
+  "cases": [
+    {
+      "name": "train_spaces",
+      "split": "train",
+      "args": ["  Hello   WORLD  "],
+      "expected": "hello world"
+    },
+    {
+      "name": "train_case",
+      "split": "train",
+      "args": ["A  B"],
+      "expected": "a b"
+    },
+    {
+      "name": "validation_mixed",
+      "split": "validation",
+      "args": ["  Mixed CASE"],
+      "expected": "mixed case"
+    },
+    {
+      "name": "holdout_tabs",
+      "split": "holdout",
+      "args": ["\tNEW   Value\n"],
+      "expected": "new value"
+    }
+  ]
+}
