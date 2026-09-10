@@ -16,11 +16,44 @@ if str(SRC_ROOT) not in sys.path:
 
 from dgm_zero.capability import CapabilityAcquirer
 from dgm_zero.capability_model import CapabilitySpec
+from dgm_zero.objective import ObjectiveCompiler
 
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(message)
+
+
+def verify_report(report, capability: str) -> dict[str, object]:
+    require(report.promoted, f"{capability} was not promoted: {report}")
+    require(report.final_score == 1.0, f"{capability} final score was not 1.0")
+    require(report.train_score == 1.0, f"{capability} train score was not 1.0")
+    require(
+        report.validation_score == 1.0,
+        f"{capability} validation score was not 1.0",
+    )
+    require(
+        report.holdout_score == 1.0,
+        f"{capability} holdout score was not 1.0",
+    )
+    require(
+        report.holdout_evaluations == 1,
+        f"{capability} did not use exactly one holdout evaluation",
+    )
+    require(
+        report.installed_path is not None
+        and Path(report.installed_path).is_file(),
+        f"{capability} did not install a versioned skill",
+    )
+    return {
+        "capability": capability,
+        "status": report.status,
+        "baseline_score": report.baseline_score,
+        "final_score": report.final_score,
+        "holdout_evaluations": report.holdout_evaluations,
+        "installed_path": report.installed_path,
+        "holdout_digest": report.holdout_digest,
+    }
 
 
 def run_example(name: str) -> dict[str, object]:
@@ -30,35 +63,16 @@ def run_example(name: str) -> dict[str, object]:
         spec,
         validation_budget=24,
     )
-    require(report.promoted, f"{spec.name} was not promoted: {report}")
-    require(report.final_score == 1.0, f"{spec.name} final score was not 1.0")
-    require(report.train_score == 1.0, f"{spec.name} train score was not 1.0")
-    require(
-        report.validation_score == 1.0,
-        f"{spec.name} validation score was not 1.0",
+    return verify_report(report, spec.name)
+
+
+def run_objective(text: str) -> dict[str, object]:
+    spec = ObjectiveCompiler().compile(text)
+    report = CapabilityAcquirer(WORKSPACE).acquire(
+        spec,
+        validation_budget=24,
     )
-    require(
-        report.holdout_score == 1.0,
-        f"{spec.name} holdout score was not 1.0",
-    )
-    require(
-        report.holdout_evaluations == 1,
-        f"{spec.name} did not use exactly one holdout evaluation",
-    )
-    require(
-        report.installed_path is not None
-        and Path(report.installed_path).is_file(),
-        f"{spec.name} did not install a versioned skill",
-    )
-    return {
-        "capability": spec.name,
-        "status": report.status,
-        "baseline_score": report.baseline_score,
-        "final_score": report.final_score,
-        "holdout_evaluations": report.holdout_evaluations,
-        "installed_path": report.installed_path,
-        "holdout_digest": report.holdout_digest,
-    }
+    return verify_report(report, spec.name)
 
 
 def verify_holdout_reuse_blocked() -> dict[str, object]:
@@ -95,6 +109,7 @@ def main() -> int:
     examples = [
         run_example("normalize_text.json"),
         run_example("sequence_span.json"),
+        run_objective("Improve Python debugging ability"),
     ]
     reuse = verify_holdout_reuse_blocked()
     summary = {
