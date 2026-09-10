@@ -1,0 +1,63 @@
+name: GENESIS quality
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "genesis.py"
+      - "requirements.txt"
+      - ".github/workflows/genesis-quality.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "genesis.py"
+      - "requirements.txt"
+      - ".github/workflows/genesis-quality.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: genesis-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  syntax:
+    name: Python ${{ matrix.python-version }} syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile GENESIS
+        run: python -m py_compile genesis.py
+
+  dependencies:
+    name: Runtime dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Verify imports
+        run: python -c "import numpy, matplotlib; print('GENESIS dependencies import successfully')"

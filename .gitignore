@@ -1,0 +1,34 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Coverage and test artifacts
+.coverage
+coverage.xml
+htmlcov/
+
+# Generated GENESIS outputs
+genesis_output/
+genesis_v*_dashboard.png
+genesis_v*_analysis.png
+genesis_v*_universe.png
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Editor / OS metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
