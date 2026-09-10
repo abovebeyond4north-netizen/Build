@@ -6,6 +6,7 @@ from pathlib import Path
 from dgm_zero.capability import CapabilityAcquirer
 from dgm_zero.capability_model import CapabilityCase, CapabilitySpec
 from dgm_zero.capability_sandbox import SkillSandbox
+from dgm_zero.objective import ObjectiveCompiler
 
 
 def normalize_spec() -> CapabilitySpec:
@@ -212,6 +213,26 @@ class CapabilityAcquisitionTests(unittest.TestCase):
             )
             self.assertTrue(report.promoted)
             self.assertEqual(report.final_score, 1.0)
+
+    def test_natural_language_python_debugging_objective_acquires_skill(self):
+        spec = ObjectiveCompiler().compile("Improve Python debugging ability")
+        self.assertEqual(spec.name, "python_error_diagnosis")
+        with tempfile.TemporaryDirectory() as tmp:
+            report = CapabilityAcquirer(Path(tmp)).acquire(
+                spec,
+                validation_budget=24,
+            )
+            self.assertTrue(report.promoted)
+            self.assertEqual(report.final_score, 1.0)
+            self.assertEqual(report.holdout_evaluations, 1)
+            source = Path(report.installed_path).read_text(encoding="utf-8")
+            self.assertIn("nameerror", source)
+            self.assertIn("typeerror", source)
+            self.assertIn("indexerror", source)
+
+    def test_unsupported_objective_fails_instead_of_inventing_tests(self):
+        with self.assertRaises(ValueError):
+            ObjectiveCompiler().compile("Become generally superintelligent")
 
 
 if __name__ == "__main__":
