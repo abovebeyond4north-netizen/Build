@@ -2,10 +2,12 @@ name: Darwin Agent Zero Tests
 
 on:
   push:
+    branches: [main]
     paths:
       - 'darwin_agent_zero/**'
       - '.github/workflows/darwin_agent_zero_tests.yml'
   pull_request:
+    branches: [main]
     paths:
       - 'darwin_agent_zero/**'
       - '.github/workflows/darwin_agent_zero_tests.yml'
@@ -13,19 +15,40 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: darwin-agent-zero-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: Python ${{ matrix.python-version }} validation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: darwin_agent_zero/pyproject.toml
+
       - name: Install package
         run: |
           cd darwin_agent_zero
-          python -m pip install --upgrade pip
-          pip install -e .
+          python -m pip install --disable-pip-version-check -e .
+
+      - name: Compile package and tests
+        run: |
+          cd darwin_agent_zero
+          python -m compileall -q src tests scripts
+
       - name: Run validation suite
         run: |
           cd darwin_agent_zero
