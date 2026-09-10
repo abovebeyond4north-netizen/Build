@@ -49,7 +49,12 @@ jobs:
           cd darwin_agent_zero
           python -m compileall -q src tests scripts
 
-      - name: Run validation suite
+      - name: Run Darwin validation suite
         run: |
           cd darwin_agent_zero
           python scripts/validate.py
+
+      - name: Run capability acquisition validation
+        run: |
+          cd darwin_agent_zero
+          python scripts/validate_capabilities.py
