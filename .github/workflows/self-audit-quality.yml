@@ -1,0 +1,46 @@
+name: Self-audit quality
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "self_audit_improve.py"
+      - "tests/test_self_audit_improve.py"
+      - ".github/workflows/self-audit-quality.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "self_audit_improve.py"
+      - "tests/test_self_audit_improve.py"
+      - ".github/workflows/self-audit-quality.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-audit-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile
+        run: python -m py_compile self_audit_improve.py tests/test_self_audit_improve.py
+
+      - name: Test
+        run: python -m unittest tests.test_self_audit_improve -v
