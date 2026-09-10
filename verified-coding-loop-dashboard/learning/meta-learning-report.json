@@ -1,14 +1,14 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-08T21:14:19.425Z",
+  "generatedAt": "2026-09-10T04:50:59.186Z",
   "purpose": "Measure whether the learning loop is improving its own learning process.",
-  "learningScore": 0.755,
+  "learningScore": 0.79,
   "dimensions": {
     "diversity": 1,
-    "evidenceDepth": 0.3,
+    "evidenceDepth": 0.4,
     "reversibility": 1,
     "safetyConsistency": 1,
-    "cadence": 0.3
+    "cadence": 0.4
   },
   "selectedStrategies": [
     {
