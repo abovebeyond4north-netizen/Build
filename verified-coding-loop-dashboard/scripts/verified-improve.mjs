@@ -18,6 +18,7 @@ const previous = readJson(statePath, {
 
 const beforeScore = asNumber(previous.bestQualityScore, 0);
 const afterScore = computeQualityScore(root);
+const started = performance.now();
 const test = runCommand('npm', ['run', 'test'], { cwd: root });
 const build = runCommand('npm', ['run', 'build'], { cwd: root });
 const approved = test.ok && build.ok && afterScore >= beforeScore;
@@ -28,6 +29,7 @@ const record = {
   decision,
   beforeScore,
   afterScore,
+  elapsedSeconds: (performance.now() - started) / 1000,
   testsPassed: test.ok,
   buildPassed: build.ok,
   rule: 'Only update learning state when tests pass, build passes, and quality score is not worse.'

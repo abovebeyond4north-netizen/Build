@@ -1,78 +1,102 @@
 {
-  "schemaVersion": 2,
-  "runs": 3,
+  "schemaVersion": 3,
+  "runs": 0,
   "virtualBalance": 42.72,
   "virtualHourlyRate": 3.1,
-  "bestEfficiencyScore": 2.33,
-  "totalBenchmarksRewarded": 3,
-  "totalSkillsRewarded": 9,
-  "ledger": [
-    {
-      "time": "2026-09-10T04:50:59.324Z",
-      "type": "virtual_time_value_update",
-      "benchmarkPassed": true,
-      "benchmarkReward": 5,
-      "skillSignals": [
-        "meta_learning_measurement",
-        "value_experiment_selection",
-        "quality_score_preserved"
-      ],
-      "skillReward": 9,
-      "raiseAmount": 0.7,
-      "virtualHourlyRateBefore": 2.4,
-      "virtualHourlyRateAfter": 3.1,
-      "payout": 14.31,
-      "efficiencyScore": 2.33,
-      "note": "Internal virtual credits only for prioritization."
+  "bestEfficiencyScore": null,
+  "totalBenchmarksRewarded": 0,
+  "totalSkillsRewarded": 0,
+  "rewardedQualityHighWater": 130,
+  "openingBalance": 42.72,
+  "openingRate": 3.1,
+  "legacySnapshot": {
+    "schemaVersion": 2,
+    "runs": 3,
+    "virtualBalance": 42.72,
+    "virtualHourlyRate": 3.1,
+    "bestEfficiencyScore": 2.33,
+    "totalBenchmarksRewarded": 3,
+    "totalSkillsRewarded": 9,
+    "ledger": [
+      {
+        "time": "2026-09-10T04:50:59.324Z",
+        "type": "virtual_time_value_update",
+        "benchmarkPassed": true,
+        "benchmarkReward": 5,
+        "skillSignals": [
+          "meta_learning_measurement",
+          "value_experiment_selection",
+          "quality_score_preserved"
+        ],
+        "skillReward": 9,
+        "raiseAmount": 0.7,
+        "virtualHourlyRateBefore": 2.4,
+        "virtualHourlyRateAfter": 3.1,
+        "payout": 14.31,
+        "efficiencyScore": 2.33,
+        "note": "Internal virtual credits only for prioritization."
+      },
+      {
+        "time": "2026-09-08T21:14:19.520Z",
+        "type": "virtual_time_value_update",
+        "benchmarkPassed": true,
+        "benchmarkReward": 5,
+        "skillSignals": [
+          "meta_learning_measurement",
+          "value_experiment_selection",
+          "quality_score_preserved"
+        ],
+        "skillReward": 9,
+        "raiseAmount": 0.7,
+        "virtualHourlyRateBefore": 1.7,
+        "virtualHourlyRateAfter": 2.4,
+        "payout": 14.24,
+        "efficiencyScore": 2.33,
+        "note": "Internal virtual credits only for prioritization."
+      },
+      {
+        "time": "2026-09-02T14:42:40.983Z",
+        "type": "virtual_time_value_update",
+        "benchmarkPassed": true,
+        "benchmarkReward": 5,
+        "skillSignals": [
+          "meta_learning_measurement",
+          "value_experiment_selection",
+          "quality_score_preserved"
+        ],
+        "skillReward": 9,
+        "raiseAmount": 0.7,
+        "virtualHourlyRateBefore": 1,
+        "virtualHourlyRateAfter": 1.7,
+        "payout": 14.17,
+        "efficiencyScore": 2.33,
+        "note": "Internal virtual credits only for prioritization."
+      }
+    ],
+    "rules": {
+      "realWorldFunds": false,
+      "automaticTransfers": false,
+      "humanReviewRequired": true,
+      "baseBenchmarkReward": 5,
+      "baseSkillReward": 3,
+      "raisePerPassedBenchmark": 0.25,
+      "raisePerSkillAcquired": 0.15,
+      "maxVirtualRate": 100
     },
-    {
-      "time": "2026-09-08T21:14:19.520Z",
-      "type": "virtual_time_value_update",
-      "benchmarkPassed": true,
-      "benchmarkReward": 5,
-      "skillSignals": [
-        "meta_learning_measurement",
-        "value_experiment_selection",
-        "quality_score_preserved"
-      ],
-      "skillReward": 9,
-      "raiseAmount": 0.7,
-      "virtualHourlyRateBefore": 1.7,
-      "virtualHourlyRateAfter": 2.4,
-      "payout": 14.24,
-      "efficiencyScore": 2.33,
-      "note": "Internal virtual credits only for prioritization."
-    },
-    {
-      "time": "2026-09-02T14:42:40.983Z",
-      "type": "virtual_time_value_update",
-      "benchmarkPassed": true,
-      "benchmarkReward": 5,
-      "skillSignals": [
-        "meta_learning_measurement",
-        "value_experiment_selection",
-        "quality_score_preserved"
-      ],
-      "skillReward": 9,
-      "raiseAmount": 0.7,
-      "virtualHourlyRateBefore": 1,
-      "virtualHourlyRateAfter": 1.7,
-      "payout": 14.17,
-      "efficiencyScore": 2.33,
-      "note": "Internal virtual credits only for prioritization."
-    }
-  ],
-  "rules": {
-    "realWorldFunds": false,
-    "automaticTransfers": false,
-    "humanReviewRequired": true,
-    "baseBenchmarkReward": 5,
-    "baseSkillReward": 3,
-    "raisePerPassedBenchmark": 0.25,
-    "raisePerSkillAcquired": 0.15,
-    "maxVirtualRate": 100
+    "virtualScoreBalance": 0,
+    "virtualRate": 1,
+    "lastRunAt": "2026-09-10T04:50:59.324Z"
   },
-  "virtualScoreBalance": 0,
-  "virtualRate": 1,
-  "lastRunAt": "2026-09-10T04:50:59.324Z"
+  "ledger": [],
+  "lastRunAt": "2026-09-10T06:47:48.846Z",
+  "lastDecision": "migrated_without_reward",
+  "rules": {
+    "externalFinance": false,
+    "outsideActions": false,
+    "reviewRequired": true,
+    "baseBenchmarkReward": 5,
+    "raisePerPassedBenchmark": 0.25,
+    "maxVirtualHourlyRate": 100
+  },
+  "openingQualityHighWater": 130
 }

@@ -128,7 +128,9 @@ const nextMeta = {
 const report = {
   schemaVersion: 2,
   generatedAt: now,
-  purpose: 'Measure whether the learning loop is improving its own learning process.',
+  purpose: 'Measure process activity and declared safeguards; not demonstrated capability improvement.',
+  metricKind: 'process_activity_proxy',
+  limitations: ['History length and cadence measure activity', 'Reversibility is assumed', 'Safety consistency checks a declaration', 'No independent capability or outcome evaluation'],
   learningScore,
   dimensions,
   selectedStrategies,
