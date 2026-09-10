@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -36,14 +37,17 @@ class MAPElitesGrid:
         key, axes = descriptor(record)
         candidate = EliteCell(
             key=key,
-            axes=axes,
+            axes=dict(axes),
             record_id=record.id,
             expression=record.expression,
-            score=record.score,
+            score=dict(record.score),
             generation=record.generation,
         )
         current = self.cells.get(key)
-        if current is None or fitness(candidate) > fitness(current):
+        candidate_fitness = fitness(candidate)
+        if not math.isfinite(candidate_fitness):
+            return False
+        if current is None or candidate_fitness > fitness(current):
             self.cells[key] = candidate
             return True
         return False
@@ -54,6 +58,8 @@ class MAPElitesGrid:
         return self
 
     def elite_expressions(self, limit: int = 32) -> list[str]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+            raise ValueError("limit must be a non-negative integer")
         ranked = sorted(self.cells.values(), key=fitness, reverse=True)
         return [cell.expression for cell in ranked[:limit]]
 
@@ -65,7 +71,13 @@ class MAPElitesGrid:
         }
 
     def write(self, path: Path) -> None:
-        path.write_text(json.dumps(self.summary(), indent=2, sort_keys=True), encoding="utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = path.with_name(f".{path.name}.tmp")
+        temp_path.write_text(
+            json.dumps(self.summary(), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        temp_path.replace(path)
 
 
 def descriptor(record: ArchiveRecord) -> tuple[str, dict[str, str]]:
@@ -92,16 +104,23 @@ def length_axis(expression: str) -> str:
 
 
 def score_axis(value: float, prefix: str) -> str:
-    if value >= 0.95:
+    score = float(value)
+    if not math.isfinite(score):
+        return f"{prefix}0"
+    if score >= 0.95:
         return f"{prefix}100"
-    if value >= 0.75:
+    if score >= 0.75:
         return f"{prefix}75"
-    if value >= 0.50:
+    if score >= 0.50:
         return f"{prefix}50"
-    if value >= 0.25:
+    if score >= 0.25:
         return f"{prefix}25"
     return f"{prefix}0"
 
 
 def fitness(cell: EliteCell) -> float:
-    return float(cell.score.get("weighted_total", 0.0))
+    try:
+        value = float(cell.score.get("weighted_total", 0.0))
+    except (TypeError, ValueError):
+        return float("-inf")
+    return value if math.isfinite(value) else float("-inf")
