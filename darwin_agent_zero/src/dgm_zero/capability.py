@@ -50,8 +50,8 @@ class CapabilityPlanner:
             AcquisitionTask(
                 "certify before promotion",
                 (
-                    "Evaluate only the selected finalist on holdout cases and "
-                    "promote only on measurable gain."
+                    "After finalist selection, evaluate the fixed baseline and "
+                    "finalist on holdout, then promote only on measurable gain."
                 ),
                 0.95,
             ),
@@ -62,8 +62,9 @@ class CapabilityAcquirer:
     """General bounded acquisition loop.
 
     The search/generator receives only training cases. Validation is used to
-    choose among training-successful candidates. Holdout is evaluated exactly
-    once, on the finalist, and cannot feed another search step in the same run.
+    choose among training-successful candidates. Holdout remains untouched until
+    the finalist is fixed; certification then evaluates the fixed baseline control
+    and exactly one finalist. Holdout cannot feed another search step in the run.
     A skill is promoted only when it clears all split thresholds and improves on
     the currently installed version by the requested minimum gain.
     """
@@ -182,15 +183,9 @@ class CapabilityAcquirer:
             spec.entrypoint,
             validation_cases,
         )
-        baseline_holdout = self.sandbox.evaluate(
-            baseline_source,
-            spec.entrypoint,
-            holdout_cases,
-        )
         baseline_score = min(
             baseline_train.correctness,
             baseline_validation.correctness,
-            baseline_holdout.correctness,
         )
 
         training_view = TrainingView(
@@ -320,6 +315,19 @@ class CapabilityAcquirer:
 
         finalist, train_score, validation_score, _ = (
             validation_survivors[0]
+        )
+
+        # The holdout boundary opens only after the finalist is immutable.
+        # The installed baseline is a fixed control, not another search candidate.
+        baseline_holdout = self.sandbox.evaluate(
+            baseline_source,
+            spec.entrypoint,
+            holdout_cases,
+        )
+        baseline_score = min(
+            baseline_train.correctness,
+            baseline_validation.correctness,
+            baseline_holdout.correctness,
         )
         holdout_score = self.sandbox.evaluate(
             finalist.source,
