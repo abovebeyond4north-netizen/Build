@@ -23,13 +23,16 @@ class ProvenanceTests(unittest.TestCase):
             self.assertIsNotNone(fp)
             self.assertEqual(fp.path, "sample.txt")
             self.assertEqual(fp.bytes, 3)
-            self.assertEqual(fp.sha256, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+            self.assertEqual(
+                fp.sha256,
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            )
 
     def test_fingerprint_missing_file_returns_none(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertIsNone(fingerprint(Path(tmp) / "missing.txt"))
 
-    def test_manifest_includes_config_and_artifact_hashes(self):
+    def test_manifest_includes_config_artifacts_and_all_source_modules(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"
             workspace = Path(tmp) / "workspace"
@@ -37,15 +40,44 @@ class ProvenanceTests(unittest.TestCase):
             source.mkdir(parents=True)
             workspace.mkdir()
             (source / "evolver.py").write_text("print('source')\n", encoding="utf-8")
-            (workspace / "champion.py").write_text("def solve(a, b): return a + b\n", encoding="utf-8")
+            (source / "future_module.py").write_text("VALUE = 1\n", encoding="utf-8")
+            (workspace / "champion.py").write_text(
+                "def solve(a, b): return a + b\n",
+                encoding="utf-8",
+            )
 
             manifest = ProvenanceRecorder(root, workspace).build(FakeConfig())
 
             self.assertEqual(manifest.config["generations"], 2)
-            self.assertTrue(any(item.path == "src/dgm_zero/evolver.py" for item in manifest.source_files))
-            self.assertTrue(any(item.path == "champion.py" for item in manifest.artifacts))
+            source_paths = [item.path for item in manifest.source_files]
+            self.assertEqual(
+                source_paths,
+                [
+                    "src/dgm_zero/evolver.py",
+                    "src/dgm_zero/future_module.py",
+                ],
+            )
+            self.assertTrue(
+                any(item.path == "champion.py" for item in manifest.artifacts)
+            )
 
-    def test_write_outputs_json_manifest(self):
+    def test_manifest_ignores_non_python_files_in_source_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            workspace = Path(tmp) / "workspace"
+            source = root / "src" / "dgm_zero"
+            source.mkdir(parents=True)
+            workspace.mkdir()
+            (source / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
+            (source / "notes.txt").write_text("not runtime source\n", encoding="utf-8")
+
+            manifest = ProvenanceRecorder(root, workspace).build(FakeConfig())
+            self.assertEqual(
+                [item.path for item in manifest.source_files],
+                ["src/dgm_zero/module.py"],
+            )
+
+    def test_write_outputs_json_manifest_atomically(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"
             workspace = Path(tmp) / "workspace"
@@ -58,6 +90,7 @@ class ProvenanceTests(unittest.TestCase):
             self.assertEqual(data["config"]["seed"], 11)
             self.assertIn("python", data)
             self.assertIn("platform", data)
+            self.assertFalse((workspace / ".provenance.json.tmp").exists())
 
 
 if __name__ == "__main__":
