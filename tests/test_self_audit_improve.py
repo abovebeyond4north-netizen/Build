@@ -26,6 +26,60 @@ def example():
         self.assertTrue(reliability)
         self.assertEqual(reliability[0].severity, 9)
 
+    def test_todo_marker_inside_string_is_not_reported(self) -> None:
+        source = 'message = "TODO is part of user-visible text"\n'
+        issues = PythonCodeAnalyzer(source).analyze()
+
+        markers = [
+            issue
+            for issue in issues
+            if issue.category == "maintainability" and "marker" in issue.problem.lower()
+        ]
+        self.assertEqual(markers, [])
+
+    def test_todo_marker_in_comment_is_reported_at_comment_line(self) -> None:
+        source = 'message = "safe"\n# FIXME replace fallback\nvalue = 1\n'
+        issues = PythonCodeAnalyzer(source).analyze()
+
+        markers = [
+            issue
+            for issue in issues
+            if issue.category == "maintainability" and "marker" in issue.problem.lower()
+        ]
+        self.assertEqual(len(markers), 1)
+        self.assertEqual(markers[0].line, 2)
+
+    def test_broad_exception_inside_tuple_is_reported(self) -> None:
+        source = """
+def example():
+    try:
+        return 1
+    except (ValueError, Exception):
+        return 0
+"""
+        issues = PythonCodeAnalyzer(source).analyze()
+
+        reliability = [issue for issue in issues if issue.category == "reliability"]
+        self.assertEqual(len(reliability), 1)
+        self.assertEqual(reliability[0].severity, 6)
+        self.assertIn("Exception", reliability[0].problem)
+
+    def test_qualified_broad_exception_is_reported(self) -> None:
+        source = """
+import builtins
+
+def example():
+    try:
+        return 1
+    except builtins.BaseException:
+        return 0
+"""
+        issues = PythonCodeAnalyzer(source).analyze()
+
+        reliability = [issue for issue in issues if issue.category == "reliability"]
+        self.assertEqual(len(reliability), 1)
+        self.assertIn("BaseException", reliability[0].problem)
+
     def test_complexity_does_not_leak_from_nested_function(self) -> None:
         source = """
 def outer(value):

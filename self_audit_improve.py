@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Self-auditing Python code-quality tool.
 
-The analyzer intentionally uses deterministic AST-based heuristics so reports are
-cheap, reproducible, and suitable for CI or for generating teacher labels.
+The analyzer uses deterministic AST/token based heuristics so reports are cheap,
+reproducible, and suitable for CI or for generating teacher labels.
 
 Usage:
     python self_audit_improve.py
@@ -12,9 +12,11 @@ Usage:
 from __future__ import annotations
 
 import ast
+import io
 import json
 import re
 import sys
+import tokenize
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -55,12 +57,13 @@ class AuditResult:
 
 
 class PythonCodeAnalyzer:
-    """Analyze Python source code with deterministic AST-based heuristics."""
+    """Analyze Python source code with deterministic syntax-aware heuristics."""
 
     LINE_LIMITS = {"low": 120, "medium": 100, "high": 88}
     COMPLEXITY_LIMITS = {"low": 12, "medium": 8, "high": 5}
     ALLOWED_NUMBERS = frozenset({-1, 0, 1, 2, 3, 10, 80, 88, 100, 120})
     TODO_PATTERN = re.compile(r"\b(TODO|FIXME|HACK)\b", re.IGNORECASE)
+    BROAD_EXCEPTIONS = frozenset({"Exception", "BaseException"})
 
     def __init__(self, source_code: str, strictness: str = "medium") -> None:
         self.source_code = source_code
@@ -117,16 +120,23 @@ class PythonCodeAnalyzer:
         ]
 
     def _check_todo_comments(self) -> list[AuditIssue]:
+        """Find unresolved markers only in lexical Python comments.
+
+        Searching raw source lines produces false positives for ordinary strings such
+        as ``message = 'TODO is a label'``. Tokenization preserves exact comment line
+        numbers while ignoring strings and identifiers.
+        """
+        tokens = tokenize.generate_tokens(io.StringIO(self.source_code).readline)
         return [
             AuditIssue(
-                line=line_number,
+                line=token.start[0],
                 severity=4,
                 category="maintainability",
                 problem="Unresolved TODO/FIXME/HACK marker found.",
                 recommendation="Resolve it or convert it into a tracked task.",
             )
-            for line_number, line in enumerate(self.lines, start=1)
-            if self.TODO_PATTERN.search(line)
+            for token in tokens
+            if token.type == tokenize.COMMENT and self.TODO_PATTERN.search(token.string)
         ]
 
     def _check_missing_docstrings(self) -> list[AuditIssue]:
@@ -181,13 +191,7 @@ class PythonCodeAnalyzer:
 
     @staticmethod
     def _estimate_complexity(node: ast.AST) -> int:
-        """Estimate complexity without charging nested scopes to their parent.
-
-        ``ast.walk(function)`` descends into nested functions, lambdas, and classes.
-        That makes a simple wrapper look complex merely because it contains a complex
-        helper. Each callable should own its own complexity, so nested scope bodies are
-        deliberately treated as traversal boundaries here.
-        """
+        """Estimate complexity without charging nested scopes to their parent."""
         complexity_nodes = (
             ast.If,
             ast.For,
@@ -220,6 +224,22 @@ class PythonCodeAnalyzer:
             stack.extend(ast.iter_child_nodes(child))
         return complexity
 
+    @classmethod
+    def _broad_exception_names(cls, node: ast.AST | None) -> list[str]:
+        """Return broad exception names contained in an except target."""
+        if node is None:
+            return []
+        if isinstance(node, ast.Name):
+            return [node.id] if node.id in cls.BROAD_EXCEPTIONS else []
+        if isinstance(node, ast.Attribute):
+            return [node.attr] if node.attr in cls.BROAD_EXCEPTIONS else []
+        if isinstance(node, ast.Tuple):
+            names: list[str] = []
+            for element in node.elts:
+                names.extend(cls._broad_exception_names(element))
+            return names
+        return []
+
     def _check_exception_handling(self) -> list[AuditIssue]:
         if self.tree is None:
             return []
@@ -238,16 +258,17 @@ class PythonCodeAnalyzer:
                         recommendation="Catch a specific exception type.",
                     )
                 )
-            elif isinstance(node.type, ast.Name) and node.type.id in {
-                "Exception",
-                "BaseException",
-            }:
+                continue
+
+            broad_names = self._broad_exception_names(node.type)
+            if broad_names:
+                names = ", ".join(sorted(set(broad_names)))
                 issues.append(
                     AuditIssue(
                         line=node.lineno,
                         severity=6,
                         category="reliability",
-                        problem=f"Overly broad exception handler: {node.type.id}.",
+                        problem=f"Overly broad exception handler: {names}.",
                         recommendation="Catch the narrowest expected exception.",
                     )
                 )
@@ -443,7 +464,7 @@ class SelfAuditImproveTool:
                 "reliability",
                 "Narrow exception handling",
                 "Broad exception handling can hide real failures.",
-                "Replace bare except or except Exception with specific exceptions, then log useful context.",
+                "Replace broad handlers with specific exceptions, then log useful context.",
             ),
             (
                 "complexity",
@@ -466,7 +487,7 @@ class SelfAuditImproveTool:
             (
                 "maintainability",
                 "Remove unresolved markers and magic numbers",
-                "TODO/FIXME/HACK markers and unexplained numbers create future risk.",
+                "Unresolved comment markers and unexplained numbers create future risk.",
                 "Convert markers into tracked tasks and move domain constants into named variables.",
             ),
         ]
