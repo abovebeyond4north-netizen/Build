@@ -6,12 +6,14 @@ on:
     paths:
       - "genesis.py"
       - "requirements.txt"
+      - "tests/test_genesis_core.py"
       - ".github/workflows/genesis-quality.yml"
   pull_request:
     branches: [main]
     paths:
       - "genesis.py"
       - "requirements.txt"
+      - "tests/test_genesis_core.py"
       - ".github/workflows/genesis-quality.yml"
 
 permissions:
@@ -40,7 +42,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Compile GENESIS
-        run: python -m py_compile genesis.py
+        run: python -m py_compile genesis.py tests/test_genesis_core.py
 
   dependencies:
     name: Runtime dependencies
@@ -61,3 +63,6 @@ jobs:
 
       - name: Verify imports
         run: python -c "import numpy, matplotlib; print('GENESIS dependencies import successfully')"
+
+      - name: Run core behavioral tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
