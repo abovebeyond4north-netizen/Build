@@ -68,6 +68,16 @@ python genesis.py
 
 The default configuration currently runs **150 generations** with **100 simulation steps per generation**, so a full run is intentionally more substantial than a smoke test.
 
+## Verify core behavior
+
+Run the deterministic fast test suite without starting the full simulation:
+
+```bash
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+The current core tests verify innovation-ID stability, minimal genome topology, finite bounded network activation, structural independence after genome copying, and learning-rule weight bounds.
+
 ## Output
 
 Generated plots are written under `genesis_output/`. The v4 visualization paths currently include:
@@ -81,9 +91,10 @@ Generated output and Python cache files are ignored by Git so experiments do not
 
 The `GENESIS quality` workflow performs fast checks on pull requests and pushes that touch GENESIS:
 
-- compiles `genesis.py` on Python 3.11 and 3.12;
+- compiles `genesis.py` and the core tests on Python 3.11 and 3.12;
 - installs the declared runtime dependencies;
-- verifies that NumPy and Matplotlib import successfully.
+- verifies that NumPy and Matplotlib import successfully;
+- executes the deterministic GENESIS core behavioral test suite.
 
 The workflow intentionally avoids running the full 150-generation simulation on every commit. Long experiment runs should be executed separately and their parameters/results recorded explicitly when used as evidence.
 
