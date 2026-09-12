@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 import copy
 import json
+import math
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -43,14 +45,17 @@ class SynthesizedPatch:
     new_value: float
     proposal: PatchProposal
 
+    @property
+    def direction(self) -> int:
+        return 1 if self.new_value > self.old_value else -1
+
+    @property
+    def step(self) -> float:
+        return abs(self.new_value - self.old_value)
+
 
 class BoundedPolicyPatchSynthesizer:
-    """Generate small strategy-only source variants without applying them.
-
-    Each candidate changes exactly one numeric keyword in one MetaLearningPolicy
-    return site. The replacement is content-addressed against the current source
-    and is still subject to RepositoryPatchLab validation/certification.
-    """
+    """Generate small strategy-only source variants without applying them."""
 
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
@@ -63,6 +68,7 @@ class BoundedPolicyPatchSynthesizer:
         *,
         max_candidates: int = 12,
         focus: str | None = None,
+        priority_fn: Callable[[str, str, int], float] | None = None,
     ) -> list[SynthesizedPatch]:
         if (
             isinstance(max_candidates, bool)
@@ -118,9 +124,34 @@ class BoundedPolicyPatchSynthesizer:
                             proposal=proposal,
                         )
                     )
-                    if len(candidates) >= max_candidates:
-                        return candidates
-        return candidates
+
+        if priority_fn is not None:
+            scored: list[tuple[float, int, int, int, str, SynthesizedPatch]] = []
+            for candidate in candidates:
+                raw_priority = priority_fn(
+                    candidate.focus,
+                    candidate.knob,
+                    candidate.direction,
+                )
+                if (
+                    isinstance(raw_priority, bool)
+                    or not isinstance(raw_priority, (int, float))
+                    or not math.isfinite(float(raw_priority))
+                ):
+                    raise ValueError("patch synthesis priority must be finite numeric")
+                scored.append(
+                    (
+                        -float(raw_priority),
+                        KNOWN_FOCI.index(candidate.focus),
+                        POLICY_KNOBS.index(candidate.knob),
+                        0 if candidate.direction > 0 else 1,
+                        candidate.proposal.digest,
+                        candidate,
+                    )
+                )
+            candidates = [entry[-1] for entry in sorted(scored)]
+
+        return candidates[:max_candidates]
 
     def generate_validated(
         self,
@@ -128,10 +159,15 @@ class BoundedPolicyPatchSynthesizer:
         *,
         max_candidates: int = 12,
         focus: str | None = None,
+        priority_fn: Callable[[str, str, int], float] | None = None,
     ) -> list[SynthesizedPatch]:
         """Generate proposals and discard any that fail static patch policy."""
         output: list[SynthesizedPatch] = []
-        for candidate in self.generate(max_candidates=max_candidates, focus=focus):
+        for candidate in self.generate(
+            max_candidates=max_candidates,
+            focus=focus,
+            priority_fn=priority_fn,
+        ):
             if lab.validate(candidate.proposal).passed:
                 output.append(candidate)
         return output
