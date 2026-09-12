@@ -10,6 +10,7 @@ from .capability_sandbox import SkillSandbox
 from .checkpoint import CheckpointManager
 from .evolver import DarwinAgentZero, EvolutionConfig
 from .objective import ObjectiveCompiler
+from .self_patch import PatchProposal, RepositoryPatchLab
 
 
 def add_acquisition_options(parser: argparse.ArgumentParser) -> None:
@@ -68,6 +69,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="objective text, for example: Improve Python debugging ability",
     )
     add_acquisition_options(objective)
+
+    patch = sub.add_parser(
+        "evaluate-patch",
+        help=(
+            "evaluate a content-addressed strategy-layer patch in an ephemeral "
+            "copy; never modify or merge the live source tree"
+        ),
+    )
+    patch.add_argument(
+        "proposal",
+        type=Path,
+        help="path to a patch proposal JSON document",
+    )
+    patch.add_argument(
+        "--repo-root",
+        type=Path,
+        default=Path.cwd(),
+        help="Darwin Agent Zero project root containing pyproject.toml",
+    )
+    patch.add_argument(
+        "--workspace",
+        type=Path,
+        default=Path(".dgm_workspace"),
+        help="persistent evidence-report workspace",
+    )
+    patch.add_argument(
+        "--timeout",
+        type=float,
+        default=90.0,
+        help="per-gate timeout in seconds",
+    )
 
     restore = sub.add_parser(
         "restore",
@@ -145,6 +177,34 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(f"Capability acquisition error: {exc}", file=sys.stderr)
             return 2
+
+    if args.command == "evaluate-patch":
+        try:
+            proposal = PatchProposal.load(args.proposal)
+            lab = RepositoryPatchLab(
+                args.repo_root,
+                args.workspace,
+            )
+            report = lab.evaluate(
+                proposal,
+                timeout_seconds=args.timeout,
+            )
+        except (TypeError, ValueError) as exc:
+            print(f"Patch evaluation error: {exc}", file=sys.stderr)
+            return 2
+
+        print("Darwin Agent Zero patch evaluation")
+        print(f"proposal: {report.proposal_digest}")
+        print(f"passed: {report.passed}")
+        print(f"report: {report.report_path}")
+        for reason in report.validation.reasons:
+            print(f"validation: {reason}")
+        for gate in report.gates:
+            print(
+                f"gate {gate.name}: passed={gate.passed} "
+                f"returncode={gate.returncode} elapsed={gate.elapsed_seconds:.3f}s"
+            )
+        return 0 if report.passed else 1
 
     if args.command == "restore":
         manager = CheckpointManager(args.workspace)
