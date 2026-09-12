@@ -16,6 +16,7 @@ from .capability_model import (
 
 
 CERTIFICATION_LEDGER_VERSION = 1
+CERTIFICATION_EVALUATION_PROTOCOL_VERSION = 1
 
 
 class SkillLibrary:
@@ -259,14 +260,25 @@ def is_sha256(value: object) -> bool:
 
 
 def holdout_digest(spec: CapabilitySpec) -> str:
-    payload = [
-        {
-            "name": case.name,
-            "args": list(case.args),
-            "expected": case.expected,
-        }
-        for case in spec.cases_for("holdout")
-    ]
+    """Identify a sealed holdout under an explicit evaluator protocol version.
+
+    Training and validation evidence are deliberately excluded: changing adaptive
+    search inputs must not unlock a previously consumed holdout. The protocol
+    version is bumped only when certification evaluation semantics intentionally
+    change, allowing a controlled one-time recertification under the new protocol.
+    """
+
+    payload = {
+        "evaluation_protocol_version": CERTIFICATION_EVALUATION_PROTOCOL_VERSION,
+        "holdout_cases": [
+            {
+                "name": case.name,
+                "args": list(case.args),
+                "expected": case.expected,
+            }
+            for case in spec.cases_for("holdout")
+        ],
+    }
     encoded = json.dumps(
         payload,
         sort_keys=True,
