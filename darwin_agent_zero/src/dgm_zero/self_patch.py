@@ -15,6 +15,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable
 
+from .patch_certification import PatchCertificationLedger
 from .patch_policy import patch_import_reasons
 from .safety import scan_source
 
@@ -129,7 +130,6 @@ class PatchProposal:
         rationale: str,
         replacements: dict[str, str],
     ) -> "PatchProposal":
-        """Create a content-addressed proposal from explicit replacements."""
         files: list[PatchFile] = []
         for relative_path, replacement in sorted(replacements.items()):
             normalized = normalize_relative_path(relative_path)
@@ -187,18 +187,13 @@ class PatchEvaluationReport:
     gates: tuple[PatchGateResult, ...]
     comparison: PatchComparisonResult | None
     replay: PatchComparisonResult | None
+    certification_status: str
     created_at: float
     report_path: str
 
 
 class RepositoryPatchLab:
-    """Evaluate bounded self-modification proposals without changing live source.
-
-    The lab is deliberately proposal-only. It has no method that writes a passed
-    proposal back into ``repo_root`` and no GitHub merge capability. A proposal is
-    applied only inside an ephemeral copy, then compile/test, deterministic
-    comparison, and fresh paired replay gates produce evidence for human review.
-    """
+    """Evaluate bounded self-modification proposals without changing live source."""
 
     def __init__(
         self,
@@ -215,31 +210,21 @@ class RepositoryPatchLab:
         self.editable_paths = frozenset(
             normalize_relative_path(path) for path in editable_paths
         )
-        self.max_patch_files = require_positive_int(
-            max_patch_files,
-            "max_patch_files",
-        )
-        self.max_file_bytes = require_positive_int(
-            max_file_bytes,
-            "max_file_bytes",
-        )
-        self.max_total_bytes = require_positive_int(
-            max_total_bytes,
-            "max_total_bytes",
-        )
+        self.max_patch_files = require_positive_int(max_patch_files, "max_patch_files")
+        self.max_file_bytes = require_positive_int(max_file_bytes, "max_file_bytes")
+        self.max_total_bytes = require_positive_int(max_total_bytes, "max_total_bytes")
         if not (self.repo_root / "pyproject.toml").is_file():
             raise ValueError("repo_root must contain pyproject.toml")
         self.workspace.mkdir(parents=True, exist_ok=True)
+        self.certifications = PatchCertificationLedger(self.workspace)
 
     def validate(self, proposal: PatchProposal) -> PatchValidationReport:
         reasons: list[str] = []
         checked: list[str] = []
         if len(proposal.files) > self.max_patch_files:
             reasons.append(
-                f"proposal changes {len(proposal.files)} files; maximum is "
-                f"{self.max_patch_files}"
+                f"proposal changes {len(proposal.files)} files; maximum is {self.max_patch_files}"
             )
-
         seen_paths: set[str] = set()
         total_bytes = 0
         for item in proposal.files:
@@ -256,7 +241,6 @@ class RepositoryPatchLab:
             if relative_path not in self.editable_paths:
                 reasons.append(f"path is not editable by self-patch policy: {relative_path}")
                 continue
-
             target = self.repo_root / relative_path
             if not target.is_file() or target.is_symlink():
                 reasons.append(f"editable path is not a regular file: {relative_path}")
@@ -264,32 +248,23 @@ class RepositoryPatchLab:
             actual_hash = sha256_file(target)
             if actual_hash != item.base_sha256:
                 reasons.append(
-                    f"base hash mismatch for {relative_path}: expected "
-                    f"{item.base_sha256}, found {actual_hash}"
+                    f"base hash mismatch for {relative_path}: expected {item.base_sha256}, found {actual_hash}"
                 )
-
             source_bytes = len(item.replacement_source.encode("utf-8"))
             total_bytes += source_bytes
             if source_bytes > self.max_file_bytes:
                 reasons.append(
-                    f"replacement exceeds {self.max_file_bytes} bytes: "
-                    f"{relative_path}"
+                    f"replacement exceeds {self.max_file_bytes} bytes: {relative_path}"
                 )
-
             try:
                 ast.parse(item.replacement_source)
             except SyntaxError as exc:
                 reasons.append(f"syntax error in {relative_path}: {exc}")
                 continue
-            reasons.extend(
-                patch_import_reasons(relative_path, item.replacement_source)
-            )
+            reasons.extend(patch_import_reasons(relative_path, item.replacement_source))
             safety = scan_source(item.replacement_source)
             if not safety.passed:
-                reasons.extend(
-                    f"{relative_path}: {reason}" for reason in safety.reasons
-                )
-
+                reasons.extend(f"{relative_path}: {reason}" for reason in safety.reasons)
         if total_bytes > self.max_total_bytes:
             reasons.append(
                 f"proposal replacement payload exceeds {self.max_total_bytes} bytes"
@@ -321,6 +296,9 @@ class RepositoryPatchLab:
         comparison: PatchComparisonResult | None = None
         replay: PatchComparisonResult | None = None
         default_gates = gate_commands is None
+        certification_status = (
+            "not_requested" if not default_gates else "not_reached"
+        )
         if validation.passed:
             with tempfile.TemporaryDirectory(prefix="dgm-self-patch-") as tmp:
                 temp_root = Path(tmp)
@@ -330,14 +308,11 @@ class RepositoryPatchLab:
                 self._copy_project(baseline_root, staged_root)
                 for item in proposal.files:
                     relative_path = normalize_relative_path(item.relative_path)
-                    target = staged_root / relative_path
-                    target.write_text(item.replacement_source, encoding="utf-8")
-
-                commands = (
-                    self.default_gate_commands()
-                    if gate_commands is None
-                    else gate_commands
-                )
+                    (staged_root / relative_path).write_text(
+                        item.replacement_source,
+                        encoding="utf-8",
+                    )
+                commands = self.default_gate_commands() if gate_commands is None else gate_commands
                 env = self._validation_env(staged_root)
                 for name, command in commands:
                     result = self._run_gate(
@@ -350,7 +325,6 @@ class RepositoryPatchLab:
                     gates.append(result)
                     if not result.passed:
                         break
-
                 if default_gates and gates and all(gate.passed for gate in gates):
                     comparison, comparison_gates = self._compare_strategy(
                         baseline_root,
@@ -362,16 +336,29 @@ class RepositoryPatchLab:
                     )
                     gates.extend(comparison_gates)
                     if comparison is not None and comparison.passed:
-                        replay_seeds = generate_replay_seeds()
-                        replay, replay_gates = self._compare_strategy(
-                            baseline_root,
-                            staged_root,
-                            temp_root,
-                            float(timeout_seconds),
-                            seeds=replay_seeds,
-                            prefix="replay",
-                        )
-                        gates.extend(replay_gates)
+                        if self.certifications.is_consumed(proposal.digest):
+                            certification_status = "fresh_replay_already_consumed"
+                        else:
+                            replay_seeds = generate_replay_seeds()
+                            self.certifications.reserve(proposal.digest, replay_seeds)
+                            certification_status = "fresh_replay_reserved"
+                            replay, replay_gates = self._compare_strategy(
+                                baseline_root,
+                                staged_root,
+                                temp_root,
+                                float(timeout_seconds),
+                                seeds=replay_seeds,
+                                prefix="replay",
+                            )
+                            gates.extend(replay_gates)
+                            if replay is None:
+                                certification_status = "fresh_replay_execution_failed"
+                            elif replay.passed and all(gate.passed for gate in replay_gates):
+                                certification_status = "certified_passed"
+                            else:
+                                certification_status = "certified_failed"
+                    elif comparison is not None:
+                        certification_status = "development_comparison_failed"
 
         gates_passed = bool(gates) and all(gate.passed for gate in gates)
         comparison_passed = comparison is None or comparison.passed
@@ -384,6 +371,7 @@ class RepositoryPatchLab:
             and gates_passed
             and comparison_passed
             and replay_passed
+            and (not default_gates or certification_status == "certified_passed")
         )
         return self._write_report(
             PatchEvaluationReport(
@@ -393,6 +381,7 @@ class RepositoryPatchLab:
                 gates=tuple(gates),
                 comparison=comparison,
                 replay=replay,
+                certification_status=certification_status,
                 created_at=time.time(),
                 report_path="",
             )
@@ -402,15 +391,9 @@ class RepositoryPatchLab:
     def default_gate_commands() -> tuple[tuple[str, tuple[str, ...]], ...]:
         python = sys.executable
         return (
-            (
-                "compile",
-                (python, "-m", "compileall", "-q", "src", "tests", "scripts"),
-            ),
+            ("compile", (python, "-m", "compileall", "-q", "src", "tests", "scripts")),
             ("darwin_validation", (python, "scripts/validate.py")),
-            (
-                "capability_validation",
-                (python, "scripts/validate_capability_acquisition.py"),
-            ),
+            ("capability_validation", (python, "scripts/validate_capability_acquisition.py")),
         )
 
     @staticmethod
@@ -441,7 +424,9 @@ class RepositoryPatchLab:
         seeds: tuple[int, ...],
         prefix: str,
     ) -> tuple[PatchComparisonResult | None, list[PatchGateResult]]:
-        if not prefix or any(character not in "abcdefghijklmnopqrstuvwxyz_" for character in prefix):
+        if not prefix or any(
+            character not in "abcdefghijklmnopqrstuvwxyz_" for character in prefix
+        ):
             raise ValueError("comparison prefix must contain lowercase letters/underscores")
         baseline_output = temp_root / f"{prefix}-baseline.json"
         candidate_output = temp_root / f"{prefix}-candidate.json"
@@ -483,7 +468,6 @@ class RepositoryPatchLab:
             gate_results.append(result)
             if not result.passed:
                 return None, gate_results
-
         baseline = load_json_object(
             baseline_output,
             f"{prefix} baseline strategy benchmark",
@@ -547,16 +531,14 @@ class RepositoryPatchLab:
             )
         except subprocess.TimeoutExpired as exc:
             elapsed = time.perf_counter() - started
-            stdout = decode_timeout_output(exc.stdout)
-            stderr = decode_timeout_output(exc.stderr)
             return PatchGateResult(
                 name=name,
                 command=command,
                 passed=False,
                 returncode=None,
                 elapsed_seconds=elapsed,
-                stdout_tail=tail(stdout),
-                stderr_tail=tail(stderr or "gate timed out"),
+                stdout_tail=tail(decode_timeout_output(exc.stdout)),
+                stderr_tail=tail(decode_timeout_output(exc.stderr) or "gate timed out"),
             )
 
     def _write_report(self, report: PatchEvaluationReport) -> PatchEvaluationReport:
@@ -590,9 +572,7 @@ class RepositoryPatchLab:
         return completed
 
 
-def generate_replay_seeds(
-    count: int = REPLAY_SEED_COUNT,
-) -> tuple[int, ...]:
+def generate_replay_seeds(count: int = REPLAY_SEED_COUNT) -> tuple[int, ...]:
     count = require_positive_int(count, "replay seed count")
     if count > (REPLAY_SEED_MAX - REPLAY_SEED_MIN):
         raise ValueError("replay seed count exceeds available range")
@@ -618,7 +598,6 @@ def compare_strategy_reports(
         raise ValueError("strategy benchmark seeds do not match")
     if expected_seeds is not None and baseline_seeds != expected_seeds:
         raise ValueError("strategy benchmark did not use the expected comparison seeds")
-
     baseline_aggregate = report_score(baseline, "aggregate_score")
     candidate_aggregate = report_score(candidate, "aggregate_score")
     baseline_mean = report_score(baseline, "mean_champion_score")
@@ -627,30 +606,22 @@ def compare_strategy_reports(
     candidate_runs = champion_scores_by_seed(candidate)
     if set(baseline_runs) != set(candidate_runs):
         raise ValueError("strategy benchmark run seeds do not match")
-
     per_seed_deltas = {
-        seed: candidate_runs[seed] - baseline_runs[seed]
-        for seed in baseline_seeds
+        seed: candidate_runs[seed] - baseline_runs[seed] for seed in baseline_seeds
     }
     aggregate_delta = candidate_aggregate - baseline_aggregate
     mean_delta = candidate_mean - baseline_mean
     worst_seed_delta = min(per_seed_deltas.values())
     reasons: list[str] = []
     if aggregate_delta < -AGGREGATE_REGRESSION_TOLERANCE:
-        reasons.append(
-            f"aggregate strategy score regressed by {aggregate_delta:.6f}"
-        )
+        reasons.append(f"aggregate strategy score regressed by {aggregate_delta:.6f}")
     if mean_delta < -MEAN_CHAMPION_REGRESSION_TOLERANCE:
-        reasons.append(
-            f"mean champion score regressed by {mean_delta:.6f}"
-        )
+        reasons.append(f"mean champion score regressed by {mean_delta:.6f}")
     if worst_seed_delta < -PER_SEED_CHAMPION_REGRESSION_TOLERANCE:
         worst_seed = min(per_seed_deltas, key=per_seed_deltas.get)
         reasons.append(
-            f"seed {worst_seed} champion score regressed by "
-            f"{per_seed_deltas[worst_seed]:.6f}"
+            f"seed {worst_seed} champion score regressed by {per_seed_deltas[worst_seed]:.6f}"
         )
-
     return PatchComparisonResult(
         passed=not reasons,
         reasons=tuple(reasons),
