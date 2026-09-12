@@ -73,6 +73,7 @@ class EvolutionConfig:
     elite_parent_limit: int = 16
     curriculum_enabled: bool = True
     mined_case_limit: int = 24
+    operator_context_retention: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,10 @@ class DarwinAgentZero:
         self.provenance = ProvenanceRecorder(Path(__file__).resolve().parents[2], workspace)
         self.bandit_path = self.workspace / "operator_bandit.json"
         self.operator_bandit = UCBOperatorBandit.load(self.bandit_path, OPERATORS)
+        self.operator_bandit.adapt_context(
+            self.operator_context_key(),
+            retention=self.config.operator_context_retention,
+        )
         self.cognitive_state = self.assess_self()
         self.meta_policy = self.meta_learner.policy_from_state(self.cognitive_state)
         self.mined_cases = self.mine_cases()
@@ -152,6 +157,19 @@ class DarwinAgentZero:
             adversarial_scale=level.adversarial_scale,
         )
         return EmpiricalGodelOracle(self.archive, self.matrix, benchmark_config, self.mined_cases)
+
+    def operator_context_key(self) -> str:
+        """Stable mutation-credit regime, excluding per-generation novelty state."""
+        level = self.curriculum_state.current
+        return json.dumps(
+            {
+                "curriculum": asdict(level),
+                "accept_threshold": self.config.accept_threshold,
+                "mined_case_limit": self.config.mined_case_limit,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
 
     def run(self) -> EvolutionReport:
         parent: ArchiveRecord | None = self.select_parent()
