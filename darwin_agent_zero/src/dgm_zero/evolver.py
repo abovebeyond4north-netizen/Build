@@ -282,13 +282,27 @@ class DarwinAgentZero:
         return dedupe_candidates(candidates)
 
     def choose_operator(self, generation: int) -> str:
-        if generation % 4 == 0 and self.meta_policy.novelty_bias >= 1.0:
-            return "replace"
+        learned = self.operator_bandit.choose()
+        policy_modes = self.meta_learner.weighted_modes(self.meta_policy)
+        if not policy_modes:
+            return learned
+
+        exploration_rate = min(
+            0.65,
+            max(0.10, 0.20 * self.meta_policy.exploration_bias),
+        )
         if self.cognitive_state.focus in {"increase diversity", "escape stagnation"}:
-            return self.rng.choice(["replace", self.operator_bandit.choose()])
-        if self.cognitive_state.focus == "repair correctness":
-            return self.rng.choice(["simplify", self.operator_bandit.choose()])
-        return self.operator_bandit.choose()
+            exploration_rate = max(exploration_rate, 0.55)
+        elif self.cognitive_state.focus == "repair correctness":
+            exploration_rate = max(exploration_rate, 0.40)
+            policy_modes = [*policy_modes, "simplify", "simplify", "simplify"]
+
+        if generation % 4 == 0 and self.meta_policy.novelty_bias >= 1.0:
+            policy_modes = [*policy_modes, "replace", "replace", "replace"]
+
+        if self.rng.random() < exploration_rate:
+            return self.rng.choice(policy_modes)
+        return learned
 
     def mutate(self, expression: str, generation: int) -> Candidate:
         mode = self.choose_operator(generation)
