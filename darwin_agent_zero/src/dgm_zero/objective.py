@@ -88,10 +88,34 @@ class ObjectiveCompiler:
                     "mixed case",
                 ),
                 CapabilityCase(
+                    "validation_newlines",
+                    "validation",
+                    ("ONE\n\nTwo",),
+                    "one two",
+                ),
+                CapabilityCase(
+                    "validation_tabs",
+                    "validation",
+                    ("A\t B\tC",),
+                    "a b c",
+                ),
+                CapabilityCase(
                     "holdout_tabs",
                     "holdout",
                     ("\tNEW   Value\n",),
                     "new value",
+                ),
+                CapabilityCase(
+                    "holdout_unicode_case",
+                    "holdout",
+                    ("  CAFÉ   TEST  ",),
+                    "café test",
+                ),
+                CapabilityCase(
+                    "holdout_mixed_whitespace",
+                    "holdout",
+                    ("Alpha\r\n  BETA\tGamma",),
+                    "alpha beta gamma",
                 ),
             ),
         )
@@ -122,10 +146,34 @@ class ObjectiveCompiler:
                     0,
                 ),
                 CapabilityCase(
+                    "validation_negative",
+                    "validation",
+                    ([-8, -3, -11],),
+                    8,
+                ),
+                CapabilityCase(
+                    "validation_fractional",
+                    "validation",
+                    ([1.5, -2.5, 4.0],),
+                    6.5,
+                ),
+                CapabilityCase(
                     "holdout_wide",
                     "holdout",
                     ([-5, 0, 7],),
                     12,
+                ),
+                CapabilityCase(
+                    "holdout_two_values",
+                    "holdout",
+                    ([100, -25],),
+                    125,
+                ),
+                CapabilityCase(
+                    "holdout_fractional",
+                    "holdout",
+                    ([-0.25, 0.5, 2.75],),
+                    3.0,
                 ),
             ),
         )
@@ -162,10 +210,34 @@ class ObjectiveCompiler:
                     -1,
                 ),
                 CapabilityCase(
+                    "validation_inside_negative_bounds",
+                    "validation",
+                    (-5, -10, -2),
+                    -5,
+                ),
+                CapabilityCase(
+                    "validation_upper_boundary",
+                    "validation",
+                    (4, -3, 4),
+                    4,
+                ),
+                CapabilityCase(
                     "holdout_shifted",
                     "holdout",
                     (9, 2, 7),
                     7,
+                ),
+                CapabilityCase(
+                    "holdout_lower_boundary",
+                    "holdout",
+                    (2, 2, 7),
+                    2,
+                ),
+                CapabilityCase(
+                    "holdout_fractional",
+                    "holdout",
+                    (1.25, -0.5, 1.0),
+                    1.0,
                 ),
             ),
         )
