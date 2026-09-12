@@ -155,6 +155,7 @@ class DarwinAgentZero:
             self.meta_policy = self.meta_learner.policy_from_state(self.cognitive_state)
             self.metacognition.write(self.workspace / "cognitive_state.json", self.cognitive_state)
             self.oracle = self.make_oracle(self.curriculum_state)
+            parent_total = self.current_parent_total(parent)
             tasks = self.instructor.create_tasks(parent)
             level = self.curriculum_state.current
             self.memory.deposit(
@@ -173,7 +174,12 @@ class DarwinAgentZero:
                 if candidate.expression in evaluated_expressions:
                     continue
                 evaluated_expressions.add(candidate.expression)
-                record = self.evaluate_and_archive(candidate, parent, generation)
+                record = self.evaluate_and_archive(
+                    candidate,
+                    parent,
+                    generation,
+                    parent_total=parent_total,
+                )
                 self.map_elites.add(record)
                 evaluated_count += 1
                 if evaluated_count >= self.config.population:
@@ -243,6 +249,12 @@ class DarwinAgentZero:
         self.provenance.write(provenance_path, self.provenance.build(self.config))
         self.checkpoints.refresh(checkpoint)
         return report
+
+    def current_parent_total(self, parent: ArchiveRecord | None) -> float | None:
+        """Score a parent under the same current oracle used for its children."""
+        if parent is None:
+            return None
+        return self.oracle.judge(parent.expression).score.weighted_total
 
     def select_parent(self) -> ArchiveRecord | None:
         accepted = self.archive.accepted()
@@ -317,11 +329,19 @@ class DarwinAgentZero:
             return Candidate(expression.replace("b + b + b", "3 * b").replace("(a * a)", "a * a"), mode)
         return Candidate(self.rng.choice(SEED_EXPRESSIONS), mode)
 
-    def evaluate_and_archive(self, candidate: Candidate, parent: ArchiveRecord | None, generation: int) -> ArchiveRecord:
-        parent_score = parent.score.get("weighted_total") if parent else None
-        decision = self.oracle.judge(candidate.expression, parent_total=parent_score)
+    def evaluate_and_archive(
+        self,
+        candidate: Candidate,
+        parent: ArchiveRecord | None,
+        generation: int,
+        *,
+        parent_total: float | None = None,
+    ) -> ArchiveRecord:
+        if parent is not None and parent_total is None:
+            parent_total = self.current_parent_total(parent)
+        decision = self.oracle.judge(candidate.expression, parent_total=parent_total)
         usefulness = decision.score.weighted_total
-        reward = improvement_reward(parent_score, usefulness)
+        reward = improvement_reward(parent_total, usefulness)
         if candidate.operator != "seed":
             self.operator_bandit.update(candidate.operator, reward)
         self.memory.deposit(
