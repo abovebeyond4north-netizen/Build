@@ -147,6 +147,7 @@ class DarwinAgentZero:
 
     def run(self) -> EvolutionReport:
         parent: ArchiveRecord | None = self.archive.champion()
+        evaluated_expressions: set[str] = set()
         for generation in range(self.config.generations):
             self.map_elites = MAPElitesGrid().build(self.archive.records())
             self.mined_cases = self.mine_cases()
@@ -167,9 +168,16 @@ class DarwinAgentZero:
                 0.5,
             )
             candidates = self.self_instruct(parent, generation)
-            for candidate in candidates[: self.config.population]:
+            evaluated_count = 0
+            for candidate in candidates:
+                if candidate.expression in evaluated_expressions:
+                    continue
+                evaluated_expressions.add(candidate.expression)
                 record = self.evaluate_and_archive(candidate, parent, generation)
                 self.map_elites.add(record)
+                evaluated_count += 1
+                if evaluated_count >= self.config.population:
+                    break
             parent = self.select_parent()
             self.operator_bandit.save(self.bandit_path)
 
