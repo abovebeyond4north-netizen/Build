@@ -13,16 +13,22 @@ class MinedCase:
     a: int
     b: int
     disagreement: int
+    failures: int
     expected: int
+
+    @property
+    def failure_rate(self) -> float:
+        return float(self.failures)
 
 
 class CaseMiner:
-    """Mine extra validation cases from archive disagreement.
+    """Mine extra validation cases from archive failures and disagreement.
 
     Static tests are useful, but open-ended systems need pressure that adapts to
-    what they have already tried. This miner evaluates archived expressions over
-    a bounded grid and finds inputs where candidates disagree most. Those cases
-    become extra validation pressure in later oracle checks.
+    what they have already tried. The miner evaluates the strongest archived
+    expressions over a bounded grid and prioritizes inputs where many candidates
+    are wrong. Disagreement remains a secondary signal, but consensus failures are
+    no longer invisible to the evolving evaluator.
     """
 
     def __init__(self, value_min: int, value_max: int, limit: int = 24) -> None:
@@ -31,7 +37,7 @@ class CaseMiner:
         self.limit = limit
 
     def mine(self, records: list[ArchiveRecord]) -> list[BenchmarkCase]:
-        expressions = unique_expressions(records)
+        expressions = unique_expressions(records)[:32]
         if len(expressions) < 2:
             return []
         candidates: list[MinedCase] = []
@@ -39,16 +45,41 @@ class CaseMiner:
         values = list(range(self.value_min, self.value_max + 1, step))
         for a in values:
             for b in values:
+                expected = target_function(a, b)
                 outputs: set[int | str] = set()
-                for expression in expressions[:32]:
+                failures = 0
+                for expression in expressions:
                     try:
-                        outputs.add(eval_expr(expression, a, b))
+                        value = eval_expr(expression, a, b)
+                        outputs.add(value)
+                        if value != expected:
+                            failures += 1
                     except Exception as exc:
                         outputs.add(type(exc).__name__)
-                if len(outputs) > 1:
-                    candidates.append(MinedCase(a=a, b=b, disagreement=len(outputs), expected=target_function(a, b)))
-        ranked = sorted(candidates, key=lambda item: (item.disagreement, abs(item.a) + abs(item.b)), reverse=True)
-        return [BenchmarkCase(f"mined_{idx}", item.a, item.b, item.expected) for idx, item in enumerate(ranked[: self.limit])]
+                        failures += 1
+                if failures > 0:
+                    candidates.append(
+                        MinedCase(
+                            a=a,
+                            b=b,
+                            disagreement=len(outputs),
+                            failures=failures,
+                            expected=expected,
+                        )
+                    )
+        ranked = sorted(
+            candidates,
+            key=lambda item: (
+                item.failures / len(expressions),
+                item.disagreement,
+                abs(item.a) + abs(item.b),
+            ),
+            reverse=True,
+        )
+        return [
+            BenchmarkCase(f"mined_{idx}", item.a, item.b, item.expected)
+            for idx, item in enumerate(ranked[: self.limit])
+        ]
 
     def write(self, path: Path, cases: list[BenchmarkCase]) -> None:
         payload = [asdict(case) for case in cases]
@@ -58,7 +89,11 @@ class CaseMiner:
 def unique_expressions(records: list[ArchiveRecord]) -> list[str]:
     seen: set[str] = set()
     output: list[str] = []
-    ranked = sorted(records, key=lambda record: record.score.get("weighted_total", 0.0), reverse=True)
+    ranked = sorted(
+        records,
+        key=lambda record: record.score.get("weighted_total", 0.0),
+        reverse=True,
+    )
     for record in ranked:
         if record.expression not in seen:
             seen.add(record.expression)
