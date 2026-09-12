@@ -29,6 +29,7 @@ class OracleDecision:
     safety: SafetyReport
     score: CandidateScore
     evaluation_context: str
+    verified_delta: float | None = None
     mined: BenchmarkResult | None = None
 
 
@@ -46,8 +47,6 @@ class EmpiricalGodelOracle:
         self.matrix = matrix or DecisionMatrix()
         self.benchmark_config = benchmark_config or BenchmarkConfig()
         self.mined_cases = mined_cases
-        # Freeze novelty evidence for this oracle. Every parent/child judged by the
-        # same oracle is therefore compared against the same archive snapshot.
         self.reference_records: tuple[ArchiveRecord, ...] = tuple(archive.records())
         self.evaluation_context = self.context_digest()
 
@@ -130,6 +129,11 @@ class EmpiricalGodelOracle:
             score,
             parent_score=parent_total,
         )
+        verified_delta = (
+            None
+            if parent_total is None
+            else score.weighted_total - parent_total
+        )
         if accepted:
             reason = "accepted by empirical proof gate"
         elif not safety.passed:
@@ -141,11 +145,10 @@ class EmpiricalGodelOracle:
         else:
             reason = "decision score below gate threshold"
 
-        # Context handoff is one-shot and expression-matched by Archive.append(),
-        # so an unrelated direct append cannot inherit this evaluation provenance.
         self.archive.stage_evaluation_context(
             expression,
             self.evaluation_context,
+            verified_delta,
         )
         return OracleDecision(
             expression=expression,
@@ -155,5 +158,6 @@ class EmpiricalGodelOracle:
             safety=safety,
             score=score,
             evaluation_context=self.evaluation_context,
+            verified_delta=verified_delta,
             mined=mined,
         )
