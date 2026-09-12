@@ -1,0 +1,37 @@
+{
+  "name": "sequence_span",
+  "description": "Return the numeric span of a sequence: maximum minus minimum.",
+  "entrypoint": "solve",
+  "thresholds": {
+    "train": 1.0,
+    "validation": 1.0,
+    "holdout": 1.0,
+    "min_gain": 0.05
+  },
+  "cases": [
+    {
+      "name": "train_positive",
+      "split": "train",
+      "args": [[1, 5, 3]],
+      "expected": 4
+    },
+    {
+      "name": "train_mixed",
+      "split": "train",
+      "args": [[-2, 4]],
+      "expected": 6
+    },
+    {
+      "name": "validation_flat",
+      "split": "validation",
+      "args": [[10, 10]],
+      "expected": 0
+    },
+    {
+      "name": "holdout_wide",
+      "split": "holdout",
+      "args": [[-5, 0, 7]],
+      "expected": 12
+    }
+  ]
+}
