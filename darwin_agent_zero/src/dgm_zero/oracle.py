@@ -17,7 +17,7 @@ from .decision_matrix import CandidateScore, DecisionMatrix
 from .safety import SafetyReport, scan_source
 
 
-EVALUATION_PROTOCOL_VERSION = 1
+EVALUATION_PROTOCOL_VERSION = 2
 
 
 @dataclass(frozen=True)
