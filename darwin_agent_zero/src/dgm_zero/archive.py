@@ -23,10 +23,16 @@ class ArchiveRecord:
     created_at: float
     signature: str | None = None
     bucket: str | None = None
+    previous_hash: str | None = None
+    record_hash: str | None = None
 
 
 class Archive:
-    """Append-only evolutionary memory for generated agents/tools."""
+    """Append-only evolutionary memory for generated agents/tools.
+
+    New records are hash chained so modifications or reordering are detected on
+    read. Older unchained archives remain readable until the first chained record.
+    """
 
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace
@@ -90,6 +96,8 @@ class Archive:
             created_at=float(record.created_at),
             signature=record.signature,
             bucket=record.bucket,
+            previous_hash=record.previous_hash,
+            record_hash=record.record_hash,
         )
 
     def append(
@@ -112,8 +120,17 @@ class Archive:
             raise ValueError("accepted must be a boolean")
         clean_score = self._validate_score(score)
 
+        existing = self.records()
+        previous_hash = next(
+            (
+                record.record_hash
+                for record in reversed(existing)
+                if record.record_hash is not None
+            ),
+            None,
+        )
         signature = expression_signature(expression)
-        record = ArchiveRecord(
+        unsigned = ArchiveRecord(
             id=self.make_id(expression, generation),
             generation=generation,
             parent_id=parent_id,
@@ -124,6 +141,14 @@ class Archive:
             created_at=time.time(),
             signature=signature.digest,
             bucket=signature.bucket,
+            previous_hash=previous_hash,
+            record_hash=None,
+        )
+        record = ArchiveRecord(
+            **{
+                **asdict(unsigned),
+                "record_hash": archive_record_hash(unsigned),
+            }
         )
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(asdict(record), sort_keys=True) + "\n")
@@ -133,6 +158,8 @@ class Archive:
         if not self.path.exists():
             return []
         output: list[ArchiveRecord] = []
+        chained_started = False
+        previous_hash: str | None = None
         for line_number, line in enumerate(
             self.path.read_text(encoding="utf-8").splitlines(),
             start=1,
@@ -142,6 +169,18 @@ class Archive:
             try:
                 data = json.loads(line)
                 record = self._validate_loaded_record(ArchiveRecord(**data))
+                if record.record_hash is None:
+                    if chained_started:
+                        raise ValueError("unchained record follows chained records")
+                else:
+                    chained_started = True
+                    if not is_sha256(record.record_hash):
+                        raise ValueError("malformed record hash")
+                    if record.previous_hash != previous_hash:
+                        raise ValueError("hash-chain predecessor mismatch")
+                    if archive_record_hash(record) != record.record_hash:
+                        raise ValueError("record hash mismatch")
+                    previous_hash = record.record_hash
             except (json.JSONDecodeError, TypeError, ValueError) as exc:
                 raise ValueError(
                     f"invalid archive record on line {line_number}: {exc}"
@@ -197,3 +236,21 @@ class Archive:
             )
             distances.append((token_distance + behaviour_distance) / 2.0)
         return max(0.0, min(1.0, sum(distances) / len(distances)))
+
+
+def archive_record_hash(record: ArchiveRecord) -> str:
+    payload = asdict(record)
+    payload.pop("record_hash", None)
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def is_sha256(value: object) -> bool:
+    if not isinstance(value, str) or len(value) != 64:
+        return False
+    return all(character in "0123456789abcdef" for character in value)
