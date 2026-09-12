@@ -2,12 +2,16 @@ name: Darwin Agent Zero Tests
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feature/general-capability-acquisition-2026-09-10
     paths:
       - 'darwin_agent_zero/**'
       - '.github/workflows/darwin_agent_zero_tests.yml'
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - feature/general-capability-acquisition-2026-09-10
     paths:
       - 'darwin_agent_zero/**'
       - '.github/workflows/darwin_agent_zero_tests.yml'

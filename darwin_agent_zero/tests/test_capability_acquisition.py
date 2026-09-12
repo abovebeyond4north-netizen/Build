@@ -143,6 +143,35 @@ class CapabilityAcquisitionTests(unittest.TestCase):
             )
             self.assertTrue(current.is_file())
 
+    def test_certification_ledger_records_control_and_gain_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            report = CapabilityAcquirer(workspace).acquire(normalize_spec())
+            self.assertTrue(report.promoted)
+
+            ledger = workspace / "capability_certifications.jsonl"
+            rows = [
+                json.loads(line)
+                for line in ledger.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
+            self.assertEqual(row["capability"], report.capability)
+            self.assertEqual(row["holdout_digest"], report.holdout_digest)
+            self.assertEqual(row["baseline_digest"], report.baseline_digest)
+            self.assertEqual(row["finalist_digest"], report.finalist_digest)
+            self.assertEqual(row["holdout_score"], report.holdout_score)
+            self.assertEqual(row["final_score"], report.final_score)
+            self.assertAlmostEqual(
+                row["measured_gain"],
+                row["final_score"] - row["baseline_holdout_score"],
+            )
+            self.assertGreaterEqual(
+                row["measured_gain"] + 1e-12,
+                row["min_gain"],
+            )
+
     def test_reusing_certification_suite_does_not_reexpose_holdout(self):
         with tempfile.TemporaryDirectory() as tmp:
             acquirer = CapabilityAcquirer(Path(tmp))

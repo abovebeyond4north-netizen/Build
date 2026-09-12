@@ -346,8 +346,12 @@ class CapabilityAcquirer:
         self.library.record_certification(
             capability=spec.name,
             holdout_digest=certification_digest,
+            baseline_digest=baseline.digest,
+            baseline_holdout_score=baseline_holdout.correctness,
             finalist_digest=finalist.digest,
             holdout_score=holdout_score.correctness,
+            final_score=final_score,
+            min_gain=spec.thresholds.min_gain,
             passed=holdout_passed,
         )
 
