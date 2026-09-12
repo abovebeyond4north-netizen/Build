@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable
 
+from .patch_policy import patch_import_reasons
 from .safety import scan_source
 
 
@@ -256,6 +257,9 @@ class RepositoryPatchLab:
             except SyntaxError as exc:
                 reasons.append(f"syntax error in {relative_path}: {exc}")
                 continue
+            reasons.extend(
+                patch_import_reasons(relative_path, item.replacement_source)
+            )
             safety = scan_source(item.replacement_source)
             if not safety.passed:
                 reasons.extend(
@@ -312,7 +316,11 @@ class RepositoryPatchLab:
                     target = staged_root / relative_path
                     target.write_text(item.replacement_source, encoding="utf-8")
 
-                commands = gate_commands or self.default_gate_commands()
+                commands = (
+                    self.default_gate_commands()
+                    if gate_commands is None
+                    else gate_commands
+                )
                 env = self._validation_env(staged_root)
                 for name, command in commands:
                     result = self._run_gate(
@@ -329,8 +337,6 @@ class RepositoryPatchLab:
         passed = validation.passed and bool(gates) and all(
             gate.passed for gate in gates
         )
-        if validation.passed and gate_commands == ():
-            passed = False
         return self._write_report(
             PatchEvaluationReport(
                 proposal_digest=proposal.digest,
