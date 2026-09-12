@@ -141,6 +141,10 @@ class SkillSandbox:
                 reasons.append(
                     "candidate functions must use fixed positional arguments"
                 )
+            if function.args.defaults:
+                reasons.append(
+                    "candidate functions may not define default arguments"
+                )
 
         for node in ast.walk(tree):
             if isinstance(
