@@ -19,6 +19,7 @@ from .metacognition import CognitiveState, MetacognitiveMonitor
 from .mutation import structural_replace
 from .oracle import EmpiricalGodelOracle
 from .provenance import ProvenanceRecorder
+from .search_schedule import round_robin_by_lineage
 from .self_instruction import SelfInstructor
 from .sota_methods import UCBOperatorBandit, improvement_reward, pareto_front, uncertainty_score
 from .tools import ToolRegistry, default_registry
@@ -465,8 +466,14 @@ class DarwinAgentZero:
                         parent_id=base_record.id if base_record else None,
                     )
                 )
-        self.rng.shuffle(candidates)
-        return dedupe_candidates(candidates)
+        deduped = dedupe_candidates(candidates)
+        return round_robin_by_lineage(
+            deduped,
+            lineage_key=lambda candidate: (
+                candidate.source_expression or candidate.expression
+            ),
+            rng=self.rng,
+        )
 
     def choose_operator(self, generation: int) -> str:
         learned = self.operator_bandit.choose()
