@@ -136,6 +136,9 @@ class Archive:
             None,
         )
         existing_ids = {record.id for record in existing}
+        if parent_id is not None and parent_id not in existing_ids:
+            raise ValueError(f"parent_id does not reference an existing archive record: {parent_id}")
+
         nonce = time.time_ns()
         record_id = self.make_id(expression, generation, nonce)
         while record_id in existing_ids:
