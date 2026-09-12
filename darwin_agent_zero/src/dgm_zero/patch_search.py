@@ -15,6 +15,8 @@ from .self_patch import (
     PatchComparisonResult,
     PatchGateResult,
     RepositoryPatchLab,
+    compare_strategy_reports,
+    load_json_object,
     normalize_relative_path,
 )
 
@@ -57,13 +59,7 @@ class PatchSearchReport:
 
 
 class BoundedPatchSearchEngine:
-    """Search strategy patches using development evidence, then certify one finalist.
-
-    Candidate selection never sees fresh replay evidence. The engine screens every
-    generated candidate against the fixed development benchmark, chooses exactly
-    one finalist, and invokes RepositoryPatchLab's one-shot certifier once. A failed
-    certification does not fall back to a second candidate.
-    """
+    """Search strategy patches using targeted development evidence, then certify one finalist."""
 
     def __init__(
         self,
@@ -86,7 +82,11 @@ class BoundedPatchSearchEngine:
         focus: str | None = None,
         timeout_seconds: float = 90.0,
     ) -> PatchSearchReport:
-        if isinstance(max_candidates, bool) or not isinstance(max_candidates, int) or max_candidates <= 0:
+        if (
+            isinstance(max_candidates, bool)
+            or not isinstance(max_candidates, int)
+            or max_candidates <= 0
+        ):
             raise ValueError("max_candidates must be a positive integer")
         if (
             isinstance(timeout_seconds, bool)
@@ -196,13 +196,12 @@ class BoundedPatchSearchEngine:
             )
             gates.append(compile_gate)
             if compile_gate.passed:
-                comparison, comparison_gates = self.lab._compare_strategy(
+                comparison, comparison_gates = self._compare_focus_strategy(
                     baseline_root,
                     candidate_root,
                     temp_root,
                     timeout_seconds,
-                    seeds=COMPARISON_SEEDS,
-                    prefix="development",
+                    focus=candidate.focus,
                 )
                 gates.extend(comparison_gates)
 
@@ -241,6 +240,77 @@ class BoundedPatchSearchEngine:
             ),
             gates=tuple(gates),
             comparison=comparison,
+        )
+
+    def _compare_focus_strategy(
+        self,
+        baseline_root: Path,
+        candidate_root: Path,
+        temp_root: Path,
+        timeout_seconds: float,
+        *,
+        focus: str,
+    ) -> tuple[PatchComparisonResult | None, list[PatchGateResult]]:
+        baseline_output = temp_root / "development-baseline.json"
+        candidate_output = temp_root / "development-candidate.json"
+        seeds_arg = ",".join(str(seed) for seed in COMPARISON_SEEDS)
+        runs = (
+            (
+                "development_baseline",
+                baseline_root,
+                baseline_output,
+                temp_root / "development-baseline-workspace",
+            ),
+            (
+                "development_candidate",
+                candidate_root,
+                candidate_output,
+                temp_root / "development-candidate-workspace",
+            ),
+        )
+        gates: list[PatchGateResult] = []
+        for name, root, output, workspace in runs:
+            command = (
+                sys.executable,
+                "-m",
+                "dgm_zero.strategy_benchmark",
+                "--workspace-root",
+                str(workspace),
+                "--output",
+                str(output),
+                "--seeds",
+                seeds_arg,
+                "--focus",
+                focus,
+            )
+            result = self.lab._run_gate(
+                name,
+                command,
+                root,
+                self.lab._validation_env(root),
+                timeout_seconds,
+            )
+            gates.append(result)
+            if not result.passed:
+                return None, gates
+
+        baseline = load_json_object(
+            baseline_output,
+            "focus-conditioned baseline strategy benchmark",
+        )
+        candidate = load_json_object(
+            candidate_output,
+            "focus-conditioned candidate strategy benchmark",
+        )
+        if baseline.get("focus") != focus or candidate.get("focus") != focus:
+            raise ValueError("focus-conditioned benchmark report focus mismatch")
+        return (
+            compare_strategy_reports(
+                baseline,
+                candidate,
+                expected_seeds=COMPARISON_SEEDS,
+            ),
+            gates,
         )
 
     def _write_report(self, report: PatchSearchReport) -> PatchSearchReport:
@@ -302,8 +372,9 @@ def search_identity(
     max_candidates: int,
 ) -> str:
     payload = {
-        "protocol_version": 1,
+        "protocol_version": 2,
         "focus": focus,
+        "focus_conditioned_development": True,
         "max_candidates": max_candidates,
         "minimum_development_gain": MIN_DEVELOPMENT_GAIN,
         "candidate_digests": [candidate.proposal.digest for candidate in candidates],

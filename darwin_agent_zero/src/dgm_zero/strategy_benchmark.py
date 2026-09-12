@@ -8,12 +8,20 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .evolver import DarwinAgentZero, EvolutionConfig
+from .metacognition import CognitiveState
 
 
 DEFAULT_SEEDS = (11, 23, 47)
 DEFAULT_GENERATIONS = 4
 DEFAULT_POPULATION = 6
 DIVERSITY_TARGET = 12
+BENCHMARK_FOCI = (
+    "repair correctness",
+    "escape stagnation",
+    "increase diversity",
+    "mine failures",
+    "raise curriculum",
+)
 
 
 @dataclass(frozen=True)
@@ -35,10 +43,66 @@ class StrategyBenchmarkReport:
     seeds: tuple[int, ...]
     generations: int
     population: int
+    focus: str | None
     runs: tuple[StrategyRunResult, ...]
     aggregate_score: float
     mean_champion_score: float
     worst_champion_score: float
+
+
+class FocusConditionedDarwinAgent(DarwinAgentZero):
+    """Benchmark-only agent that holds metacognitive focus constant.
+
+    This class is never used by the production evolution loop. It lets strategy
+    benchmarks isolate the behavior of a policy branch under the state it is
+    intended to control while final patch certification can remain broad/generic.
+    """
+
+    def __init__(
+        self,
+        workspace: Path,
+        config: EvolutionConfig,
+        *,
+        focus: str | None,
+    ) -> None:
+        self._benchmark_focus = validate_focus(focus)
+        super().__init__(workspace, config)
+
+    def assess_self(self) -> CognitiveState:
+        if self._benchmark_focus is None:
+            return super().assess_self()
+        return cognitive_state_for_focus(self._benchmark_focus)
+
+
+def cognitive_state_for_focus(focus: str) -> CognitiveState:
+    focus = validate_focus(focus)
+    if focus is None:
+        raise ValueError("focus is required for a conditioned cognitive state")
+    templates = {
+        "repair correctness": (0.35, 0.65, 0.20, 0.50),
+        "escape stagnation": (0.75, 0.25, 0.90, 0.50),
+        "increase diversity": (0.80, 0.20, 0.20, 0.15),
+        "mine failures": (0.82, 0.18, 0.20, 0.60),
+        "raise curriculum": (0.90, 0.10, 0.10, 0.70),
+    }
+    confidence, uncertainty, stagnation, diversity = templates[focus]
+    return CognitiveState(
+        confidence=confidence,
+        uncertainty=uncertainty,
+        stagnation=stagnation,
+        diversity=diversity,
+        safety_pressure=0.0,
+        focus=focus,
+        critique=f"benchmark-conditioned focus: {focus}",
+    )
+
+
+def validate_focus(focus: str | None) -> str | None:
+    if focus is None:
+        return None
+    if not isinstance(focus, str) or focus not in BENCHMARK_FOCI:
+        raise ValueError(f"unsupported benchmark focus: {focus}")
+    return focus
 
 
 def score_run(
@@ -74,15 +138,27 @@ def run_strategy_benchmark(
     seeds: tuple[int, ...] = DEFAULT_SEEDS,
     generations: int = DEFAULT_GENERATIONS,
     population: int = DEFAULT_POPULATION,
+    focus: str | None = None,
 ) -> StrategyBenchmarkReport:
-    if not seeds or any(isinstance(seed, bool) or not isinstance(seed, int) for seed in seeds):
+    if not seeds or any(
+        isinstance(seed, bool) or not isinstance(seed, int) for seed in seeds
+    ):
         raise ValueError("seeds must contain integers")
     if len(set(seeds)) != len(seeds):
         raise ValueError("seeds must be unique")
-    if isinstance(generations, bool) or not isinstance(generations, int) or generations <= 0:
+    if (
+        isinstance(generations, bool)
+        or not isinstance(generations, int)
+        or generations <= 0
+    ):
         raise ValueError("generations must be a positive integer")
-    if isinstance(population, bool) or not isinstance(population, int) or population <= 0:
+    if (
+        isinstance(population, bool)
+        or not isinstance(population, int)
+        or population <= 0
+    ):
         raise ValueError("population must be a positive integer")
+    focus = validate_focus(focus)
 
     workspace_root = workspace_root.resolve()
     if workspace_root.exists():
@@ -92,7 +168,7 @@ def run_strategy_benchmark(
     runs: list[StrategyRunResult] = []
     for seed in seeds:
         workspace = workspace_root / f"seed-{seed}"
-        report = DarwinAgentZero(
+        report = FocusConditionedDarwinAgent(
             workspace,
             EvolutionConfig(
                 generations=generations,
@@ -100,6 +176,7 @@ def run_strategy_benchmark(
                 seed=seed,
                 curriculum_enabled=False,
             ),
+            focus=focus,
         ).run()
         champion_score = (
             float(report.champion_score.get("weighted_total", 0.0))
@@ -138,6 +215,7 @@ def run_strategy_benchmark(
         seeds=tuple(seeds),
         generations=generations,
         population=population,
+        focus=focus,
         runs=tuple(runs),
         aggregate_score=aggregate_score,
         mean_champion_score=mean_champion,
@@ -168,18 +246,22 @@ def parse_seeds(value: str) -> tuple[int, ...]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run deterministic Darwin strategy benchmark")
+    parser = argparse.ArgumentParser(
+        description="Run deterministic Darwin strategy benchmark"
+    )
     parser.add_argument("--workspace-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--seeds", type=parse_seeds, default=DEFAULT_SEEDS)
     parser.add_argument("--generations", type=int, default=DEFAULT_GENERATIONS)
     parser.add_argument("--population", type=int, default=DEFAULT_POPULATION)
+    parser.add_argument("--focus", choices=BENCHMARK_FOCI, default=None)
     args = parser.parse_args(argv)
     report = run_strategy_benchmark(
         args.workspace_root,
         seeds=args.seeds,
         generations=args.generations,
         population=args.population,
+        focus=args.focus,
     )
     write_report(args.output, report)
     print(json.dumps(asdict(report), sort_keys=True, allow_nan=False))
