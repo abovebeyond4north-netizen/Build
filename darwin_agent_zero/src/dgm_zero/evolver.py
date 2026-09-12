@@ -188,7 +188,10 @@ class DarwinAgentZero:
         self.memory.prune()
         champion_total = champion.score.get("weighted_total", 0.0) if champion else None
         if self.config.curriculum_enabled:
-            self.curriculum_state = self.curriculum.update_after_run(champion_total)
+            self.curriculum_state = self.curriculum.update_after_run(
+                champion_total,
+                progression_bias=self.meta_policy.curriculum_bias,
+            )
             self.mined_cases = self.mine_cases()
             self.oracle = self.make_oracle(self.curriculum_state)
         else:
