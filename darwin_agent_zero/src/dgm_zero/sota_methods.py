@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable, Protocol
@@ -27,10 +28,19 @@ class UCBOperatorBandit:
     """
 
     def __init__(self, arms: Iterable[str], exploration: float = 1.4) -> None:
-        self.exploration = exploration
-        self.arms: dict[str, BanditArm] = {name: BanditArm(name) for name in arms}
+        if not math.isfinite(exploration) or exploration <= 0:
+            raise ValueError("exploration must be finite and positive")
+        names = list(arms)
+        if any(not isinstance(name, str) or not name.strip() for name in names):
+            raise ValueError("bandit arm names must be non-empty strings")
+        if len(set(names)) != len(names):
+            raise ValueError("bandit arm names must be unique")
+        self.exploration = float(exploration)
+        self.arms: dict[str, BanditArm] = {name: BanditArm(name) for name in names}
 
     def choose(self) -> str:
+        if not self.arms:
+            raise ValueError("bandit has no operators to choose from")
         for arm in self.arms.values():
             if arm.pulls == 0:
                 return arm.name
@@ -41,6 +51,10 @@ class UCBOperatorBandit:
         ).name
 
     def update(self, name: str, reward: float) -> None:
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("bandit arm name must be a non-empty string")
+        if not math.isfinite(float(reward)):
+            raise ValueError("bandit reward must be finite")
         if name not in self.arms:
             self.arms[name] = BanditArm(name)
         arm = self.arms[name]
@@ -62,22 +76,59 @@ class UCBOperatorBandit:
             "exploration": self.exploration,
             "arms": {name: asdict(arm) for name, arm in self.arms.items()},
         }
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp = path.with_name(f".{path.name}.{time.time_ns()}.tmp")
+        temp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        temp.replace(path)
 
     @classmethod
     def load(cls, path: Path, arms: Iterable[str], exploration: float = 1.4) -> "UCBOperatorBandit":
-        bandit = cls(arms, exploration=exploration)
+        configured_arms = list(arms)
+        bandit = cls(configured_arms, exploration=exploration)
         if not path.exists():
             return bandit
-        data = json.loads(path.read_text(encoding="utf-8"))
-        bandit.exploration = float(data.get("exploration", exploration))
-        for name, arm_data in data.get("arms", {}).items():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"invalid operator bandit state: {exc}") from exc
+        if not isinstance(data, dict):
+            raise ValueError("invalid operator bandit state: expected object")
+
+        stored_exploration = data.get("exploration", exploration)
+        try:
+            stored_exploration = float(stored_exploration)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("invalid operator bandit exploration") from exc
+        if not math.isfinite(stored_exploration) or stored_exploration <= 0:
+            raise ValueError("invalid operator bandit exploration")
+        bandit.exploration = stored_exploration
+
+        stored_arms = data.get("arms", {})
+        if not isinstance(stored_arms, dict):
+            raise ValueError("invalid operator bandit arms")
+        for name, arm_data in stored_arms.items():
+            if not isinstance(name, str) or not name.strip() or not isinstance(arm_data, dict):
+                raise ValueError("invalid operator bandit arm")
+            pulls_raw = arm_data.get("pulls", 0)
+            if isinstance(pulls_raw, bool) or not isinstance(pulls_raw, int) or pulls_raw < 0:
+                raise ValueError(f"invalid pull count for operator {name}")
+            reward_raw = arm_data.get("reward_sum", 0.0)
+            try:
+                reward_sum = float(reward_raw)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"invalid reward sum for operator {name}") from exc
+            if (
+                not math.isfinite(reward_sum)
+                or reward_sum < 0.0
+                or reward_sum > pulls_raw + 1e-12
+            ):
+                raise ValueError(f"invalid reward sum for operator {name}")
             bandit.arms[name] = BanditArm(
                 name=name,
-                pulls=int(arm_data.get("pulls", 0)),
-                reward_sum=float(arm_data.get("reward_sum", 0.0)),
+                pulls=pulls_raw,
+                reward_sum=reward_sum,
             )
-        for name in arms:
+        for name in configured_arms:
             bandit.arms.setdefault(name, BanditArm(name))
         return bandit
 
@@ -154,4 +205,7 @@ def disagreement(values: Iterable[object]) -> float:
 
 
 def clamp01(value: float) -> float:
-    return max(0.0, min(1.0, float(value)))
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        raise ValueError("value must be finite")
+    return max(0.0, min(1.0, numeric))
