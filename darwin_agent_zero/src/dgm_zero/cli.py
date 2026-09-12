@@ -10,6 +10,7 @@ from .capability_sandbox import SkillSandbox
 from .checkpoint import CheckpointManager
 from .evolver import DarwinAgentZero, EvolutionConfig
 from .objective import ObjectiveCompiler
+from .patch_search import BoundedPatchSearchEngine
 from .patch_synthesis import (
     BoundedPolicyPatchSynthesizer,
     KNOWN_FOCI,
@@ -95,6 +96,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     synthesize.add_argument("--max-candidates", type=int, default=12)
     synthesize.add_argument("--focus", choices=KNOWN_FOCI, default=None)
+
+    search = sub.add_parser(
+        "search-patches",
+        help=(
+            "generate and development-screen bounded strategy variants, select "
+            "one finalist, then consume one fresh certification replay"
+        ),
+    )
+    search.add_argument(
+        "--repo-root",
+        type=Path,
+        default=Path.cwd(),
+        help="Darwin Agent Zero project root containing pyproject.toml",
+    )
+    search.add_argument(
+        "--workspace",
+        type=Path,
+        default=Path(".dgm_workspace"),
+    )
+    search.add_argument("--max-candidates", type=int, default=6)
+    search.add_argument("--focus", choices=KNOWN_FOCI, default=None)
+    search.add_argument("--timeout", type=float, default=90.0)
 
     patch = sub.add_parser(
         "evaluate-patch",
@@ -249,6 +272,35 @@ def main(argv: list[str] | None = None) -> int:
             )
         return 0 if paths else 1
 
+    if args.command == "search-patches":
+        try:
+            report = BoundedPatchSearchEngine(
+                args.repo_root,
+                args.workspace,
+            ).run(
+                max_candidates=args.max_candidates,
+                focus=args.focus,
+                timeout_seconds=args.timeout,
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            print(f"Patch search error: {exc}", file=sys.stderr)
+            return 2
+        print("Darwin Agent Zero bounded patch search")
+        print(f"generated: {report.generated_candidates}")
+        print(f"screened: {report.screened_candidates}")
+        print(f"development passes: {report.development_passes}")
+        print(f"finalist: {report.finalist_digest}")
+        print(f"certification attempted: {report.certification_attempted}")
+        print(f"certification passed: {report.certification_passed}")
+        print(f"certification status: {report.certification_status}")
+        print(f"report: {report.report_path}")
+        for screen in report.screens:
+            print(
+                f"screen {screen.proposal_digest}: passed={screen.passed} "
+                f"reason={screen.reason} aggregate_delta={screen.aggregate_delta}"
+            )
+        return 0 if report.certification_passed else 1
+
     if args.command == "evaluate-patch":
         try:
             proposal = PatchProposal.load(args.proposal)
@@ -267,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Darwin Agent Zero patch evaluation")
         print(f"proposal: {report.proposal_digest}")
         print(f"passed: {report.passed}")
+        print(f"certification status: {report.certification_status}")
         print(f"report: {report.report_path}")
         for reason in report.validation.reasons:
             print(f"validation: {reason}")
