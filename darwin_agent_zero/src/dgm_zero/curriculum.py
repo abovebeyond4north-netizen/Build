@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -44,13 +45,33 @@ class CurriculumManager:
     def save(self, state: CurriculumState) -> None:
         self.path.write_text(json.dumps(asdict(state), indent=2, sort_keys=True), encoding="utf-8")
 
-    def update_after_run(self, champion_score: float | None) -> CurriculumState:
+    def update_after_run(
+        self,
+        champion_score: float | None,
+        *,
+        progression_bias: float = 1.0,
+    ) -> CurriculumState:
         state = self.load()
         if champion_score is None:
             self.save(state)
             return state
+        if not math.isfinite(progression_bias) or progression_bias <= 0:
+            raise ValueError("progression_bias must be finite and positive")
 
-        stable = state.stable_successes + 1 if champion_score >= 0.94 else 0
+        # Preserve the historical 0.94 threshold at bias=1.0 while allowing the
+        # metacognitive policy to make modest, bounded adjustments. Higher bias
+        # means the system believes it is ready for harder tasks; lower bias
+        # requires stronger evidence before a run counts as a stable success.
+        bounded_bias = max(0.5, min(1.5, progression_bias))
+        success_threshold = max(
+            0.90,
+            min(0.98, 0.94 + 0.03 * (1.0 - bounded_bias)),
+        )
+        stable = (
+            state.stable_successes + 1
+            if champion_score >= success_threshold
+            else 0
+        )
         next_level = state.current
         if stable >= 2:
             next_level = self.level_for(state.current.level + 1)
