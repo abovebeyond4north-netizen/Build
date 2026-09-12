@@ -66,7 +66,8 @@ class CapabilityAcquirer:
     the finalist is fixed; certification then evaluates the fixed baseline control
     and exactly one finalist. Holdout cannot feed another search step in the run.
     A skill is promoted only when it clears all split thresholds and improves on
-    the currently installed version by the requested minimum gain.
+    the currently installed version by the requested minimum gain. Specs may also
+    bound adaptive validation reuse relative to the amount of validation evidence.
     """
 
     def __init__(
@@ -91,14 +92,28 @@ class CapabilityAcquirer:
         max_candidates: int = 96,
         validation_budget: int = 12,
     ) -> AcquisitionReport:
-        if max_candidates <= 0:
-            raise ValueError("max_candidates must be positive")
-        if validation_budget <= 0:
-            raise ValueError("validation_budget must be positive")
+        if (
+            isinstance(max_candidates, bool)
+            or not isinstance(max_candidates, int)
+            or max_candidates <= 0
+        ):
+            raise ValueError("max_candidates must be a positive integer")
+        if (
+            isinstance(validation_budget, bool)
+            or not isinstance(validation_budget, int)
+            or validation_budget <= 0
+        ):
+            raise ValueError("validation_budget must be a positive integer")
 
         train_cases = spec.cases_for("train")
         validation_cases = spec.cases_for("validation")
         holdout_cases = spec.cases_for("holdout")
+        evidence_limit = spec.validation_trial_limit()
+        effective_validation_budget = (
+            validation_budget
+            if evidence_limit is None
+            else min(validation_budget, evidence_limit)
+        )
 
         certification_digest = holdout_digest(spec)
         current = self.library.current(spec.name)
@@ -238,7 +253,7 @@ class CapabilityAcquirer:
             tuple[SkillCandidate, SuiteScore, SuiteScore, int]
         ] = []
         for candidate, train_score, complexity in train_survivors[
-            :validation_budget
+            :effective_validation_budget
         ]:
             validation_score = self.sandbox.evaluate(
                 candidate.source,
