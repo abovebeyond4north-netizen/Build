@@ -23,6 +23,7 @@ class ArchiveRecord:
     created_at: float
     signature: str | None = None
     bucket: str | None = None
+    source_expression: str | None = None
     evaluation_context: str | None = None
     verified_delta: float | None = None
     previous_hash: str | None = None
@@ -33,8 +34,9 @@ class Archive:
     """Append-only evolutionary memory for generated agents/tools.
 
     New records are hash chained so modifications or reordering are detected on
-    read. Oracle-backed records can carry both the evaluation-context digest and
-    the parent-to-child score delta measured within that same frozen context.
+    read. Oracle-backed records can carry evaluation context, verified score delta,
+    and the exact source expression that generated the candidate. When an archived
+    parent is supplied, its expression must match that source.
     """
 
     def __init__(self, workspace: Path) -> None:
@@ -116,6 +118,12 @@ class Archive:
             cls._validate_text(record.parent_id, "parent_id")
         cls._validate_text(record.expression, "expression")
         cls._validate_text(record.reason, "reason")
+        source_expression = record.source_expression
+        if source_expression is not None:
+            source_expression = cls._validate_text(
+                source_expression,
+                "source_expression",
+            )
         if not isinstance(record.accepted, bool):
             raise ValueError("accepted must be a boolean")
         if not math.isfinite(float(record.created_at)):
@@ -139,6 +147,7 @@ class Archive:
             created_at=float(record.created_at),
             signature=record.signature,
             bucket=record.bucket,
+            source_expression=source_expression,
             evaluation_context=record.evaluation_context,
             verified_delta=verified_delta,
             previous_hash=record.previous_hash,
@@ -154,6 +163,7 @@ class Archive:
         score: dict[str, float],
         accepted: bool,
         reason: str,
+        source_expression: str | None = None,
         evaluation_context: str | None = None,
         verified_delta: float | None = None,
     ) -> ArchiveRecord:
@@ -163,6 +173,11 @@ class Archive:
         reason = self._validate_text(reason, "reason")
         if parent_id is not None:
             parent_id = self._validate_text(parent_id, "parent_id")
+        if source_expression is not None:
+            source_expression = self._validate_text(
+                source_expression,
+                "source_expression",
+            )
         if not isinstance(accepted, bool):
             raise ValueError("accepted must be a boolean")
         clean_score = self._validate_score(score)
@@ -191,12 +206,24 @@ class Archive:
             ),
             None,
         )
-        existing_ids = {record.id for record in existing}
-        if parent_id is not None and parent_id not in existing_ids:
-            raise ValueError(f"parent_id does not reference an existing archive record: {parent_id}")
+        existing_by_id = {record.id: record for record in existing}
+        if parent_id is not None:
+            parent_record = existing_by_id.get(parent_id)
+            if parent_record is None:
+                raise ValueError(
+                    "parent_id does not reference an existing archive record: "
+                    f"{parent_id}"
+                )
+            if source_expression is None:
+                source_expression = parent_record.expression
+            elif source_expression != parent_record.expression:
+                raise ValueError(
+                    "source_expression does not match the referenced parent"
+                )
 
         nonce = time.time_ns()
         record_id = self.make_id(expression, generation, nonce)
+        existing_ids = set(existing_by_id)
         while record_id in existing_ids:
             nonce += 1
             record_id = self.make_id(expression, generation, nonce)
@@ -213,6 +240,7 @@ class Archive:
             created_at=nonce / 1_000_000_000,
             signature=signature.digest,
             bucket=signature.bucket,
+            source_expression=source_expression,
             evaluation_context=evaluation_context,
             verified_delta=verified_delta,
             previous_hash=previous_hash,
@@ -325,6 +353,8 @@ def archive_record_hash(record: ArchiveRecord) -> str:
     payload.pop("record_hash", None)
     # Preserve verification of older hash-chained archives. Optional evidence
     # fields that did not exist in a legacy record are excluded when absent.
+    if payload.get("source_expression") is None:
+        payload.pop("source_expression", None)
     if payload.get("evaluation_context") is None:
         payload.pop("evaluation_context", None)
     if payload.get("verified_delta") is None:
