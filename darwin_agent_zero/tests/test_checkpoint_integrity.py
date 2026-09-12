@@ -22,6 +22,7 @@ class CheckpointIntegrityTests(unittest.TestCase):
             manifest = CheckpointManager(workspace).save_if_healthy()
             self.assertIn("archive.jsonl", manifest.file_hashes)
             self.assertEqual(len(manifest.file_hashes["archive.jsonl"]), 64)
+            self.assertEqual(len(manifest.manifest_hash), 64)
 
     def test_corrupt_checkpoint_fails_before_restoring_any_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -50,7 +51,7 @@ class CheckpointIntegrityTests(unittest.TestCase):
                 "current-memory\n",
             )
 
-    def test_legacy_manifest_without_hashes_remains_readable(self):
+    def test_legacy_manifest_without_integrity_fields_remains_readable(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)
             self.write_health(workspace)
@@ -65,6 +66,7 @@ class CheckpointIntegrityTests(unittest.TestCase):
             ):
                 data = json.loads(path.read_text(encoding="utf-8"))
                 data.pop("file_hashes", None)
+                data.pop("manifest_hash", None)
                 path.write_text(json.dumps(data), encoding="utf-8")
 
             (workspace / "archive.jsonl").write_text("changed\n", encoding="utf-8")
@@ -74,6 +76,24 @@ class CheckpointIntegrityTests(unittest.TestCase):
                 (workspace / "archive.jsonl").read_text(encoding="utf-8"),
                 "known-good\n",
             )
+
+    def test_deleting_integrity_fields_from_sealed_manifest_is_detected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            self.write_health(workspace)
+            (workspace / "archive.jsonl").write_text("known-good\n", encoding="utf-8")
+            manager = CheckpointManager(workspace)
+            manifest = manager.save_if_healthy()
+
+            pointer_path = manager.root / "latest_healthy.json"
+            pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+            pointer.pop("file_hashes", None)
+            pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+
+            found = manager.latest_healthy_manifest()
+            self.assertIsNotNone(found)
+            self.assertEqual(found.checkpoint_id, manifest.checkpoint_id)
+            self.assertIn("archive.jsonl", found.file_hashes)
 
 
 if __name__ == "__main__":
