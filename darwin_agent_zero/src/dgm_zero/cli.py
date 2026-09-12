@@ -10,6 +10,11 @@ from .capability_sandbox import SkillSandbox
 from .checkpoint import CheckpointManager
 from .evolver import DarwinAgentZero, EvolutionConfig
 from .objective import ObjectiveCompiler
+from .patch_synthesis import (
+    BoundedPolicyPatchSynthesizer,
+    KNOWN_FOCI,
+    write_synthesized_patches,
+)
 from .self_patch import PatchProposal, RepositoryPatchLab
 
 
@@ -69,6 +74,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="objective text, for example: Improve Python debugging ability",
     )
     add_acquisition_options(objective)
+
+    synthesize = sub.add_parser(
+        "synthesize-patches",
+        help=(
+            "generate bounded content-addressed meta-policy proposals without "
+            "editing or evaluating the live source tree"
+        ),
+    )
+    synthesize.add_argument(
+        "--repo-root",
+        type=Path,
+        default=Path.cwd(),
+        help="Darwin Agent Zero project root containing pyproject.toml",
+    )
+    synthesize.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(".dgm_workspace/patch_proposals"),
+    )
+    synthesize.add_argument("--max-candidates", type=int, default=12)
+    synthesize.add_argument("--focus", choices=KNOWN_FOCI, default=None)
 
     patch = sub.add_parser(
         "evaluate-patch",
@@ -194,6 +220,34 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(f"Capability acquisition error: {exc}", file=sys.stderr)
             return 2
+
+    if args.command == "synthesize-patches":
+        try:
+            lab = RepositoryPatchLab(
+                args.repo_root,
+                args.output_dir.parent / "patch_synthesis_evidence",
+            )
+            candidates = BoundedPolicyPatchSynthesizer(
+                args.repo_root
+            ).generate_validated(
+                lab,
+                max_candidates=args.max_candidates,
+                focus=args.focus,
+            )
+            paths = write_synthesized_patches(args.output_dir, candidates)
+        except (OSError, TypeError, ValueError) as exc:
+            print(f"Patch synthesis error: {exc}", file=sys.stderr)
+            return 2
+        print("Darwin Agent Zero bounded patch synthesis")
+        print(f"generated: {len(paths)}")
+        print(f"output: {args.output_dir}")
+        for path, candidate in zip(paths, candidates):
+            print(
+                f"proposal: {path} focus={candidate.focus!r} "
+                f"knob={candidate.knob} "
+                f"{candidate.old_value:.3f}->{candidate.new_value:.3f}"
+            )
+        return 0 if paths else 1
 
     if args.command == "evaluate-patch":
         try:
