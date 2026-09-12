@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -12,6 +13,9 @@ from .capability_model import (
     CapabilitySpec,
     SkillCandidate,
 )
+
+
+CERTIFICATION_LEDGER_VERSION = 1
 
 
 class SkillLibrary:
@@ -93,21 +97,32 @@ class SkillLibrary:
             raise ValueError(
                 "holdout suite has already been consumed for this capability"
             )
-        rows.append(
-            {
-                "capability": capability,
-                "holdout_digest": holdout_digest,
-                "finalist_digest": finalist_digest,
-                "holdout_score": holdout_score,
-                "passed": bool(passed),
-                "evaluated_at": time.time(),
-            }
+
+        previous_hash = next(
+            (
+                row["record_hash"]
+                for row in reversed(rows)
+                if isinstance(row.get("record_hash"), str)
+            ),
+            None,
         )
+        row: dict[str, Any] = {
+            "ledger_version": CERTIFICATION_LEDGER_VERSION,
+            "previous_hash": previous_hash,
+            "capability": capability,
+            "holdout_digest": holdout_digest,
+            "finalist_digest": finalist_digest,
+            "holdout_score": holdout_score,
+            "passed": bool(passed),
+            "evaluated_at": time.time(),
+        }
+        row["record_hash"] = certification_record_hash(row)
+        rows.append(row)
         atomic_write_text(
             self.certification_path,
             "".join(
-                json.dumps(row, sort_keys=True) + "\n"
-                for row in rows
+                json.dumps(item, sort_keys=True) + "\n"
+                for item in rows
             ),
         )
 
@@ -153,6 +168,8 @@ class SkillLibrary:
         if not self.certification_path.exists():
             return []
         rows: list[dict[str, Any]] = []
+        chained_started = False
+        previous_hash: str | None = None
         for line_number, line in enumerate(
             self.certification_path.read_text(
                 encoding="utf-8"
@@ -173,11 +190,72 @@ class SkillLibrary:
                     "invalid capability certification ledger at "
                     f"line {line_number}: expected object"
                 )
+
+            record_hash = row.get("record_hash")
+            if record_hash is None:
+                if chained_started:
+                    raise ValueError(
+                        "invalid capability certification ledger at "
+                        f"line {line_number}: unchained record follows chained records"
+                    )
+                rows.append(row)
+                continue
+
+            chained_started = True
+            if row.get("ledger_version") != CERTIFICATION_LEDGER_VERSION:
+                raise ValueError(
+                    "invalid capability certification ledger at "
+                    f"line {line_number}: unsupported ledger version"
+                )
+            if not is_sha256(record_hash):
+                raise ValueError(
+                    "invalid capability certification ledger at "
+                    f"line {line_number}: malformed record hash"
+                )
+            if row.get("previous_hash") != previous_hash:
+                raise ValueError(
+                    "invalid capability certification ledger at "
+                    f"line {line_number}: hash-chain predecessor mismatch"
+                )
+            if certification_record_hash(row) != record_hash:
+                raise ValueError(
+                    "invalid capability certification ledger at "
+                    f"line {line_number}: record hash mismatch"
+                )
+            score = row.get("holdout_score")
+            if (
+                isinstance(score, bool)
+                or not isinstance(score, (int, float))
+                or not math.isfinite(float(score))
+                or not 0.0 <= float(score) <= 1.0
+            ):
+                raise ValueError(
+                    "invalid capability certification ledger at "
+                    f"line {line_number}: invalid holdout score"
+                )
+            previous_hash = record_hash
             rows.append(row)
         return rows
 
     def _capability_root(self, capability: str) -> Path:
         return self.root / capability
+
+
+def certification_record_hash(row: dict[str, Any]) -> str:
+    payload = {key: value for key, value in row.items() if key != "record_hash"}
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def is_sha256(value: object) -> bool:
+    if not isinstance(value, str) or len(value) != 64:
+        return False
+    return all(character in "0123456789abcdef" for character in value)
 
 
 def holdout_digest(spec: CapabilitySpec) -> str:
