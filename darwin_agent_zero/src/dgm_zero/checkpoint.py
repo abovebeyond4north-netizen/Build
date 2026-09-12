@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 
@@ -31,6 +32,7 @@ class CheckpointManifest:
     healthy: bool
     copied_files: list[str]
     reason: str
+    file_hashes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -55,9 +57,11 @@ class CheckpointManager:
         checkpoint_id = str(time.time_ns())
         target = self.root / checkpoint_id
         copied: list[str] = []
+        file_hashes: dict[str, str] = {}
         if healthy:
             target.mkdir(parents=True, exist_ok=True)
             copied = self._copy_snapshot_files(target)
+            file_hashes = self._hash_snapshot_files(target, copied)
         manifest = CheckpointManifest(
             checkpoint_id=checkpoint_id,
             path=str(target),
@@ -65,6 +69,7 @@ class CheckpointManager:
             healthy=healthy,
             copied_files=copied,
             reason=reason,
+            file_hashes=file_hashes,
         )
         self._write_manifest(manifest)
         return manifest
@@ -77,6 +82,7 @@ class CheckpointManager:
         target = Path(manifest.path)
         target.mkdir(parents=True, exist_ok=True)
         copied = self._copy_snapshot_files(target)
+        file_hashes = self._hash_snapshot_files(target, copied)
         refreshed = CheckpointManifest(
             checkpoint_id=manifest.checkpoint_id,
             path=manifest.path,
@@ -84,6 +90,7 @@ class CheckpointManager:
             healthy=True,
             copied_files=copied,
             reason=manifest.reason,
+            file_hashes=file_hashes,
         )
         self._write_manifest(refreshed)
         return refreshed
@@ -111,14 +118,48 @@ class CheckpointManager:
                 "checkpoint_path_missing",
             )
 
+        restorable = [
+            name
+            for name in manifest.copied_files
+            if name in SNAPSHOT_FILE_SET
+            and (checkpoint_path / name).exists()
+            and (checkpoint_path / name).is_file()
+        ]
+        if manifest.file_hashes:
+            for name in restorable:
+                expected = manifest.file_hashes.get(name)
+                if expected is None or sha256_file(checkpoint_path / name) != expected:
+                    report = RestoreReport(
+                        False,
+                        manifest.checkpoint_id,
+                        [],
+                        "checkpoint_integrity_failed",
+                    )
+                    self._write_json_atomic(
+                        self.root / "last_restore.json",
+                        asdict(report),
+                    )
+                    return report
+            if any(
+                name in SNAPSHOT_FILE_SET and name not in restorable
+                for name in manifest.copied_files
+            ):
+                report = RestoreReport(
+                    False,
+                    manifest.checkpoint_id,
+                    [],
+                    "checkpoint_integrity_failed",
+                )
+                self._write_json_atomic(
+                    self.root / "last_restore.json",
+                    asdict(report),
+                )
+                return report
+
         restored: list[str] = []
-        for name in manifest.copied_files:
-            if name not in SNAPSHOT_FILE_SET:
-                continue
-            src = checkpoint_path / name
-            if src.exists() and src.is_file():
-                shutil.copy2(src, self.workspace / name)
-                restored.append(name)
+        for name in restorable:
+            shutil.copy2(checkpoint_path / name, self.workspace / name)
+            restored.append(name)
 
         if not restored:
             report = RestoreReport(
@@ -171,6 +212,10 @@ class CheckpointManager:
                 copied.append(name)
         return copied
 
+    @staticmethod
+    def _hash_snapshot_files(target: Path, names: list[str]) -> dict[str, str]:
+        return {name: sha256_file(target / name) for name in names}
+
     def _read_health(self, path: Path) -> tuple[bool, str]:
         if not path.exists():
             return False, "health_report_missing"
@@ -199,6 +244,13 @@ class CheckpointManager:
             return None
         if not all(isinstance(name, str) for name in manifest.copied_files):
             return None
+        if not isinstance(manifest.file_hashes, dict):
+            return None
+        if not all(
+            isinstance(name, str) and isinstance(digest, str)
+            for name, digest in manifest.file_hashes.items()
+        ):
+            return None
         return manifest
 
     @staticmethod
@@ -219,3 +271,11 @@ class CheckpointManager:
         self._write_json_atomic(self.root / "latest.json", data)
         if manifest.healthy:
             self._write_json_atomic(self.root / "latest_healthy.json", data)
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
