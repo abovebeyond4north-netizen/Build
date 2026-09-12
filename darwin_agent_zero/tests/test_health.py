@@ -12,9 +12,32 @@ def report(**overrides):
         "total_records": 10,
         "accepted_records": 3,
         "champion_expression": "a * a + 3 * b - gcd(a, b)",
+        "champion_score": {
+            "correctness": 1.0,
+            "efficiency": 0.9,
+            "novelty": 0.6,
+            "safety": 1.0,
+            "simplicity": 0.8,
+            "generalization": 1.0,
+            "weighted_total": 0.9,
+        },
         "map_elites_cells": 2,
-        "cognitive_state": {"focus": "exploration"},
-        "operator_bandit": {"wrap": {"attempts": 1}},
+        "cognitive_state": {
+            "confidence": 0.9,
+            "uncertainty": 0.1,
+            "stagnation": 0.2,
+            "diversity": 0.5,
+            "safety_pressure": 0.0,
+            "focus": "exploration",
+            "critique": "healthy search state",
+        },
+        "operator_bandit": {
+            "wrap": {
+                "pulls": 1.0,
+                "reward_sum": 0.5,
+                "mean_reward": 0.5,
+            }
+        },
     }
     values.update(overrides)
     return SimpleNamespace(**values)
