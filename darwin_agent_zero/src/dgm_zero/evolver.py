@@ -16,6 +16,7 @@ from .map_elites import MAPElitesGrid
 from .memory import KnowledgeBank
 from .meta_learning import MetaLearner, MetaLearningPolicy
 from .metacognition import CognitiveState, MetacognitiveMonitor
+from .mutation import structural_replace
 from .oracle import EmpiricalGodelOracle
 from .provenance import ProvenanceRecorder
 from .self_instruction import SelfInstructor
@@ -155,6 +156,7 @@ class DarwinAgentZero:
     def run(self) -> EvolutionReport:
         parent: ArchiveRecord | None = self.select_parent()
         evaluated_expressions: set[str] = set()
+        completed_generations = 0
         for generation in range(self.config.generations):
             self.map_elites = MAPElitesGrid().build(self.archive.records())
             self.mined_cases = self.mine_cases()
@@ -191,8 +193,19 @@ class DarwinAgentZero:
                 evaluated_count += 1
                 if evaluated_count >= self.config.population:
                     break
-            parent = self.select_parent()
+            completed_generations = generation + 1
             self.operator_bandit.save(self.bandit_path)
+            if evaluated_count == 0:
+                self.memory.deposit(
+                    "search",
+                    (
+                        f"generation={generation}; stop=search_space_exhausted; "
+                        f"unique_evaluated={len(evaluated_expressions)}"
+                    ),
+                    0.9,
+                )
+                break
+            parent = self.select_parent()
 
         current_champion = self.current_champion()
         champion = current_champion.record if current_champion else None
@@ -226,7 +239,7 @@ class DarwinAgentZero:
         provenance_path = self.workspace / "provenance.json"
         elites = self.archive.elites_by_bucket()
         preliminary = EvolutionReport(
-            generations=self.config.generations,
+            generations=completed_generations,
             population=self.config.population,
             total_records=len(self.archive.records()),
             accepted_records=len(self.archive.accepted()),
@@ -411,7 +424,11 @@ class DarwinAgentZero:
             return Candidate(f"{expression}{self.rng.choice(MUTATION_SNIPPETS)}", mode)
         if mode == "simplify":
             return Candidate(expression.replace("b + b + b", "3 * b").replace("(a * a)", "a * a"), mode)
-        return Candidate(self.rng.choice(SEED_EXPRESSIONS), mode)
+        try:
+            replacement = structural_replace(expression, self.rng)
+        except (TypeError, ValueError):
+            replacement = self.rng.choice(SEED_EXPRESSIONS)
+        return Candidate(replacement, mode)
 
     def evaluate_and_archive(
         self,
