@@ -14,31 +14,38 @@ class MinedCase:
     b: int
     disagreement: int
     failures: int
+    evaluated: int
     expected: int
 
     @property
     def failure_rate(self) -> float:
-        return float(self.failures)
+        return self.failures / self.evaluated if self.evaluated else 0.0
 
 
 class CaseMiner:
     """Mine extra validation cases from archive failures and disagreement.
 
-    Static tests are useful, but open-ended systems need pressure that adapts to
-    what they have already tried. The miner evaluates the strongest archived
-    expressions over a bounded grid and prioritizes inputs where many candidates
-    are wrong. Disagreement remains a secondary signal, but consensus failures are
-    no longer invisible to the evolving evaluator.
+    Mining sources deliberately mix behavioural niches, recent stepping stones,
+    and historical leaders rather than trusting historical scores alone. This
+    keeps adaptive evaluation pressure relevant as the curriculum changes without
+    introducing a circular dependency on the current oracle.
     """
 
     def __init__(self, value_min: int, value_max: int, limit: int = 24) -> None:
+        for name, value in (("value_min", value_min), ("value_max", value_max)):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"{name} must be an integer")
+        if value_min > value_max:
+            raise ValueError("value_min must not exceed value_max")
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+            raise ValueError("limit must be a non-negative integer")
         self.value_min = value_min
         self.value_max = value_max
         self.limit = limit
 
     def mine(self, records: list[ArchiveRecord]) -> list[BenchmarkCase]:
-        expressions = unique_expressions(records)[:32]
-        if len(expressions) < 2:
+        expressions = select_mining_expressions(records, limit=32)
+        if len(expressions) < 2 or self.limit == 0:
             return []
         candidates: list[MinedCase] = []
         step = max(1, (self.value_max - self.value_min) // 12)
@@ -64,13 +71,14 @@ class CaseMiner:
                             b=b,
                             disagreement=len(outputs),
                             failures=failures,
+                            evaluated=len(expressions),
                             expected=expected,
                         )
                     )
         ranked = sorted(
             candidates,
             key=lambda item: (
-                item.failures / len(expressions),
+                item.failure_rate,
                 item.disagreement,
                 abs(item.a) + abs(item.b),
             ),
@@ -86,16 +94,52 @@ class CaseMiner:
         path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def unique_expressions(records: list[ArchiveRecord]) -> list[str]:
-    seen: set[str] = set()
-    output: list[str] = []
-    ranked = sorted(
+def select_mining_expressions(
+    records: list[ArchiveRecord],
+    limit: int = 32,
+) -> list[str]:
+    """Select bounded, diverse archive expressions without stale-score monopoly."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+        raise ValueError("limit must be a non-negative integer")
+    if limit == 0 or not records:
+        return []
+
+    historical = sorted(
         records,
         key=lambda record: record.score.get("weighted_total", 0.0),
         reverse=True,
     )
-    for record in ranked:
-        if record.expression not in seen:
-            seen.add(record.expression)
-            output.append(record.expression)
+    recent = list(reversed(records))
+
+    bucket_best: dict[str, ArchiveRecord] = {}
+    for record in historical:
+        bucket = record.bucket or "unknown"
+        bucket_best.setdefault(bucket, record)
+    niches = list(bucket_best.values())
+
+    sources = (niches, recent, historical)
+    positions = [0, 0, 0]
+    seen: set[str] = set()
+    output: list[str] = []
+    while len(output) < limit:
+        progressed = False
+        for source_index, source in enumerate(sources):
+            while positions[source_index] < len(source):
+                record = source[positions[source_index]]
+                positions[source_index] += 1
+                if record.expression in seen:
+                    continue
+                seen.add(record.expression)
+                output.append(record.expression)
+                progressed = True
+                break
+            if len(output) >= limit:
+                break
+        if not progressed:
+            break
     return output
+
+
+def unique_expressions(records: list[ArchiveRecord]) -> list[str]:
+    """Backward-compatible unbounded expression selection."""
+    return select_mining_expressions(records, limit=len(records))
