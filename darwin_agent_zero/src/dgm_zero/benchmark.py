@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 
 MAX_AST_NODES = 256
+EFFICIENCY_COST_SCALE = 64.0
 ALLOWED_BINOPS = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
@@ -18,6 +19,13 @@ ALLOWED_BINOPS = {
 }
 ALLOWED_UNARY = {ast.USub: operator.neg, ast.UAdd: operator.pos}
 ALLOWED_FUNCS = {"abs": abs, "gcd": math.gcd, "max": max, "min": min}
+BINOP_COST = {
+    ast.Add: 1,
+    ast.Sub: 1,
+    ast.Mult: 2,
+    ast.FloorDiv: 3,
+    ast.Mod: 3,
+}
 
 
 @dataclass(frozen=True)
@@ -43,6 +51,7 @@ class BenchmarkResult:
     total: int
     elapsed_seconds: float
     errors: list[str]
+    structural_cost: int | None = None
 
     @property
     def correctness(self) -> float:
@@ -50,7 +59,24 @@ class BenchmarkResult:
 
     @property
     def efficiency(self) -> float:
-        return max(0.0, min(1.0, 1.0 / (1.0 + self.elapsed_seconds)))
+        """Deterministic efficiency when structural cost evidence is available.
+
+        ``elapsed_seconds`` remains useful operational telemetry, but using raw wall
+        time in evolutionary fitness makes identical candidates score differently
+        under varying host load. New benchmark evaluations therefore use a bounded
+        AST operation-cost surrogate. Legacy manually constructed results that do
+        not carry structural cost retain the historical timing interpretation.
+        """
+        if self.structural_cost is not None:
+            cost = max(0, int(self.structural_cost))
+            return max(
+                0.0,
+                min(1.0, 1.0 / (1.0 + cost / EFFICIENCY_COST_SCALE)),
+            )
+        return max(
+            0.0,
+            min(1.0, 1.0 / (1.0 + self.elapsed_seconds)),
+        )
 
 
 @dataclass(frozen=True)
@@ -174,6 +200,31 @@ def _validate_tree(tree: ast.AST) -> None:
         )
 
 
+def expression_structural_cost(expr: str) -> int:
+    """Return a deterministic operation-cost surrogate for the tiny DSL."""
+    if not isinstance(expr, str) or not expr.strip():
+        raise ValueError("expression must be a non-empty string")
+    tree = ast.parse(expr, mode="eval")
+    _validate_tree(tree)
+    cost = 0
+    for node in ast.walk(tree):
+        if isinstance(node, ast.BinOp):
+            cost += BINOP_COST.get(type(node.op), 4)
+        elif isinstance(node, ast.UnaryOp):
+            cost += 1
+        elif isinstance(node, ast.Call):
+            cost += 4
+        elif isinstance(node, ast.Name):
+            cost += 1
+        elif (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, int)
+            and not isinstance(node.value, bool)
+        ):
+            cost += 1
+    return max(1, cost)
+
+
 def eval_expr(expr: str, a: int, b: int) -> int:
     """Evaluate a deliberately tiny arithmetic expression language.
 
@@ -220,9 +271,15 @@ def evaluate_expression(
     """Evaluate an expression against exactly the supplied cases.
 
     ``None`` selects the canonical suite. An explicitly empty list remains empty,
-    which keeps callers in control of benchmark composition.
+    which keeps callers in control of benchmark composition. Wall time is retained
+    as telemetry; structural cost is the deterministic efficiency evidence.
     """
     evaluation_cases = canonical_cases() if cases is None else cases
+    try:
+        structural_cost = expression_structural_cost(expr)
+    except (SyntaxError, TypeError, ValueError):
+        structural_cost = MAX_AST_NODES
+
     passed = 0
     errors: list[str] = []
     start = time.perf_counter()
@@ -238,10 +295,11 @@ def evaluate_expression(
         except Exception as exc:
             errors.append(f"{case.name}: {exc}")
     return BenchmarkResult(
-        passed,
-        len(evaluation_cases),
-        time.perf_counter() - start,
-        errors[:10],
+        passed=passed,
+        total=len(evaluation_cases),
+        elapsed_seconds=time.perf_counter() - start,
+        errors=errors[:10],
+        structural_cost=structural_cost,
     )
 
 
