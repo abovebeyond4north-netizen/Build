@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import shutil
 import time
@@ -269,7 +270,7 @@ class CheckpointManager:
             if supplied_hash:
                 if not isinstance(supplied_hash, str):
                     return None
-                if not hashlib.compare_digest(
+                if not hmac.compare_digest(
                     supplied_hash,
                     cls._manifest_digest(data),
                 ):
