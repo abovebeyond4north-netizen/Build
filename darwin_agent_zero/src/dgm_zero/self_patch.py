@@ -30,6 +30,10 @@ MAX_PATCH_FILES = 4
 MAX_FILE_BYTES = 32_768
 MAX_TOTAL_BYTES = 65_536
 OUTPUT_TAIL_CHARS = 4_000
+COMPARISON_SEEDS = (11, 23, 47)
+AGGREGATE_REGRESSION_TOLERANCE = 1e-12
+MEAN_CHAMPION_REGRESSION_TOLERANCE = 0.005
+PER_SEED_CHAMPION_REGRESSION_TOLERANCE = 0.02
 
 
 @dataclass(frozen=True)
@@ -158,11 +162,26 @@ class PatchGateResult:
 
 
 @dataclass(frozen=True)
+class PatchComparisonResult:
+    passed: bool
+    reasons: tuple[str, ...]
+    seeds: tuple[int, ...]
+    baseline_aggregate_score: float
+    candidate_aggregate_score: float
+    aggregate_delta: float
+    baseline_mean_champion_score: float
+    candidate_mean_champion_score: float
+    mean_champion_delta: float
+    worst_seed_champion_delta: float
+
+
+@dataclass(frozen=True)
 class PatchEvaluationReport:
     proposal_digest: str
     passed: bool
     validation: PatchValidationReport
     gates: tuple[PatchGateResult, ...]
+    comparison: PatchComparisonResult | None
     created_at: float
     report_path: str
 
@@ -172,8 +191,8 @@ class RepositoryPatchLab:
 
     The lab is deliberately proposal-only. It has no method that writes a passed
     proposal back into ``repo_root`` and no GitHub merge capability. A proposal is
-    applied only inside an ephemeral copy, then compile/test gates produce evidence
-    for human review.
+    applied only inside an ephemeral copy, then compile/test and comparative
+    strategy gates produce evidence for human review.
     """
 
     def __init__(
@@ -294,23 +313,15 @@ class RepositoryPatchLab:
             raise ValueError("timeout_seconds must be finite and positive")
         validation = self.validate(proposal)
         gates: list[PatchGateResult] = []
+        comparison: PatchComparisonResult | None = None
+        default_gates = gate_commands is None
         if validation.passed:
             with tempfile.TemporaryDirectory(prefix="dgm-self-patch-") as tmp:
-                staged_root = Path(tmp) / "repo"
-                shutil.copytree(
-                    self.repo_root,
-                    staged_root,
-                    ignore=shutil.ignore_patterns(
-                        ".git",
-                        ".venv",
-                        "__pycache__",
-                        "*.pyc",
-                        ".dgm_workspace*",
-                        ".pytest_cache",
-                        "build",
-                        "dist",
-                    ),
-                )
+                temp_root = Path(tmp)
+                baseline_root = temp_root / "baseline"
+                staged_root = temp_root / "candidate"
+                self._copy_project(self.repo_root, baseline_root)
+                self._copy_project(baseline_root, staged_root)
                 for item in proposal.files:
                     relative_path = normalize_relative_path(item.relative_path)
                     target = staged_root / relative_path
@@ -334,15 +345,27 @@ class RepositoryPatchLab:
                     if not result.passed:
                         break
 
-        passed = validation.passed and bool(gates) and all(
-            gate.passed for gate in gates
-        )
+                if default_gates and gates and all(gate.passed for gate in gates):
+                    comparison, comparison_gates = self._compare_strategy(
+                        baseline_root,
+                        staged_root,
+                        temp_root,
+                        float(timeout_seconds),
+                    )
+                    gates.extend(comparison_gates)
+
+        gates_passed = bool(gates) and all(gate.passed for gate in gates)
+        comparison_passed = comparison is None or comparison.passed
+        if default_gates:
+            comparison_passed = comparison is not None and comparison.passed
+        passed = validation.passed and gates_passed and comparison_passed
         return self._write_report(
             PatchEvaluationReport(
                 proposal_digest=proposal.digest,
                 passed=passed,
                 validation=validation,
                 gates=tuple(gates),
+                comparison=comparison,
                 created_at=time.time(),
                 report_path="",
             )
@@ -362,6 +385,76 @@ class RepositoryPatchLab:
                 (python, "scripts/validate_capability_acquisition.py"),
             ),
         )
+
+    @staticmethod
+    def _copy_project(source: Path, destination: Path) -> None:
+        shutil.copytree(
+            source,
+            destination,
+            ignore=shutil.ignore_patterns(
+                ".git",
+                ".venv",
+                "__pycache__",
+                "*.pyc",
+                ".dgm_workspace*",
+                ".pytest_cache",
+                "build",
+                "dist",
+                "patch_reports",
+            ),
+        )
+
+    def _compare_strategy(
+        self,
+        baseline_root: Path,
+        staged_root: Path,
+        temp_root: Path,
+        timeout_seconds: float,
+    ) -> tuple[PatchComparisonResult | None, list[PatchGateResult]]:
+        baseline_output = temp_root / "baseline-strategy.json"
+        candidate_output = temp_root / "candidate-strategy.json"
+        seeds_arg = ",".join(str(seed) for seed in COMPARISON_SEEDS)
+        runs = (
+            (
+                "strategy_baseline",
+                baseline_root,
+                baseline_output,
+                temp_root / "baseline-strategy-workspace",
+            ),
+            (
+                "strategy_candidate",
+                staged_root,
+                candidate_output,
+                temp_root / "candidate-strategy-workspace",
+            ),
+        )
+        gate_results: list[PatchGateResult] = []
+        for name, root, output, workspace in runs:
+            command = (
+                sys.executable,
+                "-m",
+                "dgm_zero.strategy_benchmark",
+                "--workspace-root",
+                str(workspace),
+                "--output",
+                str(output),
+                "--seeds",
+                seeds_arg,
+            )
+            result = self._run_gate(
+                name,
+                command,
+                root,
+                self._validation_env(root),
+                timeout_seconds,
+            )
+            gate_results.append(result)
+            if not result.passed:
+                return None, gate_results
+
+        baseline = load_json_object(baseline_output, "baseline strategy benchmark")
+        candidate = load_json_object(candidate_output, "candidate strategy benchmark")
+        return compare_strategy_reports(baseline, candidate), gate_results
 
     @staticmethod
     def _validation_env(staged_root: Path) -> dict[str, str]:
@@ -430,6 +523,7 @@ class RepositoryPatchLab:
                 **asdict(report),
                 "validation": report.validation,
                 "gates": report.gates,
+                "comparison": report.comparison,
                 "report_path": str(report_path),
             }
         )
@@ -448,6 +542,116 @@ class RepositoryPatchLab:
         )
         latest_tmp.replace(latest)
         return completed
+
+
+def compare_strategy_reports(
+    baseline: dict[str, object],
+    candidate: dict[str, object],
+) -> PatchComparisonResult:
+    baseline_seeds = parse_report_seeds(baseline)
+    candidate_seeds = parse_report_seeds(candidate)
+    if baseline_seeds != candidate_seeds:
+        raise ValueError("strategy benchmark seeds do not match")
+    if baseline_seeds != COMPARISON_SEEDS:
+        raise ValueError("strategy benchmark did not use the sealed comparison seeds")
+
+    baseline_aggregate = report_score(baseline, "aggregate_score")
+    candidate_aggregate = report_score(candidate, "aggregate_score")
+    baseline_mean = report_score(baseline, "mean_champion_score")
+    candidate_mean = report_score(candidate, "mean_champion_score")
+    baseline_runs = champion_scores_by_seed(baseline)
+    candidate_runs = champion_scores_by_seed(candidate)
+    if set(baseline_runs) != set(candidate_runs):
+        raise ValueError("strategy benchmark run seeds do not match")
+
+    per_seed_deltas = {
+        seed: candidate_runs[seed] - baseline_runs[seed]
+        for seed in baseline_seeds
+    }
+    aggregate_delta = candidate_aggregate - baseline_aggregate
+    mean_delta = candidate_mean - baseline_mean
+    worst_seed_delta = min(per_seed_deltas.values())
+    reasons: list[str] = []
+    if aggregate_delta < -AGGREGATE_REGRESSION_TOLERANCE:
+        reasons.append(
+            f"aggregate strategy score regressed by {aggregate_delta:.6f}"
+        )
+    if mean_delta < -MEAN_CHAMPION_REGRESSION_TOLERANCE:
+        reasons.append(
+            f"mean champion score regressed by {mean_delta:.6f}"
+        )
+    if worst_seed_delta < -PER_SEED_CHAMPION_REGRESSION_TOLERANCE:
+        worst_seed = min(per_seed_deltas, key=per_seed_deltas.get)
+        reasons.append(
+            f"seed {worst_seed} champion score regressed by "
+            f"{per_seed_deltas[worst_seed]:.6f}"
+        )
+
+    return PatchComparisonResult(
+        passed=not reasons,
+        reasons=tuple(reasons),
+        seeds=baseline_seeds,
+        baseline_aggregate_score=baseline_aggregate,
+        candidate_aggregate_score=candidate_aggregate,
+        aggregate_delta=aggregate_delta,
+        baseline_mean_champion_score=baseline_mean,
+        candidate_mean_champion_score=candidate_mean,
+        mean_champion_delta=mean_delta,
+        worst_seed_champion_delta=worst_seed_delta,
+    )
+
+
+def parse_report_seeds(report: dict[str, object]) -> tuple[int, ...]:
+    raw = report.get("seeds")
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("strategy benchmark report has invalid seeds")
+    seeds: list[int] = []
+    for value in raw:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("strategy benchmark seeds must be integers")
+        seeds.append(value)
+    if len(set(seeds)) != len(seeds):
+        raise ValueError("strategy benchmark seeds must be unique")
+    return tuple(seeds)
+
+
+def report_score(report: dict[str, object], field: str) -> float:
+    raw = report.get(field)
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise ValueError(f"strategy benchmark {field} must be numeric")
+    value = float(raw)
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        raise ValueError(
+            f"strategy benchmark {field} must be finite and between 0 and 1"
+        )
+    return value
+
+
+def champion_scores_by_seed(report: dict[str, object]) -> dict[int, float]:
+    raw_runs = report.get("runs")
+    if not isinstance(raw_runs, list) or not raw_runs:
+        raise ValueError("strategy benchmark report has invalid runs")
+    output: dict[int, float] = {}
+    for raw in raw_runs:
+        if not isinstance(raw, dict):
+            raise ValueError("strategy benchmark run must be an object")
+        seed = raw.get("seed")
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            raise ValueError("strategy benchmark run seed must be an integer")
+        if seed in output:
+            raise ValueError("strategy benchmark contains duplicate run seeds")
+        output[seed] = report_score(raw, "champion_score")
+    return output
+
+
+def load_json_object(path: Path, label: str) -> dict[str, object]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid {label}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"invalid {label}: expected object")
+    return value
 
 
 def normalize_relative_path(value: str) -> str:
