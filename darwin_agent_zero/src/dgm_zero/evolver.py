@@ -55,6 +55,8 @@ OPERATORS = ["wrap", "append", "replace", "simplify"]
 class Candidate:
     expression: str
     operator: str
+    source_expression: str | None = None
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -182,7 +184,6 @@ class DarwinAgentZero:
             self.meta_policy = self.meta_learner.policy_from_state(self.cognitive_state)
             self.metacognition.write(self.workspace / "cognitive_state.json", self.cognitive_state)
             self.oracle = self.make_oracle(self.curriculum_state)
-            parent_total = self.current_parent_total(parent)
             tasks = self.instructor.create_tasks(parent)
             level = self.curriculum_state.current
             self.memory.deposit(
@@ -196,17 +197,40 @@ class DarwinAgentZero:
                 0.5,
             )
             candidates = self.self_instruct(parent, generation)
+            records_by_id = {record.id: record for record in self.archive.records()}
+            baseline_totals: dict[str, float] = {}
             evaluated_count = 0
             for candidate in candidates:
                 if candidate.expression in evaluated_expressions:
                     continue
                 evaluated_expressions.add(candidate.expression)
+
+                candidate_parent = None
+                if candidate.parent_id is not None:
+                    candidate_parent = records_by_id.get(candidate.parent_id)
+                    if candidate_parent is None:
+                        raise ValueError(
+                            "candidate parent_id is not present in the archive: "
+                            f"{candidate.parent_id}"
+                        )
+
+                baseline_total: float | None = None
+                if candidate.source_expression is not None:
+                    if candidate.source_expression not in baseline_totals:
+                        baseline_totals[candidate.source_expression] = (
+                            self.oracle.judge(
+                                candidate.source_expression
+                            ).score.weighted_total
+                        )
+                    baseline_total = baseline_totals[candidate.source_expression]
+
                 record = self.evaluate_and_archive(
                     candidate,
-                    parent,
+                    candidate_parent,
                     generation,
-                    parent_total=parent_total,
+                    parent_total=baseline_total,
                 )
+                records_by_id[record.id] = record
                 self.map_elites.add(record)
                 evaluated_count += 1
                 if evaluated_count >= self.config.population:
@@ -389,25 +413,58 @@ class DarwinAgentZero:
         return self.rng.choice(pool).record
 
     def self_instruct(self, parent: ArchiveRecord | None, generation: int) -> list[Candidate]:
-        if parent is None:
-            base_pool = SEED_EXPRESSIONS[:]
-        else:
-            base_pool = [parent.expression] + SEED_EXPRESSIONS
+        accepted = self.archive.accepted()
+        latest_by_expression: dict[str, ArchiveRecord] = {}
+        for record in accepted:
+            latest_by_expression[record.expression] = record
 
-        for expression in self.map_elites.elite_expressions(limit=self.config.elite_parent_limit):
-            if expression not in base_pool:
-                base_pool.append(expression)
+        bases: list[tuple[str, ArchiveRecord | None]] = []
+        base_positions: dict[str, int] = {}
 
+        def add_base(expression: str, record: ArchiveRecord | None) -> None:
+            position = base_positions.get(expression)
+            if position is None:
+                base_positions[expression] = len(bases)
+                bases.append((expression, record))
+                return
+            old_expression, old_record = bases[position]
+            if old_record is None and record is not None:
+                bases[position] = (old_expression, record)
+
+        if parent is not None:
+            add_base(parent.expression, parent)
+        for expression in SEED_EXPRESSIONS:
+            add_base(expression, latest_by_expression.get(expression))
+        for expression in self.map_elites.elite_expressions(
+            limit=self.config.elite_parent_limit
+        ):
+            add_base(expression, latest_by_expression.get(expression))
         for memory in self.memory.recall("champion", limit=3):
-            if memory.content not in base_pool:
-                base_pool.append(memory.content)
+            add_base(memory.content, latest_by_expression.get(memory.content))
 
         candidates: list[Candidate] = []
-        expansion = max(1, int((self.config.population // 2) * self.meta_policy.exploration_bias))
-        for base in base_pool:
-            candidates.append(Candidate(base, "seed"))
+        expansion = max(
+            1,
+            int(
+                (self.config.population // 2)
+                * self.meta_policy.exploration_bias
+            ),
+        )
+        for base_expression, base_record in bases:
+            if base_record is None:
+                candidates.append(Candidate(base_expression, "seed"))
             for _ in range(expansion):
-                candidates.append(self.mutate(base, generation))
+                mutation = self.mutate(base_expression, generation)
+                if mutation.expression == base_expression:
+                    continue
+                candidates.append(
+                    Candidate(
+                        expression=mutation.expression,
+                        operator=mutation.operator,
+                        source_expression=base_expression,
+                        parent_id=base_record.id if base_record else None,
+                    )
+                )
         self.rng.shuffle(candidates)
         return dedupe_candidates(candidates)
 
@@ -465,7 +522,11 @@ class DarwinAgentZero:
             self.operator_bandit.update(candidate.operator, reward)
         self.memory.deposit(
             "candidate",
-            f"operator={candidate.operator}; reward={reward:.3f}; {candidate.expression} -> {decision.reason}",
+            (
+                f"operator={candidate.operator}; reward={reward:.3f}; "
+                f"source={candidate.source_expression or 'root'}; "
+                f"{candidate.expression} -> {decision.reason}"
+            ),
             usefulness,
         )
         return self.archive.append(
@@ -475,6 +536,7 @@ class DarwinAgentZero:
             score=decision.score.as_dict(),
             accepted=decision.accepted,
             reason=decision.reason,
+            source_expression=candidate.source_expression,
         )
 
     def write_champion(self, champion: ArchiveRecord) -> None:
@@ -494,10 +556,22 @@ class DarwinAgentZero:
 
 
 def dedupe_candidates(items: list[Candidate]) -> list[Candidate]:
-    seen: set[str] = set()
-    output: list[Candidate] = []
+    by_expression: dict[str, Candidate] = {}
+    order: list[str] = []
     for item in items:
-        if item.expression not in seen:
-            seen.add(item.expression)
-            output.append(item)
-    return output
+        existing = by_expression.get(item.expression)
+        if existing is None:
+            by_expression[item.expression] = item
+            order.append(item.expression)
+            continue
+        existing_rank = (
+            existing.parent_id is not None,
+            existing.source_expression is not None,
+        )
+        item_rank = (
+            item.parent_id is not None,
+            item.source_expression is not None,
+        )
+        if item_rank > existing_rank:
+            by_expression[item.expression] = item
+    return [by_expression[expression] for expression in order]
