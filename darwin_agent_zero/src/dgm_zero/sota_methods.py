@@ -24,7 +24,9 @@ class UCBOperatorBandit:
 
     Operators that have produced reward are reused, but uncertain operators still
     get exploration chances. The bandit can persist across runs so learning does
-    not reset every time the CLI is invoked.
+    not reset every time the CLI is invoked. A search-context key can also be
+    attached so evidence from an older curriculum/evaluator regime is discounted
+    rather than treated as equally current forever.
     """
 
     def __init__(self, arms: Iterable[str], exploration: float = 1.4) -> None:
@@ -36,6 +38,7 @@ class UCBOperatorBandit:
         if len(set(names)) != len(names):
             raise ValueError("bandit arm names must be unique")
         self.exploration = float(exploration)
+        self.context: str | None = None
         self.arms: dict[str, BanditArm] = {name: BanditArm(name) for name in names}
 
     def choose(self) -> str:
@@ -47,7 +50,8 @@ class UCBOperatorBandit:
         total = max(1, sum(arm.pulls for arm in self.arms.values()))
         return max(
             self.arms.values(),
-            key=lambda arm: arm.mean_reward + self.exploration * math.sqrt(math.log(total + 1) / arm.pulls),
+            key=lambda arm: arm.mean_reward
+            + self.exploration * math.sqrt(math.log(total + 1) / arm.pulls),
         ).name
 
     def update(self, name: str, reward: float) -> None:
@@ -60,6 +64,46 @@ class UCBOperatorBandit:
         arm = self.arms[name]
         arm.pulls += 1
         arm.reward_sum += clamp01(reward)
+
+    def adapt_context(self, context: str, retention: float = 0.5) -> bool:
+        """Move operator evidence into a new search regime with bounded decay.
+
+        The first context assignment upgrades legacy state without discarding it.
+        Re-entering the same context is a no-op. When the context changes, pulls
+        and rewards are discounted together, preserving approximate means while
+        restoring exploration pressure. Tiny histories can decay fully back to an
+        unseen arm, which is preferable to one stale observation becoming sticky.
+        """
+        if not isinstance(context, str) or not context.strip():
+            raise ValueError("bandit context must be a non-empty string")
+        if (
+            isinstance(retention, bool)
+            or not isinstance(retention, (int, float))
+            or not math.isfinite(float(retention))
+            or not 0.0 <= float(retention) <= 1.0
+        ):
+            raise ValueError("bandit context retention must be finite and between 0 and 1")
+        normalized = context.strip()
+        if self.context is None:
+            self.context = normalized
+            return False
+        if self.context == normalized:
+            return False
+
+        keep = float(retention)
+        for arm in self.arms.values():
+            previous_pulls = arm.pulls
+            previous_reward = arm.reward_sum
+            retained_pulls = int(math.floor(previous_pulls * keep + 1e-12))
+            if retained_pulls <= 0:
+                arm.pulls = 0
+                arm.reward_sum = 0.0
+                continue
+            retained_reward = previous_reward * keep
+            arm.pulls = retained_pulls
+            arm.reward_sum = max(0.0, min(float(retained_pulls), retained_reward))
+        self.context = normalized
+        return True
 
     def snapshot(self) -> dict[str, dict[str, float]]:
         return {
@@ -74,6 +118,7 @@ class UCBOperatorBandit:
     def save(self, path: Path) -> None:
         payload = {
             "exploration": self.exploration,
+            "context": self.context,
             "arms": {name: asdict(arm) for name, arm in self.arms.items()},
         }
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -102,6 +147,12 @@ class UCBOperatorBandit:
         if not math.isfinite(stored_exploration) or stored_exploration <= 0:
             raise ValueError("invalid operator bandit exploration")
         bandit.exploration = stored_exploration
+
+        stored_context = data.get("context")
+        if stored_context is not None:
+            if not isinstance(stored_context, str) or not stored_context.strip():
+                raise ValueError("invalid operator bandit context")
+            bandit.context = stored_context.strip()
 
         stored_arms = data.get("arms", {})
         if not isinstance(stored_arms, dict):
