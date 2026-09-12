@@ -33,6 +33,7 @@ class CheckpointManifest:
     copied_files: list[str]
     reason: str
     file_hashes: dict[str, str] = field(default_factory=dict)
+    manifest_hash: str = ""
 
 
 @dataclass(frozen=True)
@@ -62,14 +63,16 @@ class CheckpointManager:
             target.mkdir(parents=True, exist_ok=True)
             copied = self._copy_snapshot_files(target)
             file_hashes = self._hash_snapshot_files(target, copied)
-        manifest = CheckpointManifest(
-            checkpoint_id=checkpoint_id,
-            path=str(target),
-            created_at=time.time(),
-            healthy=healthy,
-            copied_files=copied,
-            reason=reason,
-            file_hashes=file_hashes,
+        manifest = self._seal_manifest(
+            CheckpointManifest(
+                checkpoint_id=checkpoint_id,
+                path=str(target),
+                created_at=time.time(),
+                healthy=healthy,
+                copied_files=copied,
+                reason=reason,
+                file_hashes=file_hashes,
+            )
         )
         self._write_manifest(manifest)
         return manifest
@@ -77,20 +80,23 @@ class CheckpointManager:
     def refresh(self, manifest: CheckpointManifest) -> CheckpointManifest:
         """Refresh a healthy checkpoint after final artifacts are written."""
         if not manifest.healthy:
-            self._write_manifest(manifest)
-            return manifest
+            sealed = self._seal_manifest(manifest)
+            self._write_manifest(sealed)
+            return sealed
         target = Path(manifest.path)
         target.mkdir(parents=True, exist_ok=True)
         copied = self._copy_snapshot_files(target)
         file_hashes = self._hash_snapshot_files(target, copied)
-        refreshed = CheckpointManifest(
-            checkpoint_id=manifest.checkpoint_id,
-            path=manifest.path,
-            created_at=manifest.created_at,
-            healthy=True,
-            copied_files=copied,
-            reason=manifest.reason,
-            file_hashes=file_hashes,
+        refreshed = self._seal_manifest(
+            CheckpointManifest(
+                checkpoint_id=manifest.checkpoint_id,
+                path=manifest.path,
+                created_at=manifest.created_at,
+                healthy=True,
+                copied_files=copied,
+                reason=manifest.reason,
+                file_hashes=file_hashes,
+            )
         )
         self._write_manifest(refreshed)
         return refreshed
@@ -231,14 +237,45 @@ class CheckpointManager:
             summary = "healthy" if healthy else "needs_attention"
         return healthy, summary
 
+    @classmethod
+    def _seal_manifest(cls, manifest: CheckpointManifest) -> CheckpointManifest:
+        data = asdict(manifest)
+        data["manifest_hash"] = ""
+        digest = cls._manifest_digest(data)
+        return CheckpointManifest(**{**data, "manifest_hash": digest})
+
     @staticmethod
-    def _load_manifest_file(path: Path) -> CheckpointManifest | None:
+    def _manifest_digest(data: dict[str, object]) -> str:
+        canonical = {**data, "manifest_hash": ""}
+        payload = json.dumps(
+            canonical,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
+
+    @classmethod
+    def _load_manifest_file(cls, path: Path) -> CheckpointManifest | None:
         if not path.exists() or not path.is_file():
             return None
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return None
+            # Legacy manifests remain readable. New sealed manifests fail closed
+            # when any protected field is edited without recomputing the digest.
+            supplied_hash = data.get("manifest_hash", "")
+            if supplied_hash:
+                if not isinstance(supplied_hash, str):
+                    return None
+                if not hashlib.compare_digest(
+                    supplied_hash,
+                    cls._manifest_digest(data),
+                ):
+                    return None
             manifest = CheckpointManifest(**data)
-        except (OSError, json.JSONDecodeError, TypeError):
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
             return None
         if not isinstance(manifest.copied_files, list):
             return None
@@ -250,6 +287,8 @@ class CheckpointManager:
             isinstance(name, str) and isinstance(digest, str)
             for name, digest in manifest.file_hashes.items()
         ):
+            return None
+        if not isinstance(manifest.manifest_hash, str):
             return None
         return manifest
 
