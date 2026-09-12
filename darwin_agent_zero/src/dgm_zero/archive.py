@@ -33,15 +33,15 @@ class Archive:
 
     New records are hash chained so modifications or reordering are detected on
     read. Older unchained archives remain readable until the first chained record.
-    New oracle-backed records can also carry a SHA-256 evaluation-context digest
-    identifying the benchmark/search evidence under which their score was created.
+    Oracle-backed records can also carry a SHA-256 evaluation-context digest
+    identifying the frozen evidence under which their score was created.
     """
 
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.path = self.workspace / "archive.jsonl"
-        self.evaluation_context: str | None = None
+        self._pending_evaluation_context: tuple[str, str] | None = None
 
     def make_id(
         self,
@@ -80,6 +80,13 @@ class Archive:
         if "weighted_total" in output and not 0.0 <= output["weighted_total"] <= 1.0:
             raise ValueError("score weighted_total must be between 0 and 1")
         return output
+
+    def stage_evaluation_context(self, expression: str, digest: str) -> None:
+        """Stage one context digest for the next append of this exact expression."""
+        expression = self._validate_text(expression, "expression")
+        if not is_sha256(digest):
+            raise ValueError("evaluation_context must be a SHA-256 digest")
+        self._pending_evaluation_context = (expression, digest)
 
     @classmethod
     def _validate_loaded_record(cls, record: ArchiveRecord) -> ArchiveRecord:
@@ -135,8 +142,13 @@ class Archive:
         if not isinstance(accepted, bool):
             raise ValueError("accepted must be a boolean")
         clean_score = self._validate_score(score)
-        if evaluation_context is None:
-            evaluation_context = self.evaluation_context
+
+        pending = self._pending_evaluation_context
+        self._pending_evaluation_context = None
+        if evaluation_context is None and pending is not None:
+            pending_expression, pending_digest = pending
+            if pending_expression == expression:
+                evaluation_context = pending_digest
         if evaluation_context is not None and not is_sha256(evaluation_context):
             raise ValueError("evaluation_context must be a SHA-256 digest")
 
