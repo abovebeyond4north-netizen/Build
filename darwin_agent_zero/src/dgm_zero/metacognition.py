@@ -85,7 +85,7 @@ class MetacognitiveMonitor:
         accepted_rate = len(evidence_accepted) / max(1, len(evidence_records))
         verified_deltas = [
             float(record.verified_delta)
-            for record in recent
+            for record in evidence_records[-20:]
             if record.verified_delta is not None
         ]
         diversity = min(1.0, elite_cell_count / 12.0)
@@ -171,7 +171,11 @@ def stagnation_score(
     Legacy archives fall back to the historical-frontier heuristic.
     """
 
-    if isinstance(recent_window, bool) or not isinstance(recent_window, int) or recent_window <= 0:
+    if (
+        isinstance(recent_window, bool)
+        or not isinstance(recent_window, int)
+        or recent_window <= 0
+    ):
         raise ValueError("recent_window must be a positive integer")
     if (
         isinstance(meaningful_gain, bool)
@@ -187,7 +191,9 @@ def stagnation_score(
     if deltas:
         for delta in deltas:
             if not math.isfinite(float(delta)) or not -1.0 <= float(delta) <= 1.0:
-                raise ValueError("verified deltas must be finite and between -1 and 1")
+                raise ValueError(
+                    "verified deltas must be finite and between -1 and 1"
+                )
         best_gain = max(0.0, max(float(delta) for delta in deltas))
         progress = min(1.0, best_gain / float(meaningful_gain))
         return 1.0 - progress
