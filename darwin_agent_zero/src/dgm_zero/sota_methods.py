@@ -127,6 +127,22 @@ def regret(parent_score: float | None, child_score: float) -> float:
     return max(0.0, parent_score - child_score)
 
 
+def improvement_reward(parent_score: float | None, child_score: float) -> float:
+    """Reward mutation operators only for verified progress over their parent.
+
+    The previous bandit update mixed absolute child quality with regret, which
+    could still assign a positive reward to a regressing child. For recursive
+    self-improvement, operator credit should reflect actual measured progress.
+    Seed candidates have no parent, so their verified absolute score is used.
+    """
+
+    child = clamp01(child_score)
+    if parent_score is None:
+        return child
+    parent = clamp01(parent_score)
+    return clamp01(max(0.0, child - parent))
+
+
 def disagreement(values: Iterable[object]) -> float:
     """Normalized ensemble disagreement over candidate outputs."""
 

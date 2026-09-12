@@ -19,7 +19,7 @@ from .metacognition import CognitiveState, MetacognitiveMonitor
 from .oracle import EmpiricalGodelOracle
 from .provenance import ProvenanceRecorder
 from .self_instruction import SelfInstructor
-from .sota_methods import UCBOperatorBandit, pareto_front, regret, uncertainty_score
+from .sota_methods import UCBOperatorBandit, improvement_reward, pareto_front, uncertainty_score
 from .tools import ToolRegistry, default_registry
 
 
@@ -296,8 +296,7 @@ class DarwinAgentZero:
         parent_score = parent.score.get("weighted_total") if parent else None
         decision = self.oracle.judge(candidate.expression, parent_total=parent_score)
         usefulness = decision.score.weighted_total
-        loss = regret(parent_score, usefulness)
-        reward = max(0.0, usefulness - loss)
+        reward = improvement_reward(parent_score, usefulness)
         if candidate.operator != "seed":
             self.operator_bandit.update(candidate.operator, reward)
         self.memory.deposit(
