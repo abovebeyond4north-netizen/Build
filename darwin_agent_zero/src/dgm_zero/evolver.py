@@ -57,6 +57,13 @@ class Candidate:
 
 
 @dataclass(frozen=True)
+class CurrentArchiveCandidate:
+    record: ArchiveRecord
+    score: dict[str, float]
+    accepted: bool
+
+
+@dataclass(frozen=True)
 class EvolutionConfig:
     generations: int = 12
     population: int = 6
@@ -146,7 +153,7 @@ class DarwinAgentZero:
         return EmpiricalGodelOracle(self.archive, self.matrix, benchmark_config, self.mined_cases)
 
     def run(self) -> EvolutionReport:
-        parent: ArchiveRecord | None = self.archive.champion()
+        parent: ArchiveRecord | None = self.select_parent()
         evaluated_expressions: set[str] = set()
         for generation in range(self.config.generations):
             self.map_elites = MAPElitesGrid().build(self.archive.records())
@@ -187,12 +194,18 @@ class DarwinAgentZero:
             parent = self.select_parent()
             self.operator_bandit.save(self.bandit_path)
 
-        champion = self.archive.champion()
+        current_champion = self.current_champion()
+        champion = current_champion.record if current_champion else None
+        champion_score = current_champion.score if current_champion else None
         if champion:
             self.write_champion(champion)
-            self.memory.deposit("champion", champion.expression, champion.score.get("weighted_total", 0.0))
+            self.memory.deposit(
+                "champion",
+                champion.expression,
+                champion_score.get("weighted_total", 0.0) if champion_score else 0.0,
+            )
         self.memory.prune()
-        champion_total = champion.score.get("weighted_total", 0.0) if champion else None
+        champion_total = champion_score.get("weighted_total", 0.0) if champion_score else None
         if self.config.curriculum_enabled:
             self.curriculum_state = self.curriculum.update_after_run(
                 champion_total,
@@ -219,7 +232,7 @@ class DarwinAgentZero:
             accepted_records=len(self.archive.accepted()),
             champion_id=champion.id if champion else None,
             champion_expression=champion.expression if champion else None,
-            champion_score=champion.score if champion else None,
+            champion_score=champion_score,
             elite_buckets={bucket: record.id for bucket, record in sorted(elites.items())},
             map_elites_cells=len(self.map_elites.cells),
             map_elites_path=str(map_path),
@@ -256,22 +269,93 @@ class DarwinAgentZero:
             return None
         return self.oracle.judge(parent.expression).score.weighted_total
 
-    def select_parent(self) -> ArchiveRecord | None:
+    def archive_shortlist(self) -> list[ArchiveRecord]:
+        """Mix archive elites, historical leaders, and recent stepping stones."""
         accepted = self.archive.accepted()
         if not accepted:
-            return None
+            return []
+
+        limit = max(1, self.config.elite_parent_limit)
         elite_ids = {cell.record_id for cell in self.map_elites.cells.values()}
-        elite_records = [record for record in accepted if record.id in elite_ids]
-        candidate_pool = elite_records or accepted
+        elite_records = sorted(
+            (record for record in accepted if record.id in elite_ids),
+            key=lambda record: record.score.get("weighted_total", 0.0),
+            reverse=True,
+        )
+        historical = sorted(
+            accepted,
+            key=lambda record: record.score.get("weighted_total", 0.0),
+            reverse=True,
+        )
+        recent = list(reversed(accepted[-limit:]))
+
+        sources = (elite_records, historical, recent)
+        positions = [0, 0, 0]
+        selected: list[ArchiveRecord] = []
+        seen: set[str] = set()
+        while len(selected) < limit:
+            progressed = False
+            for source_index, source in enumerate(sources):
+                while positions[source_index] < len(source):
+                    record = source[positions[source_index]]
+                    positions[source_index] += 1
+                    if record.id in seen:
+                        continue
+                    seen.add(record.id)
+                    selected.append(record)
+                    progressed = True
+                    break
+                if len(selected) >= limit:
+                    break
+            if not progressed:
+                break
+        return selected
+
+    def current_archive_candidates(self) -> list[CurrentArchiveCandidate]:
+        """Re-evaluate bounded archive candidates using today's oracle."""
+        evaluated: list[CurrentArchiveCandidate] = []
+        for record in self.archive_shortlist():
+            decision = self.oracle.judge(record.expression)
+            evaluated.append(
+                CurrentArchiveCandidate(
+                    record=record,
+                    score=decision.score.as_dict(),
+                    accepted=decision.accepted,
+                )
+            )
+        return evaluated
+
+    def current_champion(self) -> CurrentArchiveCandidate | None:
+        """Return the strongest archive member that still clears current gates."""
+        current = [candidate for candidate in self.current_archive_candidates() if candidate.accepted]
+        if not current:
+            return None
+        return max(
+            current,
+            key=lambda candidate: candidate.score.get("weighted_total", 0.0),
+        )
+
+    def select_parent(self) -> ArchiveRecord | None:
+        current = self.current_archive_candidates()
+        if not current:
+            return None
+
+        currently_accepted = [candidate for candidate in current if candidate.accepted]
+        candidate_pool = currently_accepted or current
         front = pareto_front(candidate_pool)
         pool = sorted(
             front or candidate_pool,
-            key=lambda record: record.score.get("weighted_total", 0.0) + 0.15 * uncertainty_score(record.score),
+            key=lambda candidate: candidate.score.get("weighted_total", 0.0)
+            + 0.15 * uncertainty_score(candidate.score),
             reverse=True,
-        )[: self.config.elite_parent_limit]
-        if self.cognitive_state.focus in {"increase diversity", "escape stagnation"} and elite_records:
-            return self.rng.choice(elite_records)
-        return self.rng.choice(pool)
+        )
+
+        if self.cognitive_state.focus in {"increase diversity", "escape stagnation"}:
+            elite_ids = {cell.record_id for cell in self.map_elites.cells.values()}
+            elite_pool = [candidate for candidate in pool if candidate.record.id in elite_ids]
+            if elite_pool:
+                return self.rng.choice(elite_pool).record
+        return self.rng.choice(pool).record
 
     def self_instruct(self, parent: ArchiveRecord | None, generation: int) -> list[Candidate]:
         if parent is None:
