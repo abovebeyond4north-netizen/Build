@@ -23,6 +23,7 @@ class CheckpointTests(unittest.TestCase):
             manifest = manager.save_if_healthy()
             self.assertTrue(manifest.healthy)
             self.assertIn("archive.jsonl", manifest.copied_files)
+            self.assertTrue(manifest.manifest_hash)
 
             (workspace / "archive.jsonl").write_text("corrupt\n", encoding="utf-8")
             restored = manager.restore_latest()
@@ -68,6 +69,43 @@ class CheckpointTests(unittest.TestCase):
             found = manager.latest_healthy_manifest()
             self.assertIsNotNone(found)
             self.assertEqual(found.checkpoint_id, manifest.checkpoint_id)
+
+    def test_tampered_pointer_falls_back_to_sealed_checkpoint_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            self.write_health(workspace, True, "healthy")
+            (workspace / "archive.jsonl").write_text("good\n", encoding="utf-8")
+            manager = CheckpointManager(workspace)
+            manifest = manager.save_if_healthy()
+
+            pointer_path = manager.root / "latest_healthy.json"
+            pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+            pointer["reason"] = "tampered"
+            pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+
+            found = manager.latest_healthy_manifest()
+            self.assertIsNotNone(found)
+            self.assertEqual(found.checkpoint_id, manifest.checkpoint_id)
+            self.assertEqual(found.reason, "healthy")
+
+    def test_tampered_checkpoint_manifest_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            self.write_health(workspace, True, "healthy")
+            (workspace / "archive.jsonl").write_text("good\n", encoding="utf-8")
+            manager = CheckpointManager(workspace)
+            manifest = manager.save_if_healthy()
+
+            pointer_path = manager.root / "latest_healthy.json"
+            pointer_path.write_text("{broken", encoding="utf-8")
+            manifest_path = Path(manifest.path) / "manifest.json"
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            data["file_hashes"]["archive.jsonl"] = "0" * 64
+            manifest_path.write_text(json.dumps(data), encoding="utf-8")
+
+            self.assertIsNone(manager.latest_healthy_manifest())
+            restored = manager.restore_latest()
+            self.assertFalse(restored.restored)
 
     def test_restore_ignores_manifest_paths_outside_snapshot_allowlist(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -120,6 +158,8 @@ class CheckpointTests(unittest.TestCase):
             refreshed = manager.refresh(manifest)
 
             checkpoint_path = Path(refreshed.path)
+            self.assertTrue(refreshed.manifest_hash)
+            self.assertNotEqual(refreshed.manifest_hash, manifest.manifest_hash)
             self.assertIn("evolution_report.json", refreshed.copied_files)
             self.assertIn("provenance.json", refreshed.copied_files)
             self.assertEqual(
