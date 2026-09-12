@@ -204,6 +204,22 @@ def main(argv: list[str] | None = None) -> int:
                 f"gate {gate.name}: passed={gate.passed} "
                 f"returncode={gate.returncode} elapsed={gate.elapsed_seconds:.3f}s"
             )
+        if report.comparison is not None:
+            comparison = report.comparison
+            print(
+                "strategy comparison: "
+                f"passed={comparison.passed} "
+                f"baseline={comparison.baseline_aggregate_score:.6f} "
+                f"candidate={comparison.candidate_aggregate_score:.6f} "
+                f"delta={comparison.aggregate_delta:+.6f}"
+            )
+            print(
+                "champion comparison: "
+                f"mean_delta={comparison.mean_champion_delta:+.6f} "
+                f"worst_seed_delta={comparison.worst_seed_champion_delta:+.6f}"
+            )
+            for reason in comparison.reasons:
+                print(f"comparison: {reason}")
         return 0 if report.passed else 1
 
     if args.command == "restore":
