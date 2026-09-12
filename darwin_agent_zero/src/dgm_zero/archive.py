@@ -39,10 +39,16 @@ class Archive:
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.path = self.workspace / "archive.jsonl"
 
-    def make_id(self, expression: str, generation: int) -> str:
-        digest = hashlib.sha256(
-            f"{generation}:{expression}".encode("utf-8")
-        ).hexdigest()
+    def make_id(
+        self,
+        expression: str,
+        generation: int,
+        nonce: int | str | None = None,
+    ) -> str:
+        identity = f"{generation}:{expression}"
+        if nonce is not None:
+            identity = f"{identity}:{nonce}"
+        digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
         return digest[:16]
 
     @staticmethod
@@ -129,16 +135,23 @@ class Archive:
             ),
             None,
         )
+        existing_ids = {record.id for record in existing}
+        nonce = time.time_ns()
+        record_id = self.make_id(expression, generation, nonce)
+        while record_id in existing_ids:
+            nonce += 1
+            record_id = self.make_id(expression, generation, nonce)
+
         signature = expression_signature(expression)
         unsigned = ArchiveRecord(
-            id=self.make_id(expression, generation),
+            id=record_id,
             generation=generation,
             parent_id=parent_id,
             expression=expression,
             score=clean_score,
             accepted=accepted,
             reason=reason,
-            created_at=time.time(),
+            created_at=nonce / 1_000_000_000,
             signature=signature.digest,
             bucket=signature.bucket,
             previous_hash=previous_hash,
