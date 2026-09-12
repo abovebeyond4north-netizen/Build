@@ -64,7 +64,11 @@ class BoundedPolicyPatchSynthesizer:
         max_candidates: int = 12,
         focus: str | None = None,
     ) -> list[SynthesizedPatch]:
-        if isinstance(max_candidates, bool) or not isinstance(max_candidates, int) or max_candidates <= 0:
+        if (
+            isinstance(max_candidates, bool)
+            or not isinstance(max_candidates, int)
+            or max_candidates <= 0
+        ):
             raise ValueError("max_candidates must be a positive integer")
         if focus is not None and focus not in KNOWN_FOCI:
             raise ValueError(f"unsupported metacognitive focus: {focus}")
@@ -171,7 +175,11 @@ def policy_sites(tree: ast.AST) -> list[PolicySite]:
 
 
 def focus_from_test(node: ast.AST) -> str | None:
-    if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
+    if (
+        not isinstance(node, ast.Compare)
+        or len(node.ops) != 1
+        or len(node.comparators) != 1
+    ):
         return None
     if not isinstance(node.ops[0], ast.Eq):
         return None
@@ -202,7 +210,11 @@ def policy_return_call(statements: list[ast.stmt]) -> ast.Call | None:
 
 
 def numeric_literal(node: ast.AST) -> float | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+    if (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, (int, float))
+        and not isinstance(node.value, bool)
+    ):
         return float(node.value)
     if (
         isinstance(node, ast.UnaryOp)
@@ -253,16 +265,19 @@ def write_synthesized_patches(
     output_dir: Path,
     candidates: list[SynthesizedPatch],
 ) -> list[Path]:
+    """Write proposal JSON files that can be passed directly to evaluate-patch."""
     output_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
     for index, candidate in enumerate(candidates, start=1):
         path = output_dir / f"{index:03d}-{candidate.proposal.digest}.json"
         payload = {
-            "focus": candidate.focus,
-            "knob": candidate.knob,
-            "old_value": candidate.old_value,
-            "new_value": candidate.new_value,
-            "proposal": asdict(candidate.proposal),
+            **asdict(candidate.proposal),
+            "synthesis": {
+                "focus": candidate.focus,
+                "knob": candidate.knob,
+                "old_value": candidate.old_value,
+                "new_value": candidate.new_value,
+            },
         }
         temp = path.with_name(f".{path.name}.tmp")
         temp.write_text(
