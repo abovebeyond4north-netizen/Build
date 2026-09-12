@@ -2,7 +2,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dgm_zero.sota_methods import UCBOperatorBandit, disagreement, pareto_front, regret, uncertainty_score
+from dgm_zero.sota_methods import (
+    UCBOperatorBandit,
+    disagreement,
+    improvement_reward,
+    pareto_front,
+    regret,
+    uncertainty_score,
+)
 
 
 class FakeRecord:
@@ -39,6 +46,15 @@ class SOTAMethodTests(unittest.TestCase):
     def test_uncertainty_and_regret(self):
         self.assertGreater(uncertainty_score({"correctness": 0.0, "generalization": 0.0, "novelty": 0.0}), 0.9)
         self.assertEqual(regret(0.8, 0.5), 0.30000000000000004)
+
+    def test_improvement_reward_never_rewards_regression(self):
+        self.assertEqual(improvement_reward(0.8, 0.5), 0.0)
+        self.assertEqual(improvement_reward(0.8, 0.8), 0.0)
+        self.assertAlmostEqual(improvement_reward(0.8, 0.95), 0.15)
+
+    def test_improvement_reward_uses_absolute_score_for_seed(self):
+        self.assertEqual(improvement_reward(None, 0.75), 0.75)
+        self.assertEqual(improvement_reward(None, 1.5), 1.0)
 
     def test_disagreement(self):
         self.assertGreater(disagreement([1, 2, 2]), 0.0)
