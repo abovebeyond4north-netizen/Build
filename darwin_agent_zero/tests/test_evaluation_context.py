@@ -74,6 +74,24 @@ class EvaluationContextTests(unittest.TestCase):
                 oracle.evaluation_context,
             )
 
+    def test_context_handoff_does_not_label_unrelated_append(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Archive(Path(tmp))
+            oracle = EmpiricalGodelOracle(
+                archive,
+                benchmark_config=self.small_config(),
+            )
+            oracle.judge("a + b")
+            unrelated = archive.append(
+                generation=0,
+                parent_id=None,
+                expression="a * a + b",
+                score={"weighted_total": 0.5},
+                accepted=True,
+                reason="direct append",
+            )
+            self.assertIsNone(unrelated.evaluation_context)
+
     def test_oracle_novelty_reference_stays_frozen_after_append(self):
         with tempfile.TemporaryDirectory() as tmp:
             archive = Archive(Path(tmp))
