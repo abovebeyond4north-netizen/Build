@@ -50,7 +50,6 @@ class EmpiricalGodelOracle:
         # same oracle is therefore compared against the same archive snapshot.
         self.reference_records: tuple[ArchiveRecord, ...] = tuple(archive.records())
         self.evaluation_context = self.context_digest()
-        self.archive.evaluation_context = self.evaluation_context
 
     def context_digest(self) -> str:
         """Fingerprint all bounded evidence that materially affects scoring."""
@@ -141,6 +140,13 @@ class EmpiricalGodelOracle:
             reason = "; ".join(benchmark.errors[:2])
         else:
             reason = "decision score below gate threshold"
+
+        # Context handoff is one-shot and expression-matched by Archive.append(),
+        # so an unrelated direct append cannot inherit this evaluation provenance.
+        self.archive.stage_evaluation_context(
+            expression,
+            self.evaluation_context,
+        )
         return OracleDecision(
             expression=expression,
             accepted=accepted,
