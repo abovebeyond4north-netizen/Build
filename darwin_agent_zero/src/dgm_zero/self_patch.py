@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -31,6 +32,9 @@ MAX_FILE_BYTES = 32_768
 MAX_TOTAL_BYTES = 65_536
 OUTPUT_TAIL_CHARS = 4_000
 COMPARISON_SEEDS = (11, 23, 47)
+REPLAY_SEED_COUNT = 3
+REPLAY_SEED_MIN = 1_000_000
+REPLAY_SEED_MAX = 2_000_000_000
 AGGREGATE_REGRESSION_TOLERANCE = 1e-12
 MEAN_CHAMPION_REGRESSION_TOLERANCE = 0.005
 PER_SEED_CHAMPION_REGRESSION_TOLERANCE = 0.02
@@ -182,6 +186,7 @@ class PatchEvaluationReport:
     validation: PatchValidationReport
     gates: tuple[PatchGateResult, ...]
     comparison: PatchComparisonResult | None
+    replay: PatchComparisonResult | None
     created_at: float
     report_path: str
 
@@ -191,8 +196,8 @@ class RepositoryPatchLab:
 
     The lab is deliberately proposal-only. It has no method that writes a passed
     proposal back into ``repo_root`` and no GitHub merge capability. A proposal is
-    applied only inside an ephemeral copy, then compile/test and comparative
-    strategy gates produce evidence for human review.
+    applied only inside an ephemeral copy, then compile/test, deterministic
+    comparison, and fresh paired replay gates produce evidence for human review.
     """
 
     def __init__(
@@ -314,6 +319,7 @@ class RepositoryPatchLab:
         validation = self.validate(proposal)
         gates: list[PatchGateResult] = []
         comparison: PatchComparisonResult | None = None
+        replay: PatchComparisonResult | None = None
         default_gates = gate_commands is None
         if validation.passed:
             with tempfile.TemporaryDirectory(prefix="dgm-self-patch-") as tmp:
@@ -351,14 +357,34 @@ class RepositoryPatchLab:
                         staged_root,
                         temp_root,
                         float(timeout_seconds),
+                        seeds=COMPARISON_SEEDS,
+                        prefix="strategy",
                     )
                     gates.extend(comparison_gates)
+                    if comparison is not None and comparison.passed:
+                        replay_seeds = generate_replay_seeds()
+                        replay, replay_gates = self._compare_strategy(
+                            baseline_root,
+                            staged_root,
+                            temp_root,
+                            float(timeout_seconds),
+                            seeds=replay_seeds,
+                            prefix="replay",
+                        )
+                        gates.extend(replay_gates)
 
         gates_passed = bool(gates) and all(gate.passed for gate in gates)
         comparison_passed = comparison is None or comparison.passed
+        replay_passed = replay is None or replay.passed
         if default_gates:
             comparison_passed = comparison is not None and comparison.passed
-        passed = validation.passed and gates_passed and comparison_passed
+            replay_passed = replay is not None and replay.passed
+        passed = (
+            validation.passed
+            and gates_passed
+            and comparison_passed
+            and replay_passed
+        )
         return self._write_report(
             PatchEvaluationReport(
                 proposal_digest=proposal.digest,
@@ -366,6 +392,7 @@ class RepositoryPatchLab:
                 validation=validation,
                 gates=tuple(gates),
                 comparison=comparison,
+                replay=replay,
                 created_at=time.time(),
                 report_path="",
             )
@@ -410,22 +437,27 @@ class RepositoryPatchLab:
         staged_root: Path,
         temp_root: Path,
         timeout_seconds: float,
+        *,
+        seeds: tuple[int, ...],
+        prefix: str,
     ) -> tuple[PatchComparisonResult | None, list[PatchGateResult]]:
-        baseline_output = temp_root / "baseline-strategy.json"
-        candidate_output = temp_root / "candidate-strategy.json"
-        seeds_arg = ",".join(str(seed) for seed in COMPARISON_SEEDS)
+        if not prefix or any(character not in "abcdefghijklmnopqrstuvwxyz_" for character in prefix):
+            raise ValueError("comparison prefix must contain lowercase letters/underscores")
+        baseline_output = temp_root / f"{prefix}-baseline.json"
+        candidate_output = temp_root / f"{prefix}-candidate.json"
+        seeds_arg = ",".join(str(seed) for seed in seeds)
         runs = (
             (
-                "strategy_baseline",
+                f"{prefix}_baseline",
                 baseline_root,
                 baseline_output,
-                temp_root / "baseline-strategy-workspace",
+                temp_root / f"{prefix}-baseline-workspace",
             ),
             (
-                "strategy_candidate",
+                f"{prefix}_candidate",
                 staged_root,
                 candidate_output,
-                temp_root / "candidate-strategy-workspace",
+                temp_root / f"{prefix}-candidate-workspace",
             ),
         )
         gate_results: list[PatchGateResult] = []
@@ -452,9 +484,22 @@ class RepositoryPatchLab:
             if not result.passed:
                 return None, gate_results
 
-        baseline = load_json_object(baseline_output, "baseline strategy benchmark")
-        candidate = load_json_object(candidate_output, "candidate strategy benchmark")
-        return compare_strategy_reports(baseline, candidate), gate_results
+        baseline = load_json_object(
+            baseline_output,
+            f"{prefix} baseline strategy benchmark",
+        )
+        candidate = load_json_object(
+            candidate_output,
+            f"{prefix} candidate strategy benchmark",
+        )
+        return (
+            compare_strategy_reports(
+                baseline,
+                candidate,
+                expected_seeds=seeds,
+            ),
+            gate_results,
+        )
 
     @staticmethod
     def _validation_env(staged_root: Path) -> dict[str, str]:
@@ -524,6 +569,7 @@ class RepositoryPatchLab:
                 "validation": report.validation,
                 "gates": report.gates,
                 "comparison": report.comparison,
+                "replay": report.replay,
                 "report_path": str(report_path),
             }
         )
@@ -544,16 +590,34 @@ class RepositoryPatchLab:
         return completed
 
 
+def generate_replay_seeds(
+    count: int = REPLAY_SEED_COUNT,
+) -> tuple[int, ...]:
+    count = require_positive_int(count, "replay seed count")
+    if count > (REPLAY_SEED_MAX - REPLAY_SEED_MIN):
+        raise ValueError("replay seed count exceeds available range")
+    rng = secrets.SystemRandom()
+    seeds: set[int] = set()
+    blocked = set(COMPARISON_SEEDS)
+    while len(seeds) < count:
+        value = rng.randrange(REPLAY_SEED_MIN, REPLAY_SEED_MAX)
+        if value not in blocked:
+            seeds.add(value)
+    return tuple(sorted(seeds))
+
+
 def compare_strategy_reports(
     baseline: dict[str, object],
     candidate: dict[str, object],
+    *,
+    expected_seeds: tuple[int, ...] | None = COMPARISON_SEEDS,
 ) -> PatchComparisonResult:
     baseline_seeds = parse_report_seeds(baseline)
     candidate_seeds = parse_report_seeds(candidate)
     if baseline_seeds != candidate_seeds:
         raise ValueError("strategy benchmark seeds do not match")
-    if baseline_seeds != COMPARISON_SEEDS:
-        raise ValueError("strategy benchmark did not use the sealed comparison seeds")
+    if expected_seeds is not None and baseline_seeds != expected_seeds:
+        raise ValueError("strategy benchmark did not use the expected comparison seeds")
 
     baseline_aggregate = report_score(baseline, "aggregate_score")
     candidate_aggregate = report_score(candidate, "aggregate_score")
