@@ -6,7 +6,7 @@ import math
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Iterable, Mapping
 
 from .signature import expression_signature
 
@@ -23,6 +23,7 @@ class ArchiveRecord:
     created_at: float
     signature: str | None = None
     bucket: str | None = None
+    evaluation_context: str | None = None
     previous_hash: str | None = None
     record_hash: str | None = None
 
@@ -32,12 +33,15 @@ class Archive:
 
     New records are hash chained so modifications or reordering are detected on
     read. Older unchained archives remain readable until the first chained record.
+    Oracle-backed records can also carry a SHA-256 evaluation-context digest
+    identifying the frozen evidence under which their score was created.
     """
 
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.path = self.workspace / "archive.jsonl"
+        self._pending_evaluation_context: tuple[str, str] | None = None
 
     def make_id(
         self,
@@ -77,6 +81,13 @@ class Archive:
             raise ValueError("score weighted_total must be between 0 and 1")
         return output
 
+    def stage_evaluation_context(self, expression: str, digest: str) -> None:
+        """Stage one context digest for the next append of this exact expression."""
+        expression = self._validate_text(expression, "expression")
+        if not is_sha256(digest):
+            raise ValueError("evaluation_context must be a SHA-256 digest")
+        self._pending_evaluation_context = (expression, digest)
+
     @classmethod
     def _validate_loaded_record(cls, record: ArchiveRecord) -> ArchiveRecord:
         cls._validate_text(record.id, "id")
@@ -90,6 +101,10 @@ class Archive:
             raise ValueError("accepted must be a boolean")
         if not math.isfinite(float(record.created_at)):
             raise ValueError("created_at must be finite")
+        if record.evaluation_context is not None and not is_sha256(
+            record.evaluation_context
+        ):
+            raise ValueError("evaluation_context must be a SHA-256 digest")
         score = cls._validate_score(record.score)
         return ArchiveRecord(
             id=record.id,
@@ -102,6 +117,7 @@ class Archive:
             created_at=float(record.created_at),
             signature=record.signature,
             bucket=record.bucket,
+            evaluation_context=record.evaluation_context,
             previous_hash=record.previous_hash,
             record_hash=record.record_hash,
         )
@@ -115,6 +131,7 @@ class Archive:
         score: dict[str, float],
         accepted: bool,
         reason: str,
+        evaluation_context: str | None = None,
     ) -> ArchiveRecord:
         if isinstance(generation, bool) or not isinstance(generation, int):
             raise ValueError("generation must be an integer")
@@ -125,6 +142,15 @@ class Archive:
         if not isinstance(accepted, bool):
             raise ValueError("accepted must be a boolean")
         clean_score = self._validate_score(score)
+
+        pending = self._pending_evaluation_context
+        self._pending_evaluation_context = None
+        if evaluation_context is None and pending is not None:
+            pending_expression, pending_digest = pending
+            if pending_expression == expression:
+                evaluation_context = pending_digest
+        if evaluation_context is not None and not is_sha256(evaluation_context):
+            raise ValueError("evaluation_context must be a SHA-256 digest")
 
         existing = self.records()
         previous_hash = next(
@@ -157,6 +183,7 @@ class Archive:
             created_at=nonce / 1_000_000_000,
             signature=signature.digest,
             bucket=signature.bucket,
+            evaluation_context=evaluation_context,
             previous_hash=previous_hash,
             record_hash=None,
         )
@@ -230,10 +257,18 @@ class Archive:
                 elites[bucket] = record
         return elites
 
-    def novelty(self, expression: str) -> float:
-        """Reward expressions that differ in source and behaviour."""
+    def novelty(
+        self,
+        expression: str,
+        reference_records: Iterable[ArchiveRecord] | None = None,
+    ) -> float:
+        """Reward source/behaviour novelty against a chosen archive snapshot."""
         expression = self._validate_text(expression, "expression")
-        records = self.records()
+        records = (
+            self.records()
+            if reference_records is None
+            else list(reference_records)
+        )
         if not records:
             return 1.0
         tokens = set(expression.replace("(", " ").replace(")", " ").split())
@@ -257,6 +292,11 @@ class Archive:
 def archive_record_hash(record: ArchiveRecord) -> str:
     payload = asdict(record)
     payload.pop("record_hash", None)
+    # Preserve verification of pre-context hash-chained archives. New records with
+    # a context include it in the committed payload; legacy records did not have
+    # this field at all.
+    if payload.get("evaluation_context") is None:
+        payload.pop("evaluation_context", None)
     encoded = json.dumps(
         payload,
         sort_keys=True,
