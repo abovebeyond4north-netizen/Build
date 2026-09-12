@@ -138,6 +138,23 @@ def run_acquisition(args: argparse.Namespace, spec: CapabilitySpec) -> int:
     return 0
 
 
+def print_comparison(label: str, comparison) -> None:
+    print(
+        f"{label}: passed={comparison.passed} "
+        f"seeds={','.join(str(seed) for seed in comparison.seeds)} "
+        f"baseline={comparison.baseline_aggregate_score:.6f} "
+        f"candidate={comparison.candidate_aggregate_score:.6f} "
+        f"delta={comparison.aggregate_delta:+.6f}"
+    )
+    print(
+        f"{label} champion: "
+        f"mean_delta={comparison.mean_champion_delta:+.6f} "
+        f"worst_seed_delta={comparison.worst_seed_champion_delta:+.6f}"
+    )
+    for reason in comparison.reasons:
+        print(f"{label}: {reason}")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "run":
@@ -205,21 +222,9 @@ def main(argv: list[str] | None = None) -> int:
                 f"returncode={gate.returncode} elapsed={gate.elapsed_seconds:.3f}s"
             )
         if report.comparison is not None:
-            comparison = report.comparison
-            print(
-                "strategy comparison: "
-                f"passed={comparison.passed} "
-                f"baseline={comparison.baseline_aggregate_score:.6f} "
-                f"candidate={comparison.candidate_aggregate_score:.6f} "
-                f"delta={comparison.aggregate_delta:+.6f}"
-            )
-            print(
-                "champion comparison: "
-                f"mean_delta={comparison.mean_champion_delta:+.6f} "
-                f"worst_seed_delta={comparison.worst_seed_champion_delta:+.6f}"
-            )
-            for reason in comparison.reasons:
-                print(f"comparison: {reason}")
+            print_comparison("strategy comparison", report.comparison)
+        if report.replay is not None:
+            print_comparison("fresh replay", report.replay)
         return 0 if report.passed else 1
 
     if args.command == "restore":
