@@ -2,7 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .capability_model import CapabilityCase, CapabilitySpec
+from .capability_model import (
+    CapabilityCase,
+    CapabilityEvidencePolicy,
+    CapabilitySpec,
+)
+
+
+BUILTIN_EVIDENCE = CapabilityEvidencePolicy(
+    min_train_cases=2,
+    min_validation_cases=3,
+    min_holdout_cases=3,
+    max_validation_trials_per_case=4,
+)
 
 
 @dataclass(frozen=True)
@@ -17,9 +29,10 @@ class CapabilityObjective:
 class ObjectiveCompiler:
     """Compile supported natural-language objectives into sealed benchmark specs.
 
-    Unsupported objectives fail rather than receiving invented tests. New benchmark
-    families can be added independently of search, sandboxing, validation, holdout,
-    and promotion.
+    Unsupported objectives fail rather than receiving invented tests. Built-in
+    objectives also carry a minimum-evidence policy so later self-modifications
+    cannot silently weaken validation/holdout coverage or probe validation without
+    a bounded trial budget.
     """
 
     def compile(
@@ -118,6 +131,7 @@ class ObjectiveCompiler:
                     "alpha beta gamma",
                 ),
             ),
+            evidence=BUILTIN_EVIDENCE,
         )
 
     @staticmethod
@@ -176,6 +190,7 @@ class ObjectiveCompiler:
                     3.0,
                 ),
             ),
+            evidence=BUILTIN_EVIDENCE,
         )
 
     @staticmethod
@@ -240,6 +255,7 @@ class ObjectiveCompiler:
                     1.0,
                 ),
             ),
+            evidence=BUILTIN_EVIDENCE,
         )
 
     @staticmethod
@@ -331,4 +347,5 @@ class ObjectiveCompiler:
                     "bad_index",
                 ),
             ),
+            evidence=BUILTIN_EVIDENCE,
         )

@@ -48,12 +48,44 @@ class CapabilityThresholds:
 
 
 @dataclass(frozen=True)
+class CapabilityEvidencePolicy:
+    """Minimum evidence and bounded adaptive validation reuse.
+
+    Defaults preserve the historical custom-spec contract: one case per split and
+    no additional validation-trial cap. Built-in objectives can opt into stronger
+    evidence requirements without breaking explicit user-provided specifications.
+    """
+
+    min_train_cases: int = 1
+    min_validation_cases: int = 1
+    min_holdout_cases: int = 1
+    max_validation_trials_per_case: int | None = None
+
+    def __post_init__(self) -> None:
+        for name in (
+            "min_train_cases",
+            "min_validation_cases",
+            "min_holdout_cases",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if self.max_validation_trials_per_case is not None:
+            value = self.max_validation_trials_per_case
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(
+                    "max_validation_trials_per_case must be a positive integer or null"
+                )
+
+
+@dataclass(frozen=True)
 class CapabilitySpec:
     name: str
     description: str
     entrypoint: str
     cases: tuple[CapabilityCase, ...]
     thresholds: CapabilityThresholds = CapabilityThresholds()
+    evidence: CapabilityEvidencePolicy = CapabilityEvidencePolicy()
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not re.fullmatch(
@@ -71,6 +103,10 @@ class CapabilitySpec:
             raise ValueError("entrypoint must be a public Python identifier")
         if not isinstance(self.cases, tuple) or not self.cases:
             raise ValueError("capability must define cases")
+        if not isinstance(self.thresholds, CapabilityThresholds):
+            raise TypeError("thresholds must be CapabilityThresholds")
+        if not isinstance(self.evidence, CapabilityEvidencePolicy):
+            raise TypeError("evidence must be CapabilityEvidencePolicy")
 
         names = [case.name for case in self.cases]
         if len(names) != len(set(names)):
@@ -86,6 +122,17 @@ class CapabilitySpec:
             raise ValueError(
                 "capability requires non-empty train, validation, and holdout splits"
             )
+        required_counts = {
+            "train": self.evidence.min_train_cases,
+            "validation": self.evidence.min_validation_cases,
+            "holdout": self.evidence.min_holdout_cases,
+        }
+        for split, minimum in required_counts.items():
+            if split_counts[split] < minimum:
+                raise ValueError(
+                    f"capability requires at least {minimum} {split} cases "
+                    f"under its evidence policy; found {split_counts[split]}"
+                )
         if len(arities) != 1:
             raise ValueError("all capability cases must use the same positional arity")
 
@@ -97,6 +144,13 @@ class CapabilitySpec:
         if split not in SPLITS:
             raise ValueError(f"unknown split: {split}")
         return tuple(case for case in self.cases if case.split == split)
+
+    def validation_trial_limit(self) -> int | None:
+        """Return the maximum adaptive validation probes allowed for this spec."""
+        per_case = self.evidence.max_validation_trials_per_case
+        if per_case is None:
+            return None
+        return len(self.cases_for("validation")) * per_case
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "CapabilitySpec":
@@ -133,6 +187,19 @@ class CapabilitySpec:
             holdout=float(raw_thresholds.get("holdout", 1.0)),
             min_gain=float(raw_thresholds.get("min_gain", 0.05)),
         )
+
+        raw_evidence = data.get("evidence", {})
+        if not isinstance(raw_evidence, dict):
+            raise ValueError("evidence must be an object")
+        evidence = CapabilityEvidencePolicy(
+            min_train_cases=raw_evidence.get("min_train_cases", 1),
+            min_validation_cases=raw_evidence.get("min_validation_cases", 1),
+            min_holdout_cases=raw_evidence.get("min_holdout_cases", 1),
+            max_validation_trials_per_case=raw_evidence.get(
+                "max_validation_trials_per_case"
+            ),
+        )
+
         try:
             name = data["name"]
             description = data["description"]
@@ -146,6 +213,7 @@ class CapabilitySpec:
             entrypoint=data.get("entrypoint", "solve"),
             cases=tuple(cases),
             thresholds=thresholds,
+            evidence=evidence,
         )
 
     @classmethod
