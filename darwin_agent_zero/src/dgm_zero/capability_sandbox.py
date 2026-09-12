@@ -70,9 +70,9 @@ class SkillSandbox:
     """Execute pure candidate functions in an isolated Python subprocess.
 
     Static checks forbid imports, reflective builtins, private/dunder attribute
-    traversal, extra top-level execution, and non-allowlisted direct calls.
-    Runtime execution uses isolated/no-site Python, a wall-clock timeout, and
-    resource bounds where the host supports them.
+    traversal, stateful attribute writes, extra top-level execution, and
+    non-allowlisted direct calls. Runtime execution uses isolated/no-site Python,
+    a wall-clock timeout, and resource bounds where the host supports them.
     """
 
     def __init__(self, timeout_seconds: float = 2.0) -> None:
@@ -161,10 +161,15 @@ class SkillSandbox:
                 reasons.append(
                     f"unsupported candidate syntax: {type(node).__name__}"
                 )
-            if isinstance(node, ast.Attribute) and node.attr.startswith("_"):
-                reasons.append(
-                    f"private/dunder attribute access is forbidden: {node.attr}"
-                )
+            if isinstance(node, ast.Attribute):
+                if node.attr.startswith("_"):
+                    reasons.append(
+                        f"private/dunder attribute access is forbidden: {node.attr}"
+                    )
+                if isinstance(node.ctx, (ast.Store, ast.Del)):
+                    reasons.append(
+                        "candidate functions may not write or delete attributes"
+                    )
             if isinstance(node, ast.Name) and node.id in BLOCKED_NAMES:
                 reasons.append(f"forbidden name: {node.id}")
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
