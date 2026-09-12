@@ -80,8 +80,12 @@ class SkillLibrary:
         *,
         capability: str,
         holdout_digest: str,
+        baseline_digest: str,
+        baseline_holdout_score: float,
         finalist_digest: str,
         holdout_score: float,
+        final_score: float,
+        min_gain: float,
         passed: bool,
     ) -> None:
         rows = self._certifications()
@@ -93,12 +97,18 @@ class SkillLibrary:
             raise ValueError(
                 "holdout suite has already been consumed for this capability"
             )
+        measured_gain = final_score - baseline_holdout_score
         rows.append(
             {
                 "capability": capability,
                 "holdout_digest": holdout_digest,
+                "baseline_digest": baseline_digest,
+                "baseline_holdout_score": baseline_holdout_score,
                 "finalist_digest": finalist_digest,
                 "holdout_score": holdout_score,
+                "final_score": final_score,
+                "min_gain": min_gain,
+                "measured_gain": measured_gain,
                 "passed": bool(passed),
                 "evaluated_at": time.time(),
             }
