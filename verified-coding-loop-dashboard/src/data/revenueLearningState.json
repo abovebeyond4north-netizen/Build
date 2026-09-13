@@ -1,9 +1,20 @@
 {
   "schemaVersion": 1,
-  "loopRuns": 3,
+  "loopRuns": 4,
   "bestScore": 0.901,
   "totalRevenueRecorded": 0,
   "experimentHistory": [
+    {
+      "time": "2026-09-13T04:54:59.034Z",
+      "id": "open-source-issue-checklist",
+      "title": "Manual opportunity research checklist",
+      "score": 0.883,
+      "cost": 0,
+      "revenuePotential": 0.58,
+      "learningValue": 0.78,
+      "decision": "proposed_not_executed",
+      "safety": "human approval required before outreach, payments, or external actions"
+    },
     {
       "time": "2026-09-10T04:50:59.050Z",
       "id": "template-product-roadmap",
@@ -46,6 +57,6 @@
     "human approval before outreach or money movement",
     "low-risk lawful work only"
   ],
-  "lastRunAt": "2026-09-10T04:50:59.050Z",
-  "lastSelectedExperiment": "template-product-roadmap"
+  "lastRunAt": "2026-09-13T04:54:59.034Z",
+  "lastSelectedExperiment": "open-source-issue-checklist"
 }
