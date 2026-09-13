@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-10T04:50:59.050Z",
+  "generatedAt": "2026-09-13T04:54:59.034Z",
   "purpose": "Zero-cost learning loop for ethical value experiment proposals.",
   "limits": {
     "doesNotGuaranteeRevenue": true,
@@ -11,28 +11,17 @@
     "humanReviewRequired": true
   },
   "selectedExperiment": {
-    "id": "template-product-roadmap",
-    "title": "Turn the dashboard into a reusable template product roadmap",
+    "id": "open-source-issue-checklist",
+    "title": "Manual opportunity research checklist",
     "cost": 0,
-    "revenuePotential": 0.62,
-    "learningValue": 0.8,
+    "revenuePotential": 0.58,
+    "learningValue": 0.78,
     "requiresHumanApproval": true,
-    "output": "Create a product roadmap for a free starter template and optional paid customization work.",
-    "safeNextStep": "Human reviews pricing, terms, and legal obligations before offering services.",
-    "score": 0.894
+    "output": "Create a checklist for manually finding bounties, grants, and open-source issues without automated scraping.",
+    "safeNextStep": "Human searches approved platforms and pastes candidate opportunities into the repo.",
+    "score": 0.883
   },
   "rankedExperiments": [
-    {
-      "id": "template-product-roadmap",
-      "title": "Turn the dashboard into a reusable template product roadmap",
-      "cost": 0,
-      "revenuePotential": 0.62,
-      "learningValue": 0.8,
-      "requiresHumanApproval": true,
-      "output": "Create a product roadmap for a free starter template and optional paid customization work.",
-      "safeNextStep": "Human reviews pricing, terms, and legal obligations before offering services.",
-      "score": 0.894
-    },
     {
       "id": "open-source-issue-checklist",
       "title": "Manual opportunity research checklist",
@@ -67,6 +56,17 @@
       "score": 0.861
     },
     {
+      "id": "template-product-roadmap",
+      "title": "Turn the dashboard into a reusable template product roadmap",
+      "cost": 0,
+      "revenuePotential": 0.62,
+      "learningValue": 0.8,
+      "requiresHumanApproval": true,
+      "output": "Create a product roadmap for a free starter template and optional paid customization work.",
+      "safeNextStep": "Human reviews pricing, terms, and legal obligations before offering services.",
+      "score": 0.854
+    },
+    {
       "id": "github-sponsors-readiness",
       "title": "Prepare GitHub Sponsors readiness checklist",
       "cost": 0,
@@ -79,15 +79,15 @@
     }
   ],
   "learningUpdate": {
-    "time": "2026-09-10T04:50:59.050Z",
-    "id": "template-product-roadmap",
-    "title": "Turn the dashboard into a reusable template product roadmap",
-    "score": 0.894,
+    "time": "2026-09-13T04:54:59.034Z",
+    "id": "open-source-issue-checklist",
+    "title": "Manual opportunity research checklist",
+    "score": 0.883,
     "cost": 0,
-    "revenuePotential": 0.62,
-    "learningValue": 0.8,
+    "revenuePotential": 0.58,
+    "learningValue": 0.78,
     "decision": "proposed_not_executed",
     "safety": "human approval required before outreach, payments, or external actions"
   },
-  "nextHumanStep": "Human reviews pricing, terms, and legal obligations before offering services."
+  "nextHumanStep": "Human searches approved platforms and pastes candidate opportunities into the repo."
 }

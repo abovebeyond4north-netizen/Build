@@ -1,21 +1,23 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-10T04:50:59.186Z",
+  "generatedAt": "2026-09-13T04:54:59.164Z",
   "purpose": "Measure process activity and declared safeguards; not demonstrated capability improvement.",
-  "learningScore": 0.79,
+  "metricKind": "process_activity_proxy",
+  "limitations": [
+    "History length and cadence measure activity",
+    "Reversibility is assumed",
+    "Safety consistency checks a declaration",
+    "No independent capability or outcome evaluation"
+  ],
+  "learningScore": 0.825,
   "dimensions": {
     "diversity": 1,
-    "evidenceDepth": 0.4,
+    "evidenceDepth": 0.5,
     "reversibility": 1,
     "safetyConsistency": 1,
-    "cadence": 0.4
+    "cadence": 0.5
   },
   "selectedStrategies": [
-    {
-      "id": "increase-evidence-depth",
-      "recommendation": "Accumulate more verified run records before accepting stronger claims.",
-      "expectedEffect": "better calibration and less overfitting to early runs"
-    },
     {
       "id": "preserve-reversibility",
       "recommendation": "Keep all learning updates in small JSON and Markdown artifacts until tests prove app-level changes.",
@@ -33,12 +35,5 @@
     "external actions remain disabled",
     "income is not guaranteed or assumed"
   ],
-  "nextHumanStep": "Review selected strategies and mark whether the generated proposal was useful.",
-  "metricKind": "process_activity_proxy",
-  "limitations": [
-    "History length and cadence measure activity",
-    "Reversibility is assumed",
-    "Safety consistency checks a declaration",
-    "No independent capability or outcome evaluation"
-  ]
+  "nextHumanStep": "Review selected strategies and mark whether the generated proposal was useful."
 }
