@@ -9,6 +9,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .patch_search_memory import PatchSearchMemory
 from .patch_synthesis import BoundedPolicyPatchSynthesizer, SynthesizedPatch
 from .self_patch import (
     COMPARISON_SEEDS,
@@ -59,7 +60,7 @@ class PatchSearchReport:
 
 
 class BoundedPatchSearchEngine:
-    """Search strategy patches using targeted development evidence, then certify one finalist."""
+    """Search strategy patches with adaptive public evidence, then certify one finalist."""
 
     def __init__(
         self,
@@ -68,12 +69,14 @@ class BoundedPatchSearchEngine:
         *,
         lab: RepositoryPatchLab | None = None,
         synthesizer: BoundedPolicyPatchSynthesizer | None = None,
+        development_memory: PatchSearchMemory | None = None,
     ) -> None:
         self.repo_root = repo_root.resolve()
         self.workspace = workspace.resolve()
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.lab = lab or RepositoryPatchLab(self.repo_root, self.workspace)
         self.synthesizer = synthesizer or BoundedPolicyPatchSynthesizer(self.repo_root)
+        self.development_memory = development_memory or PatchSearchMemory(self.workspace)
 
     def run(
         self,
@@ -100,11 +103,30 @@ class BoundedPatchSearchEngine:
             self.lab,
             max_candidates=max_candidates,
             focus=focus,
+            priority_fn=self.development_memory.priority,
         )
-        screens = tuple(
-            self._screen_candidate(candidate, float(timeout_seconds))
-            for candidate in candidates
+        search_digest = search_identity(
+            candidates,
+            focus=focus,
+            max_candidates=max_candidates,
         )
+        screens_list: list[PatchDevelopmentScreen] = []
+        for candidate in candidates:
+            screen = self._screen_candidate(candidate, float(timeout_seconds))
+            screens_list.append(screen)
+            if screen.aggregate_delta is not None:
+                self.development_memory.record(
+                    search_digest=search_digest,
+                    proposal_digest=candidate.proposal.digest,
+                    focus=candidate.focus,
+                    knob=candidate.knob,
+                    direction=candidate.direction,
+                    step=candidate.step,
+                    aggregate_delta=screen.aggregate_delta,
+                    passed=screen.passed,
+                    reason=screen.reason,
+                )
+        screens = tuple(screens_list)
         passing = [screen for screen in screens if screen.passed]
         finalist_screen = select_finalist(passing)
         by_digest = {candidate.proposal.digest: candidate for candidate in candidates}
@@ -126,11 +148,6 @@ class BoundedPatchSearchEngine:
             certification_status = certification.certification_status
             certification_report_path = certification.report_path
 
-        search_digest = search_identity(
-            candidates,
-            focus=focus,
-            max_candidates=max_candidates,
-        )
         return self._write_report(
             PatchSearchReport(
                 search_digest=search_digest,
@@ -232,9 +249,7 @@ class BoundedPatchSearchEngine:
             passed=passed,
             reason=reason,
             aggregate_delta=(comparison.aggregate_delta if comparison else None),
-            mean_champion_delta=(
-                comparison.mean_champion_delta if comparison else None
-            ),
+            mean_champion_delta=(comparison.mean_champion_delta if comparison else None),
             worst_seed_champion_delta=(
                 comparison.worst_seed_champion_delta if comparison else None
             ),
@@ -372,9 +387,10 @@ def search_identity(
     max_candidates: int,
 ) -> str:
     payload = {
-        "protocol_version": 2,
+        "protocol_version": 3,
         "focus": focus,
         "focus_conditioned_development": True,
+        "adaptive_development_memory": True,
         "max_candidates": max_candidates,
         "minimum_development_gain": MIN_DEVELOPMENT_GAIN,
         "candidate_digests": [candidate.proposal.digest for candidate in candidates],
