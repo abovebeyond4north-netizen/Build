@@ -377,33 +377,47 @@ async def paypal_webhook(request: Request):
     event_type = str(event.get("event_type", ""))
     if not event_id:
         raise HTTPException(400, "Missing PayPal event id")
-    try:
-        with engine.db() as con:
-            con.execute(
-                "INSERT INTO paypal_events(event_id,event_type,received_at) VALUES(?,?,?)",
-                (event_id, event_type, engine.utcnow()),
-            )
-    except sqlite3.IntegrityError:
-        return {"status": "duplicate"}
 
+    refund = None
     if event_type == "PAYMENT.CAPTURE.REFUNDED":
         resource = event.get("resource", {})
         refund_id = str(resource.get("id", ""))
+        if not refund_id:
+            raise HTTPException(400, "Missing PayPal refund id")
         amount = resource.get("amount", {})
-        amount_cents = _cents(str(amount.get("value", "-1")))
+        try:
+            amount_cents = _cents(str(amount.get("value", "-1")))
+        except Exception as exc:
+            raise HTTPException(409, "Unexpected PayPal refund currency or amount") from exc
         if amount.get("currency_code") != engine.CURRENCY or amount_cents <= 0:
             raise HTTPException(409, "Unexpected PayPal refund currency or amount")
         related = resource.get("supplementary_data", {}).get("related_ids", {})
         capture_id = str(related.get("capture_id", "")) or None
-        product_id = None
-        if capture_id:
-            with engine.db() as con:
-                sale = con.execute("SELECT product_id FROM sales WHERE id=?", (capture_id,)).fetchone()
-                product_id = sale["product_id"] if sale else None
+        refund = (refund_id, amount_cents, capture_id)
+
+    try:
+        with engine.db() as con:
+            con.execute("BEGIN IMMEDIATE")
+            con.execute(
+                "INSERT INTO paypal_events(event_id,event_type,received_at) VALUES(?,?,?)",
+                (event_id, event_type, engine.utcnow()),
+            )
+            if refund is not None:
+                refund_id, amount_cents, capture_id = refund
+                product_id = None
+                if capture_id:
+                    sale = con.execute("SELECT product_id FROM sales WHERE id=?", (capture_id,)).fetchone()
+                    product_id = sale["product_id"] if sale else None
                 con.execute(
                     "INSERT OR IGNORE INTO refunds(id,amount_cents,currency,created_at,sale_id,product_id) VALUES(?,?,?,?,?,?)",
                     (refund_id, amount_cents, engine.CURRENCY, engine.utcnow(), capture_id, product_id),
                 )
+            con.execute("COMMIT")
+    except sqlite3.IntegrityError:
+        return {"status": "duplicate"}
+
+    if refund is not None:
+        refund_id, amount_cents, capture_id = refund
         engine.audit("paypal.refund_recorded", {"refund_id": refund_id, "capture_id": capture_id, "amount_cents": amount_cents})
     return {"status": "ok"}
 
