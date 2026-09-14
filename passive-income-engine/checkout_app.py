@@ -174,10 +174,15 @@ def fulfill_paypal_capture(order_id: str, order: dict, capture: dict) -> str:
             "INSERT OR IGNORE INTO sales(id,product_id,net_cents,currency,created_at) VALUES(?,?,?,?,?)",
             (capture_id, product_id, net, engine.CURRENCY, now),
         )
+        existing_delivery = con.execute(
+            "SELECT downloads FROM deliveries WHERE sale_id=?",
+            (capture_id,),
+        ).fetchone()
+        downloads = int(existing_delivery["downloads"]) if existing_delivery else 0
         con.execute("DELETE FROM deliveries WHERE sale_id=?", (capture_id,))
         con.execute(
-            "INSERT INTO deliveries(token_hash,sale_id,product_id,expires_at,downloads) VALUES(?,?,?,?,0)",
-            (token_hash, capture_id, product_id, expires),
+            "INSERT INTO deliveries(token_hash,sale_id,product_id,expires_at,downloads) VALUES(?,?,?,?,?)",
+            (token_hash, capture_id, product_id, expires, downloads),
         )
         session = con.execute(
             "SELECT source,medium,campaign FROM visitor_sessions WHERE visitor_hash=?",
