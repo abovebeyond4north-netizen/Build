@@ -156,3 +156,43 @@ The branch also contains `.github/workflows/passive-income-engine.yml`, which ru
 Keep the payment provider as the source of truth for completed sales and refunds. Do not fulfill from browser-provided prices or unsigned callbacks. Use HTTPS, protect the admin token and webhook secret, keep `/data` backed up, and reconcile `payout_ready_cents` against actual settled funds before making a transfer.
 
 The engine automates owned-site discovery surfaces and on-site placement optimization. It does not send spam, fabricate traffic or reviews, perform deceptive promotion, or autonomously move money.
+
+
+## Hybrid autonomous revenue system
+
+The hybrid system separates public acquisition from private transaction processing:
+
+- GitHub Pages is generated from the product and guide catalog on every relevant push to `main`.
+- Product calls to action point to the hosted backend configured in the repository variable `PASSIVE_INCOME_BACKEND_URL`.
+- PayPal remains the payment processor and fulfills digital downloads only after validated captures.
+- Affiliate offers are supplied as verified HTTPS destinations through `AFFILIATE_OFFERS_JSON`; clicks are recorded without exposing the destination in static content.
+- Lead capture requires explicit consent, records attribution, provides a useful checklist immediately, and supports one-click unsubscribe.
+- The authenticated `/admin/growth` endpoint combines affiliate clicks, active leads, and payout-ready funds.
+- Transfers are intentionally delegated to PayPal automatic-transfer settings after the engine calculates reserves and payout-ready profit.
+
+Example affiliate configuration:
+
+```json
+[
+  {
+    "id": "accounting-platform",
+    "name": "Accounting Platform",
+    "description": "Cloud bookkeeping and reporting for independent businesses.",
+    "category": "business",
+    "url": "https://merchant.example/your-approved-affiliate-destination"
+  }
+]
+```
+
+Only use destinations issued by affiliate programs that have approved the account. Empty configuration is valid and hides monetized partner offers.
+
+### Production connection
+
+Set these values in the hosted container:
+
+- `PUBLIC_BASE_URL`: public HTTPS backend origin.
+- `STATIC_SITE_ORIGIN=https://abovebeyond4north-netizen.github.io`.
+- `AFFILIATE_OFFERS_JSON`: approved partner offer catalog.
+- PayPal live credentials and webhook ID already documented below.
+
+Set the GitHub Actions repository variable `PASSIVE_INCOME_BACKEND_URL` to the same backend origin. The Pages workflow then builds checkout, affiliate, and lead-generation links into the static site. PayPal automatic transfers remain configured in PayPal itself; the application never stores payout credentials.
