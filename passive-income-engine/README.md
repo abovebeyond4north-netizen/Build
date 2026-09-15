@@ -170,19 +170,7 @@ The hybrid system separates public acquisition from private transaction processi
 - The authenticated `/admin/growth` endpoint combines affiliate clicks, active leads, and payout-ready funds.
 - Transfers are intentionally delegated to PayPal automatic-transfer settings after the engine calculates reserves and payout-ready profit.
 
-Example affiliate configuration:
-
-```json
-[
-  {
-    "id": "accounting-platform",
-    "name": "Accounting Platform",
-    "description": "Cloud bookkeeping and reporting for independent businesses.",
-    "category": "business",
-    "url": "https://merchant.example/your-approved-affiliate-destination"
-  }
-]
-```
+Affiliate configuration is a JSON array of approved offers containing `id`, `name`, `description`, `category`, and the program-issued HTTPS `url`.
 
 Only use destinations issued by affiliate programs that have approved the account. Empty configuration is valid and hides monetized partner offers.
 
