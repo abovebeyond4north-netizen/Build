@@ -128,6 +128,36 @@ class EngineTests(unittest.TestCase):
             count = con.execute("SELECT COUNT(*) v FROM sales").fetchone()["v"]
         self.assertEqual(count, 1)
 
+    def test_distinct_sale_events_preserve_consumed_download_quota(self):
+        first_payload = {
+            "id": "evt-sale-retry-1",
+            "type": "sale.completed",
+            "sale_id": "sale-retry",
+            "product_id": "compound-growth-calculator",
+            "gross_cents": 900,
+            "net_cents": 855,
+            "currency": "CAD",
+        }
+        first = self.signed_post(first_payload)
+        self.assertEqual(first.status_code, 200)
+        first_url = first.json()["download_url"]
+        self.assertEqual(self.client.get(first_url).status_code, 200)
+
+        second_payload = dict(first_payload, id="evt-sale-retry-2")
+        second = self.signed_post(second_payload)
+        self.assertEqual(second.status_code, 200)
+        second_url = second.json()["download_url"]
+        self.assertNotEqual(first_url, second_url)
+
+        with engine.db() as con:
+            delivery = con.execute(
+                "SELECT downloads FROM deliveries WHERE sale_id='sale-retry'"
+            ).fetchone()
+        self.assertEqual(delivery["downloads"], 1)
+        self.assertEqual(self.client.get(first_url).status_code, 404)
+        self.assertEqual(self.client.get(second_url).status_code, 200)
+        self.assertEqual(self.client.get(second_url).status_code, 404)
+
     def test_browser_cannot_override_catalog_price(self):
         response = self.signed_post(
             {
