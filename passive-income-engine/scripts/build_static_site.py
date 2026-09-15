@@ -5,10 +5,13 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
+_STATIC_DB = tempfile.TemporaryDirectory()
+os.environ.setdefault("DATABASE_PATH", str(Path(_STATIC_DB.name) / "static-build.db"))
 sys.path.insert(0, str(ROOT))
 
 import engine  # noqa: E402
