@@ -1,0 +1,57 @@
+services:
+  - type: web
+    name: beyond-digital-tools-api
+    runtime: docker
+    plan: starter
+    region: ohio
+    rootDir: passive-income-engine
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: commit
+    healthCheckPath: /health
+    numInstances: 1
+    disk:
+      name: passive-income-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_PATH
+        value: /data/passive_income.db
+      - key: PUBLIC_BASE_URL
+        value: https://beyond-digital-tools-api.onrender.com
+      - key: STATIC_SITE_ORIGIN
+        value: https://abovebeyond4north-netizen.github.io
+      - key: SITE_NAME
+        value: Beyond Digital Tools
+      - key: CURRENCY
+        value: CAD
+      - key: PAYPAL_MODE
+        value: live
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      - key: AFFILIATE_OFFERS_JSON
+        value: "[]"
+      - key: PROFIT_FLOOR_CENTS
+        value: "50000"
+      - key: MIN_SWEEP_CENTS
+        value: "5000"
+      - key: MAX_SWEEP_CENTS
+        value: "100000"
+      - key: TAX_RESERVE_BPS
+        value: "2500"
+      - key: REFUND_RESERVE_BPS
+        value: "500"
+      - key: OPERATING_RESERVE_CENTS
+        value: "10000"
+      - key: DOWNLOAD_TTL_HOURS
+        value: "168"
+      - key: MAX_DOWNLOADS
+        value: "8"
