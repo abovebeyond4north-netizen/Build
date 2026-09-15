@@ -23,6 +23,14 @@ os.environ["PAYPAL_MODE"] = "sandbox"
 os.environ["PAYPAL_CLIENT_ID"] = ""
 os.environ["PAYPAL_CLIENT_SECRET"] = ""
 os.environ["PAYPAL_WEBHOOK_ID"] = ""
+os.environ["STATIC_SITE_ORIGIN"] = "https://abovebeyond4north-netizen.github.io"
+os.environ["AFFILIATE_OFFERS_JSON"] = json.dumps([{
+    "id": "verified-tool",
+    "name": "Verified Tool",
+    "description": "A verified partner tool used by the test catalog.",
+    "category": "business",
+    "url": "https://partner.test/referral",
+}])
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -35,6 +43,8 @@ class EngineTests(unittest.TestCase):
         self.client = TestClient(checkout_app.app)
         with engine.db() as con:
             for table in (
+                "affiliate_clicks",
+                "leads",
                 "paypal_events",
                 "paypal_orders",
                 "sale_attribution",
@@ -67,6 +77,54 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(self.client.get("/robots.txt").status_code, 200)
         self.assertEqual(self.client.get("/feed.xml").status_code, 200)
         self.assertEqual(self.client.get("/guides").status_code, 200)
+
+    def test_hybrid_lead_and_affiliate_flows(self):
+        resources = self.client.get("/resources")
+        self.assertEqual(resources.status_code, 200)
+        self.assertIn("Verified Tool", resources.text)
+        self.assertIn("affiliate links", resources.text)
+
+        redirect = self.client.get(
+            "/r/verified-tool?source=guide&campaign=evergreen",
+            follow_redirects=False,
+        )
+        self.assertEqual(redirect.status_code, 302)
+        self.assertEqual(redirect.headers["location"], "https://partner.test/referral")
+
+        denied = self.client.post(
+            "/api/leads",
+            json={"email": "reader@example.com", "consent": False},
+        )
+        self.assertEqual(denied.status_code, 400)
+
+        lead = self.client.post(
+            "/api/leads",
+            json={
+                "email": "Reader@Example.com",
+                "consent": True,
+                "source": "pages",
+                "campaign": "monthly-review",
+            },
+        )
+        self.assertEqual(lead.status_code, 200)
+        self.assertEqual(lead.json()["resource_url"], "/lead-magnet")
+        self.assertEqual(self.client.get("/lead-magnet").status_code, 200)
+
+        admin = {"authorization": "Bearer test-admin-token"}
+        growth = self.client.get("/admin/growth", headers=admin).json()
+        self.assertEqual(growth["affiliate_clicks"][0]["clicks"], 1)
+        self.assertEqual(growth["leads"]["active"], 1)
+        self.assertEqual(
+            growth["payout"]["execution"],
+            "PayPal automatic transfer settings",
+        )
+
+        unsubscribe = self.client.get(lead.json()["unsubscribe_url"])
+        self.assertEqual(unsubscribe.status_code, 200)
+        self.assertEqual(
+            self.client.get("/admin/growth", headers=admin).json()["leads"]["active"],
+            0,
+        )
 
     def test_product_page_has_checkout_setup_state_without_credentials(self):
         response = self.client.get("/products/compound-growth-calculator")

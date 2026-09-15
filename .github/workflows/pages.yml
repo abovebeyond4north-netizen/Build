@@ -1,8 +1,11 @@
-name: Deploy AutoIncome Forge
+name: Deploy Hybrid Income Site
 
 on:
   push:
     branches: [main]
+    paths:
+      - "passive-income-engine/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -15,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build-and-deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -23,12 +26,28 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: passive-income-engine/requirements.txt
+      - name: Install runtime dependencies
+        working-directory: passive-income-engine
+        run: pip install -r requirements.txt
+      - name: Generate static acquisition site
+        working-directory: passive-income-engine
+        env:
+          BACKEND_PUBLIC_URL: ${{ vars.PASSIVE_INCOME_BACKEND_URL }}
+          STATIC_SITE_URL: https://abovebeyond4north-netizen.github.io/Build
+          PAGES_BASE_PATH: /Build
+        run: python scripts/build_static_site.py
       - name: Setup Pages
         uses: actions/configure-pages@v5
-      - name: Upload site artifact
+      - name: Upload generated site
         uses: actions/upload-pages-artifact@v5
         with:
-          path: .
+          path: passive-income-engine/site
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

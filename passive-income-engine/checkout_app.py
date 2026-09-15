@@ -445,3 +445,7 @@ if original_health_endpoint:
         result["paypal_checkout"] = bool(PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET)
         result["paypal_mode"] = PAYPAL_MODE
         return result
+
+
+# Register affiliate, lead-generation, and growth-reporting routes.
+import hybrid  # noqa: E402,F401

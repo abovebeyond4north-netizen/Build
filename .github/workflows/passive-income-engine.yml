@@ -35,6 +35,12 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m compileall -q engine.py checkout_app.py scripts tests
       - run: python -m unittest discover -s tests -v
+      - name: Build static GitHub Pages site
+        run: |
+          python scripts/build_static_site.py
+          test -s site/index.html
+          test -s site/sitemap.xml
+          test -s site/privacy/index.html
       - name: Exercise backup and restore workers
         run: |
           python - <<'PY'
