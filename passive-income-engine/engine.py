@@ -457,8 +457,16 @@ async def payment_webhook(request: Request):
         with db() as con:
             con.execute("BEGIN IMMEDIATE")
             con.execute("INSERT OR IGNORE INTO sales VALUES(?,?,?,?,?)", (sale_id, product_id, net, CURRENCY, now))
+            existing_delivery = con.execute(
+                "SELECT downloads FROM deliveries WHERE sale_id=?",
+                (sale_id,),
+            ).fetchone()
+            downloads = int(existing_delivery["downloads"]) if existing_delivery else 0
             con.execute("DELETE FROM deliveries WHERE sale_id=?", (sale_id,))
-            con.execute("INSERT INTO deliveries(token_hash,sale_id,product_id,expires_at,downloads) VALUES(?,?,?,?,0)", (token_hash, sale_id, product_id, expires))
+            con.execute(
+                "INSERT INTO deliveries(token_hash,sale_id,product_id,expires_at,downloads) VALUES(?,?,?,?,?)",
+                (token_hash, sale_id, product_id, expires, downloads),
+            )
             visitor_id = event.get("visitor_id")
             if visitor_id:
                 vh = visitor_hash(str(visitor_id))
