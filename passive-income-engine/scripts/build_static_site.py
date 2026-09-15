@@ -4,13 +4,14 @@ import html
 import json
 import os
 import shutil
+import sys
 from pathlib import Path
 from urllib.parse import quote
 
-import engine
-
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+import engine  # noqa: E402
 OUTPUT = ROOT / "site"
 BACKEND = os.getenv("BACKEND_PUBLIC_URL", "").rstrip("/")
 PAGES_BASE_PATH = os.getenv("PAGES_BASE_PATH", "/Build").rstrip("/")
