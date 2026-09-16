@@ -4,6 +4,7 @@ import argparse
 import os
 import sqlite3
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,14 +13,21 @@ def backup_once(source: Path, target_dir: Path, retention: int) -> Path:
     target_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     destination = target_dir / f"passive_income_{stamp}.db"
+    temporary = target_dir / f".{destination.name}.{uuid.uuid4().hex}.tmp"
 
     source_uri = f"file:{source}?mode=ro"
-    with sqlite3.connect(source_uri, uri=True, timeout=30) as src:
-        with sqlite3.connect(destination) as dst:
-            src.backup(dst)
-            check = dst.execute("PRAGMA integrity_check").fetchone()[0]
-            if check != "ok":
-                raise RuntimeError(f"backup integrity check failed: {check}")
+    try:
+        with sqlite3.connect(source_uri, uri=True, timeout=30) as src:
+            with sqlite3.connect(temporary) as dst:
+                src.backup(dst)
+                check = dst.execute("PRAGMA integrity_check").fetchone()[0]
+                if check != "ok":
+                    raise RuntimeError(f"backup integrity check failed: {check}")
+        # Publish only a fully written, integrity-checked snapshot. os.replace is atomic
+        # when the temporary file and destination are on the same filesystem.
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
 
     backups = sorted(target_dir.glob("passive_income_*.db"), reverse=True)
     for old in backups[max(1, retention):]:
