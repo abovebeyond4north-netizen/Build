@@ -4,6 +4,7 @@ import argparse
 import os
 import shutil
 import sqlite3
+import tempfile
 from pathlib import Path
 
 
@@ -20,10 +21,20 @@ def verify_database(path: Path) -> None:
 def restore(source: Path, destination: Path) -> None:
     verify_database(source)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(destination.suffix + ".restore.tmp")
-    shutil.copy2(source, temporary)
-    verify_database(temporary)
-    os.replace(temporary, destination)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.restore-",
+        suffix=".tmp",
+        dir=destination.parent,
+    )
+    os.close(fd)
+    temporary = Path(temporary_name)
+    try:
+        shutil.copy2(source, temporary)
+        verify_database(temporary)
+        os.replace(temporary, destination)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def main() -> None:
