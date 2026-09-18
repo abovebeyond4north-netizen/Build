@@ -122,6 +122,45 @@ class BountyForgeV2Tests(unittest.TestCase):
             safe_solver_payload("Build a website", "Create a custom React app from scratch.")
         )
 
+    def test_additional_safe_routes(self):
+        cases = [
+            (
+                "Convert JSONL to JSON",
+                "Please convert.\n\n```jsonl\n{\"a\":1}\n{\"a\":2}\n```",
+                "jsonl_to_json",
+            ),
+            (
+                "Deduplicate CSV by column id",
+                "Remove duplicate rows by column id.\n\n```csv\nid,name\n1,A\n1,A\n2,B\n```",
+                "csv_deduplicate",
+            ),
+            (
+                "Convert CSV to Markdown table",
+                "Make a markdown table from this CSV.\n\n```csv\nname,value\na,1\n```",
+                "csv_to_markdown",
+            ),
+            (
+                "Sort unique lines",
+                "Sort and deduplicate these lines.\n\n```text\nb\na\nb\n```",
+                "lines_sort_unique",
+            ),
+            (
+                "Base64 encode text",
+                "Encode this to Base64.\n\n```text\nhello\n```",
+                "base64_encode",
+            ),
+            (
+                "Replace exact text",
+                "Replace \"red\" with \"blue\".\n\n```text\nred green red\n```",
+                "text_replace",
+            ),
+        ]
+        for title, description, expected in cases:
+            with self.subTest(expected=expected):
+                payload = safe_solver_payload(title, description)
+                self.assertIsNotNone(payload)
+                self.assertEqual(payload["kind"], expected)
+
     def test_settled_units_require_matching_exact_receipt(self):
         invoice = self.fake.contract_invoices("contract-1")[0]
         self.assertEqual(list(_settled_units(invoice, set())), [])
