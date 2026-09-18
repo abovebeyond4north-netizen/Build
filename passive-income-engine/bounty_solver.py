@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import hmac
 import io
 import json
 import os
@@ -16,6 +17,7 @@ QUEUE_DIR = Path(os.getenv("BOUNTYFORGE_QUEUE_DIR", "/bounty-queue"))
 POLL_SECONDS = max(1, int(os.getenv("BOUNTYFORGE_SOLVER_POLL_SECONDS", "5")))
 MAX_INPUT_BYTES = max(1024, int(os.getenv("BOUNTYFORGE_SOLVER_MAX_INPUT_BYTES", "262144")))
 MAX_OUTPUT_BYTES = max(1024, int(os.getenv("BOUNTYFORGE_SOLVER_MAX_OUTPUT_BYTES", "524288")))
+QUEUE_SECRET = os.getenv("BOUNTYFORGE_QUEUE_SECRET", "")
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -183,7 +185,19 @@ HANDLERS = {
 }
 
 
+def verify_package_signature(package: dict[str, Any]) -> None:
+    if not QUEUE_SECRET:
+        raise ValueError("solver queue secret is not configured")
+    supplied = str(package.get("signature") or "")
+    unsigned = {key: value for key, value in package.items() if key != "signature"}
+    body = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode()
+    expected = hmac.new(QUEUE_SECRET.encode(), body, hashlib.sha256).hexdigest()
+    if not supplied or not hmac.compare_digest(supplied, expected):
+        raise ValueError("invalid work-package signature")
+
+
 def solve_package(package: dict[str, Any]) -> SolveResult:
+    verify_package_signature(package)
     if package.get("version") != 1:
         raise ValueError("unsupported work-package version")
     payload = package.get("payload")
