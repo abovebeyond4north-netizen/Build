@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from dataclasses import asdict, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,96 @@ def _preflight_config(config: Config | None = None) -> Config:
         auto_deliver=False,
         reconcile_payments=False,
     )
+
+
+CLOSED_TASK_STATUSES = {
+    "accepted",
+    "awarded",
+    "cancelled",
+    "canceled",
+    "closed",
+    "completed",
+    "draft",
+    "expired",
+    "filled",
+    "paused",
+}
+
+
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _available_action_names(value: Any) -> list[str]:
+    names: list[str] = []
+    if isinstance(value, dict):
+        for key, enabled in value.items():
+            if bool(enabled):
+                names.append(str(key))
+    elif isinstance(value, list):
+        for item in value:
+            if isinstance(item, str):
+                names.append(item)
+            elif isinstance(item, dict):
+                name = item.get("name") or item.get("action") or item.get("id")
+                if name:
+                    names.append(str(name))
+    return sorted(set(names))
+
+
+def task_state_evidence(task: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
+    current = now or datetime.now(timezone.utc)
+    status = str(task.get("status") or "").strip().lower()
+    actions_raw = task.get("availableActions")
+    actions = _available_action_names(actions_raw)
+
+    deadline_key = None
+    deadline = None
+    for key in ("deadlineAt", "expiresAt", "closedAt", "paymentDueAt"):
+        parsed = _parse_iso_datetime(task.get(key))
+        if parsed is not None:
+            deadline_key = key
+            deadline = parsed
+            break
+
+    updated = _parse_iso_datetime(task.get("updatedAt") or task.get("createdAt"))
+    age_days = None if updated is None else max(0, int((current - updated).total_seconds() // 86400))
+
+    explicit_bid_disabled = False
+    if isinstance(actions_raw, dict):
+        for key in ("canBid", "bid", "createBid", "sendOffer", "submitOffer"):
+            if key in actions_raw and actions_raw.get(key) is False:
+                explicit_bid_disabled = True
+                break
+
+    blocker = None
+    if status in CLOSED_TASK_STATUSES:
+        blocker = "task_not_open"
+    elif deadline is not None and deadline_key in {"deadlineAt", "expiresAt"} and deadline <= current:
+        blocker = "task_deadline_passed"
+    elif explicit_bid_disabled:
+        blocker = "task_not_biddable"
+
+    return {
+        "status": status or None,
+        "available_actions": actions,
+        "deadline_field": deadline_key,
+        "deadline_at": None if deadline is None else deadline.isoformat(),
+        "updated_age_days": age_days,
+        "explicit_bid_disabled": explicit_bid_disabled,
+        "state_blocker": blocker,
+    }
 
 
 def _artifact_evidence(
@@ -133,13 +224,22 @@ def preflight_task(
         }
 
     decision = decide(bounty, forge.store, cfg)
+    state = task_state_evidence(task)
     route = autonomous_fulfillment_route(bounty.title, bounty.description)
-    approach = build_bid_approach(bounty, decision) if decision.eligible else None
-    artifact = _artifact_evidence(
-        title=bounty.title,
-        description=bounty.description,
-        route=route,
-        artifact_dir=artifact_dir,
+    approach = (
+        build_bid_approach(bounty, decision)
+        if decision.eligible and not state["state_blocker"]
+        else None
+    )
+    artifact = (
+        _artifact_evidence(
+            title=bounty.title,
+            description=bounty.description,
+            route=route,
+            artifact_dir=artifact_dir,
+        )
+        if not state["state_blocker"]
+        else None
     )
 
     artifact_verified = (
@@ -151,13 +251,16 @@ def preflight_task(
     )
     bid_ready = bool(
         decision.eligible
+        and not state["state_blocker"]
         and bounty.execution_mode == "pitch"
         and route is not None
         and approach
         and artifact_verified
     )
 
-    if not decision.eligible:
+    if state["state_blocker"]:
+        blocked_by = str(state["state_blocker"])
+    elif not decision.eligible:
         blocked_by = decision.reason
     elif bounty.execution_mode != "pitch":
         blocked_by = "execution_mode_not_pitch"
@@ -176,6 +279,7 @@ def preflight_task(
         "task_url": bounty.task_url,
         "title": bounty.title,
         "updated_at": bounty.updated_at,
+        "task_state": state,
         "execution_mode": bounty.execution_mode,
         "reward_cents": bounty.reward_cents,
         "currency": bounty.currency,
