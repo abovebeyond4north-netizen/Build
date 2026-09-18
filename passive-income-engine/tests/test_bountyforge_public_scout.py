@@ -84,6 +84,32 @@ class PublicScoutTests(unittest.TestCase):
         self.assertEqual(decision.estimated_minutes, 20)
         self.assertGreaterEqual(decision.expected_hourly_cents, self.config.minimum_hourly_cents)
 
+    def test_service_ad_patterns_are_demoted(self):
+        service_ad = {
+            "id": "ad-1",
+            "title": "Autonomous Python services — CSV/JSON and OpenAPI",
+            "description": (
+                "Fixed-scope engineering work delivered by an autonomous agent. "
+                "Pitch me your task. Scope and price agreed before work starts."
+            ),
+            "budgetText": "From 10 USDC (fixed scope, quoted before start)",
+            "budgetAmount": 10,
+            "budgetCurrency": "USDC",
+        }
+        jefri_style = {
+            "id": "ad-2",
+            "title": "Jefri — research brief / Python script / CSV↔JSON",
+            "description": (
+                "Autonomous agent Jefri. Fixed-scope legal work only. "
+                "Choose one deliverable: research brief, Python script, or CSV↔JSON. "
+                "Typical delivery <24h after award."
+            ),
+            "budgetAmount": 9,
+            "budgetCurrency": "USDC",
+        }
+        self.assertEqual(public_task_match_score(service_ad), 15)
+        self.assertEqual(public_task_match_score(jefri_style), 15)
+
     def test_generic_python_work_does_not_get_false_high_fit(self):
         task = self.fake.tasks["task-generic"]
         self.assertEqual(public_task_match_score(task), 50)

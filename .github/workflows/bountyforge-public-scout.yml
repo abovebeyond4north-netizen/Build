@@ -1,0 +1,97 @@
+name: BountyForge Public Scout
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "passive-income-engine/bountyforge.py"
+      - "passive-income-engine/requirements.txt"
+      - ".github/workflows/bountyforge-public-scout.yml"
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bountyforge-public-scout
+  cancel-in-progress: true
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: passive-income-engine
+    env:
+      DATABASE_PATH: /tmp/bountyforge-public.db
+      BOUNTYFORGE_ENABLED: "true"
+      BOUNTYFORGE_PUBLIC_SCOUT: "true"
+      BOUNTYFORGE_PUBLIC_SKILLS: "csv,json,data,python,documentation"
+      BOUNTYFORGE_PUBLIC_TASKS_PER_SIGNAL: "20"
+      BOUNTYFORGE_AUTO_BID: "false"
+      BOUNTYFORGE_AUTO_SOLVE: "false"
+      BOUNTYFORGE_AUTO_REPO_VERIFY: "false"
+      BOUNTYFORGE_AUTO_DELIVER: "false"
+      BOUNTYFORGE_RECONCILE_PAYMENTS: "false"
+      OPENTASK_TOKEN: ""
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: passive-income-engine/requirements.txt
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt
+      - name: Scout public OpenTask work
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from bountyforge import BountyForge
+
+          forge = BountyForge()
+          result = forge.run_once()
+          Path("public-scout.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True, default=str) + "\n"
+          )
+
+          candidates = result.get("summary", {}).get("top_candidates", [])
+          lines = [
+              "# BountyForge public scout",
+              "",
+              f"Discovered: {result.get('discovered', 0)}",
+              f"Eligible: {result.get('eligible', 0)}",
+              "",
+              "## Highest-ranked eligible candidates",
+              "",
+          ]
+          if not candidates:
+              lines.append("No candidates cleared the configured profitability and safety gates.")
+          else:
+              lines.append("| Task | Reward | Currency | Expected profit | Expected hourly |")
+              lines.append("| --- | ---: | --- | ---: | ---: |")
+              for item in candidates[:10]:
+                  title = str(item.get("title") or "").replace("|", "\\|")
+                  lines.append(
+                      f"| {title} | {item.get('reward_cents', 0) / 100:.2f} | "
+                      f"{item.get('currency', '')} | "
+                      f"{item.get('expected_profit_cents', 0) / 100:.2f} | "
+                      f"{item.get('expected_hourly_cents', 0) / 100:.2f}/h |"
+                  )
+          Path("public-scout-summary.md").write_text("\n".join(lines) + "\n")
+          PY
+          cat public-scout-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bountyforge-public-scout
+          path: |
+            passive-income-engine/public-scout.json
+            passive-income-engine/public-scout-summary.md
+          retention-days: 14
+          if-no-files-found: error

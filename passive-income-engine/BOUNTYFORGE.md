@@ -1,4 +1,4 @@
-# BountyForge v4
+# BountyForge v4.1
 
 BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts public micro-bounties even before marketplace authentication, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
@@ -144,6 +144,27 @@ BOUNTYFORGE_PUBLIC_TASKS_PER_SIGNAL=20
 ```
 
 The token remains mandatory for marketplace writes such as bids, contract reads, delivery submission, and payment reconciliation.
+
+## Zero-credential scheduled scouting
+
+The repository includes `.github/workflows/bountyforge-public-scout.yml`.
+It runs every six hours and on relevant `main` pushes with no marketplace
+credentials and no repository write permission.
+
+The workflow explicitly disables bidding, solving, delivery, repository
+verification, and payment reconciliation. It performs public discovery and
+profitability ranking only, then preserves:
+
+- `public-scout.json` — machine-readable result and candidate metrics.
+- `public-scout-summary.md` — a compact top-candidate report shown in the
+  GitHub Actions run summary.
+
+Artifacts are retained for 14 days. This gives BountyForge a continuously
+refreshed opportunity feed before an OpenTask seller identity is connected.
+
+Public-feed quality filtering also demotes high-confidence seller
+advertisements (for example, "pitch me your task" service listings) so they
+are not mistaken for buyer bounties.
 
 ## OpenTask integration
 
