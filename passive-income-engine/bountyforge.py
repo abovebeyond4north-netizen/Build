@@ -1049,7 +1049,8 @@ def _task_work_text(task: dict[str, Any]) -> str:
 
 def looks_like_service_ad(task: dict[str, Any]) -> bool:
     title = str(task.get("title") or "").lower()
-    text = f"{title}\n{_task_work_text(task)}".lower()
+    description = _task_work_text(task).lower()
+    text = f"{title}\n{description}"
     budget_text = str(task.get("budgetText") or "").lower()
 
     high_confidence = (
@@ -1070,9 +1071,9 @@ def looks_like_service_ad(task: dict[str, Any]) -> bool:
     ):
         return True
     if (
-        text.lstrip().startswith("autonomous agent ")
-        and "choose one deliverable" in text
-        and "typical delivery" in text
+        description.lstrip().startswith("autonomous agent ")
+        and "choose one deliverable" in description
+        and "typical delivery" in description
     ):
         return True
     return False
