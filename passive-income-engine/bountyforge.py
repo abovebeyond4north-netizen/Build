@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import math
 import os
@@ -66,6 +68,8 @@ class Config:
     enabled: bool = True
     auto_bid: bool = False
     auto_submit_entries: bool = False
+    auto_solve: bool = True
+    auto_deliver: bool = False
     reconcile_payments: bool = True
     scout_interval_seconds: int = 900
     queue_dir: str = "/bounty-queue"
@@ -94,6 +98,8 @@ class Config:
             enabled=env_bool("BOUNTYFORGE_ENABLED", True),
             auto_bid=env_bool("BOUNTYFORGE_AUTO_BID", False),
             auto_submit_entries=env_bool("BOUNTYFORGE_AUTO_SUBMIT_ENTRIES", False),
+            auto_solve=env_bool("BOUNTYFORGE_AUTO_SOLVE", True),
+            auto_deliver=env_bool("BOUNTYFORGE_AUTO_DELIVER", False),
             reconcile_payments=env_bool("BOUNTYFORGE_RECONCILE_PAYMENTS", True),
             scout_interval_seconds=max(60, env_int("BOUNTYFORGE_SCOUT_INTERVAL_SECONDS", 900)),
             queue_dir=os.getenv("BOUNTYFORGE_QUEUE_DIR", "/bounty-queue"),
@@ -543,6 +549,75 @@ def decide(bounty: Bounty, store: Store, config: Config) -> Decision:
     )
 
 
+
+def _fenced_blocks(text: str) -> list[tuple[str, str]]:
+    return [
+        ((m.group(1) or "").strip().lower(), m.group(2).strip())
+        for m in re.finditer(r"\`\`\`([A-Za-z0-9_-]*)[ \t]*\n(.*?)\`\`\`", text, re.DOTALL)
+    ]
+
+
+def safe_solver_payload(title: str, description: str) -> dict[str, Any] | None:
+    """Return a deterministic, non-code-executing solver job for clear task types."""
+    text = f"{title}\n{description}"
+    lower = text.lower()
+    blocks = _fenced_blocks(text)
+    if not blocks:
+        return None
+
+    def first_block(*languages: str) -> str | None:
+        allowed = set(languages)
+        for language, body in blocks:
+            if language in allowed:
+                return body
+        return blocks[0][1] if blocks else None
+
+    if re.search(r"\b(csv\s*(?:to|->)\s*json|convert\b.*\bcsv\b.*\bjson\b)", lower, re.DOTALL):
+        raw = first_block("csv", "text", "")
+        return {"kind": "csv_to_json", "input_text": raw} if raw else None
+    if re.search(r"\b(json\s*(?:to|->)\s*csv|convert\b.*\bjson\b.*\bcsv\b)", lower, re.DOTALL):
+        raw = first_block("json", "text", "")
+        return {"kind": "json_to_csv", "input_text": raw} if raw else None
+    if any(term in lower for term in ("pretty print json", "format json", "normalize json", "canonicalize json")):
+        raw = first_block("json", "text", "")
+        return {"kind": "json_format", "input_text": raw, "compact": "compact json" in lower} if raw else None
+    if "sha256" in lower or "sha-256" in lower:
+        raw = first_block("text", "", "json", "csv")
+        return {"kind": "sha256", "input_text": raw} if raw is not None else None
+    return None
+
+
+def _queue_signature(secret: str, package: dict[str, Any]) -> str:
+    unsigned = {key: value for key, value in package.items() if key != "signature"}
+    body = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode()
+    return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+
+def _safe_queue_job_id(source: str, task_id: str, contract_id: str | None = None) -> str:
+    identity = f"{source}:{task_id}:{contract_id or 'entry'}"
+    digest = hashlib.sha256(identity.encode()).hexdigest()[:20]
+    return f"{source}-{digest}"
+
+
+def _settled_units(invoice: dict[str, Any], receipt_ids: set[str]) -> Iterable[dict[str, Any]]:
+    settlement = invoice.get("settlement") or {}
+    for unit in settlement.get("units") or []:
+        receipt_id = str(unit.get("receiptId") or "")
+        amount = unit.get("amount") or {}
+        if (
+            unit.get("status") == "paid"
+            and receipt_id
+            and receipt_id in receipt_ids
+            and amount.get("sellerAmount") is not None
+            and amount.get("currency")
+        ):
+            yield {
+                "receipt_id": receipt_id,
+                "seller_amount": str(amount["sellerAmount"]),
+                "currency": str(amount["currency"]).upper(),
+            }
+
+
 class OpenTaskClient:
     def __init__(self, config: Config):
         self.base = config.opentask_base_url
@@ -611,6 +686,101 @@ class OpenTaskClient:
             f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/receipts",
         )
         return list(data.get("receipts") or [])
+
+
+    def contract_invoices(self, contract_id: str) -> list[dict[str, Any]]:
+        data = self._request(
+            "GET",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/invoices",
+        )
+        return list(data.get("invoices") or [])
+
+    def create_delivery_draft(
+        self,
+        contract_id: str,
+        *,
+        title: str,
+        summary: str,
+        verification_instructions: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/deliveries",
+            {
+                "title": title[:200],
+                "summary": summary[:20000],
+                "verificationInstructions": verification_instructions[:20000],
+            },
+            {"Idempotency-Key": idempotency_key},
+        )
+
+    def create_delivery_upload_intent(
+        self,
+        contract_id: str,
+        package_id: str,
+        *,
+        filename: str,
+        content_type: str,
+        size_bytes: int,
+        sha256: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/deliveries/"
+            f"{urllib.parse.quote(package_id, safe='')}/upload-intents",
+            {
+                "filename": filename,
+                "contentType": content_type,
+                "sizeBytes": size_bytes,
+                "sha256": sha256,
+            },
+            {"Idempotency-Key": idempotency_key},
+        )
+
+    def complete_delivery_upload(
+        self, contract_id: str, package_id: str, upload_intent_id: str
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/deliveries/"
+            f"{urllib.parse.quote(package_id, safe='')}/upload-intents/"
+            f"{urllib.parse.quote(upload_intent_id, safe='')}/complete",
+            {},
+        )
+
+    def delivery_upload_status(
+        self, contract_id: str, package_id: str, upload_intent_id: str
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/deliveries/"
+            f"{urllib.parse.quote(package_id, safe='')}/upload-intents/"
+            f"{urllib.parse.quote(upload_intent_id, safe='')}",
+        )
+
+    def submit_delivery(
+        self,
+        contract_id: str,
+        package_id: str,
+        *,
+        expected_version: int,
+        file_id: str,
+        label: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/deliveries/"
+            f"{urllib.parse.quote(package_id, safe='')}/submit",
+            {
+                "expectedVersion": expected_version,
+                "nativeArtifacts": [{"fileId": file_id, "label": label[:200]}],
+                "confirmed": True,
+            },
+            {"Idempotency-Key": idempotency_key},
+        )
 
     def create_task_entry_upload_intent(
         self,
