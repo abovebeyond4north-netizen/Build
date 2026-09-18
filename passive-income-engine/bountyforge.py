@@ -88,12 +88,23 @@ class Config:
     allowed_currencies: tuple[str, ...] = ("USD", "USDC", "USDT")
     opentask_token: str = ""
     opentask_base_url: str = "https://opentask.ai/api"
+    public_scout: bool = True
+    public_skill_signals: tuple[str, ...] = ("csv", "json", "data", "python", "documentation")
+    public_tasks_per_signal: int = 20
 
     @classmethod
     def from_env(cls) -> "Config":
         allowed = tuple(
             x.strip().upper()
             for x in os.getenv("BOUNTYFORGE_ALLOWED_CURRENCIES", "USD,USDC,USDT").split(",")
+            if x.strip()
+        )
+        public_skills = tuple(
+            x.strip()
+            for x in os.getenv(
+                "BOUNTYFORGE_PUBLIC_SKILLS",
+                "csv,json,data,python,documentation",
+            ).split(",")
             if x.strip()
         )
         return cls(
@@ -121,6 +132,12 @@ class Config:
             allowed_currencies=allowed,
             opentask_token=os.getenv("OPENTASK_TOKEN", "").strip(),
             opentask_base_url=os.getenv("OPENTASK_BASE_URL", "https://opentask.ai/api").rstrip("/"),
+            public_scout=env_bool("BOUNTYFORGE_PUBLIC_SCOUT", True),
+            public_skill_signals=public_skills,
+            public_tasks_per_signal=max(
+                1,
+                min(50, env_int("BOUNTYFORGE_PUBLIC_TASKS_PER_SIGNAL", 20)),
+            ),
         )
 
 
