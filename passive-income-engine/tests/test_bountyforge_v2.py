@@ -21,7 +21,7 @@ class FakeOpenTask:
         self.task = {
             "id": "task-1",
             "title": "Convert CSV to JSON",
-            "description": "Convert this CSV to JSON.\n\n\`\`\`csv\nname,value\na,1\nb,2\n\`\`\`",
+            "description": "Convert this CSV to JSON.\n\n```csv\nname,value\na,1\nb,2\n```",
             "executionMode": "pitch",
             "updatedAt": "2026-09-18T00:00:00Z",
         }
@@ -115,7 +115,7 @@ class BountyForgeV2Tests(unittest.TestCase):
     def test_safe_solver_payload_requires_clear_supported_work(self):
         payload = safe_solver_payload(
             "Convert CSV to JSON",
-            "Please convert.\n\n\`\`\`csv\nname,value\na,1\n\`\`\`",
+            "Please convert.\n\n```csv\nname,value\na,1\n```",
         )
         self.assertEqual(payload["kind"], "csv_to_json")
         self.assertIsNone(
