@@ -1,67 +1,128 @@
-# BountyForge v2
+# BountyForge v3
 
-BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts micro-bounties, rejects unsafe or uneconomic work, ranks viable jobs by expected return, performs a narrow set of deterministic tasks in an offline solver, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
+BountyForge is the active-work revenue subsystem for the Passive Income Engine. It discovers agent-compatible micro-bounties, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
 ## Trust zones
 
-BountyForge deliberately separates marketplace authority from work execution.
+BountyForge deliberately separates marketplace authority, deterministic work execution, repository fetching, repository verification, and accounting.
 
 ### Coordinator
 
-`bountyforge.py` runs with:
+`bountyforge.py` has:
 
 - the scoped OpenTask token;
-- the shared accounting database;
+- the accounting database;
 - outbound network access;
-- the signed queue volume.
+- the deterministic solver queue;
+- the repository-verification queue.
 
-It may discover tasks, score them, place bounded bids when explicitly enabled, inspect seller contracts, submit verified native deliveries when enabled, and reconcile exact router-verified receipts.
+It may discover tasks, score them, place bounded bids when enabled, inspect seller contracts, submit verified native deliveries when enabled, and reconcile exact payment receipts.
 
-It does **not** execute buyer-supplied commands or arbitrary code.
+It does **not** execute buyer-provided shell commands or arbitrary code.
 
-### Offline solver
+### Deterministic solver
 
 `bounty_solver.py` runs with:
 
 - no network;
-- no `/data` treasury volume;
+- no treasury database;
 - no OpenTask or PayPal credentials;
-- a dedicated queue volume;
-- a queue authentication secret only;
-- all Linux capabilities dropped;
+- a dedicated HMAC-authenticated queue;
+- a read-only container root;
+- dropped Linux capabilities;
 - `no-new-privileges`;
-- a PID cap;
-- a memory limit;
-- a CPU limit;
-- a read-only container filesystem.
+- CPU, memory, PID, input, and output limits.
 
-The coordinator signs each work package with HMAC-SHA256. The solver rejects unsigned or altered packages. Solver result manifests are also signed and include artifact SHA-256 evidence; the coordinator verifies both signature and artifact hash before any delivery action.
+Every work package and result manifest is authenticated with HMAC-SHA256. Artifact bytes are independently SHA-256 checked by the coordinator before delivery.
 
-## Safe solver v2
+### Repository stager
 
-The first deterministic handlers are intentionally narrow:
+`repo_stager.py` is the only repository worker with network access. It has no treasury, PayPal, or OpenTask credential.
+
+It accepts only:
+
+- `https://github.com/<owner>/<repo>`;
+- a full 40-hex immutable commit SHA;
+- a signed request from the coordinator.
+
+It fetches the public codeload archive, rejects symlinks, hardlinks, devices, FIFOs, absolute paths, and traversal paths, enforces compressed/expanded size and file-count ceilings, and writes a file-level SHA-256 manifest.
+
+### Repository verifier
+
+`repo_verifier.py` receives the staged tree but has:
+
+- no network;
+- no treasury volume;
+- no OpenTask/PayPal credential;
+- a read-only root filesystem;
+- dropped capabilities;
+- `no-new-privileges`;
+- resource limits.
+
+It accepts only signed verification jobs and a tiny command allowlist:
+
+- `python -m unittest discover -v`
+- `python -m compileall -q .`
+
+No free-form command string is accepted.
+
+## Deterministic microtask library
+
+v3 supports:
 
 - `json_format`
 - `csv_to_json`
 - `json_to_csv`
+- `jsonl_to_json`
+- `json_to_jsonl`
+- `csv_deduplicate`
+- `csv_to_markdown`
+- `lines_sort_unique`
+- `base64_encode`
+- `base64_decode`
+- `text_replace`
 - `sha256`
 
-The task router activates a handler only when the task wording clearly identifies one of those operations and includes an inline fenced input block.
+The router only selects these handlers when task wording is explicit and the required input appears in an inline fenced block. Unsupported tasks remain unsolved.
 
-The solver does not:
+The deterministic solver never executes Python, JavaScript, binaries, macros, shell commands, or task-supplied programs.
 
-- run shell commands;
-- execute Python, JavaScript, binaries, macros, or task-supplied code;
-- clone repositories;
-- browse the web;
-- read production credentials;
-- access the treasury database.
+## Repository verification microtasks
 
-Unsupported tasks remain unsolved rather than being guessed.
+BountyForge can also recognize explicit jobs of the form:
+
+```text
+Verify/run tests for:
+https://github.com/OWNER/REPO
+commit: <40-hex SHA>
+check: python unittest and/or compileall
+```
+
+The coordinator signs a staging request, the stager fetches that exact public commit, the no-network verifier runs only the named allowlisted checks, and the signed result is converted into a normal BountyForge delivery artifact.
+
+A successful report includes:
+
+- repository tree size;
+- file count;
+- check name;
+- exact argv used;
+- return code;
+- duration;
+- capped output;
+- output SHA-256;
+- pass/fail state.
+
+This creates a real autonomous microjob class for repository verification without pretending to be a general coding model.
+
+## Current boundary on code-change bounties
+
+v3 does **not** generate arbitrary source-code patches.
+
+Repository verification is intentionally separate from patch generation. A future code-change system would need a dedicated candidate-generator boundary and must return candidate diffs into this verifier rather than receiving shell or marketplace authority.
+
+Until that exists, BountyForge can earn from deterministic transforms and repository verification jobs, but it will not claim that it can safely solve arbitrary software bugs.
 
 ## OpenTask integration
-
-Current integrations use OpenTask's scoped REST agent API.
 
 Discovery and marketplace state:
 
@@ -72,37 +133,36 @@ Discovery and marketplace state:
 
 Native Pitch delivery:
 
-- `POST /api/agent/contracts/{contractId}/deliveries`
-- `POST /api/agent/contracts/{contractId}/deliveries/{packageId}/upload-intents`
-- direct authorized HTTPS PUT using the short-lived upload authorization;
-- upload completion and processing-status polling;
-- `POST /api/agent/contracts/{contractId}/deliveries/{packageId}/submit`
+- create delivery draft;
+- create native upload intent;
+- upload using the short-lived authorized HTTPS request;
+- complete/poll file processing;
+- submit immutable delivery package.
 
-The upload URL and caller headers are treated as short-lived credentials and are never logged.
+The temporary upload URL and headers are never persisted in logs.
 
 Payment reconciliation:
 
-- `GET /api/agent/contracts/{contractId}/receipts`
-- `GET /api/agent/contracts/{contractId}/invoices`
+- contract receipts;
+- contract invoices;
+- exact paid settlement units.
 
-BountyForge credits an earning only when an invoice settlement unit is `paid`, carries a receipt ID, and that exact receipt is present in the receipt collection. The seller amount on that unit becomes the recorded proceeds. Platform-fee estimates used during opportunity scoring are not deducted again from a verified seller amount.
+An earning is recorded only when a paid invoice unit references a receipt that exists in the contract receipt collection. The recorded amount is the seller proceeds from the verified unit, so the opportunity-model fee estimate is not deducted again.
 
 ## Bounty and Benchmark entries
 
-OpenTask Bounty/Benchmark entry artifacts currently require an artifact URL in the entry schema. The native task-entry upload flow and the public artifact URL field are separate surfaces.
+OpenTask Bounty/Benchmark entry artifacts currently require a public artifact URL in the entry schema.
 
-Therefore v2 may safely solve supported Bounty/Benchmark work and stage the verified artifact as `solved_entry_ready`, but it does not invent a public URL or auto-submit that entry.
-
-This is an intentional correctness boundary.
+BountyForge may solve or verify those jobs and stage them as ready, but it does not invent a public artifact URL. Automatic native private delivery is used only where the contract delivery surface supports it.
 
 ## Runtime controls
 
-The example environment contains:
-
 ```dotenv
 BOUNTYFORGE_ENABLED=true
+
 BOUNTYFORGE_AUTO_BID=false
 BOUNTYFORGE_AUTO_SOLVE=true
+BOUNTYFORGE_AUTO_REPO_VERIFY=true
 BOUNTYFORGE_AUTO_DELIVER=false
 BOUNTYFORGE_AUTO_SUBMIT_ENTRIES=false
 BOUNTYFORGE_RECONCILE_PAYMENTS=true
@@ -121,108 +181,93 @@ BOUNTYFORGE_ALLOWED_CURRENCIES=USD,USDC,USDT
 BOUNTYFORGE_QUEUE_DIR=/bounty-queue
 BOUNTYFORGE_QUEUE_SECRET=replace-with-an-independent-long-random-secret
 
+BOUNTYFORGE_REPO_VERIFY_DIR=/repo-verify
+BOUNTYFORGE_REPO_VERIFY_SECRET=replace-with-an-independent-long-random-secret
+BOUNTYFORGE_REPO_ARCHIVE_MAX_BYTES=20971520
+BOUNTYFORGE_REPO_VERIFY_MAX_TREE_BYTES=52428800
+BOUNTYFORGE_REPO_VERIFY_MAX_FILES=5000
+BOUNTYFORGE_REPO_VERIFY_TIMEOUT_SECONDS=120
+BOUNTYFORGE_REPO_VERIFY_MAX_OUTPUT_BYTES=131072
+
 OPENTASK_BASE_URL=https://opentask.ai/api
 OPENTASK_TOKEN=
 ```
 
-Generate `BOUNTYFORGE_QUEUE_SECRET` independently from the admin, webhook, PayPal, and OpenTask secrets.
+Generate the queue secrets independently from each other and independently from admin, webhook, PayPal, and marketplace credentials.
 
-A production OpenTask token should contain only the scopes required for the features actually enabled.
+## Autonomy flow
 
-## Autonomy sequence
-
-With discovery only:
+Deterministic job:
 
 ```text
-discover -> normalize -> safety filter -> profitability score -> ledger candidate
+discover
+ -> safety/profit scoring
+ -> accepted contract
+ -> signed deterministic package
+ -> offline solver
+ -> signed + SHA-256 verified artifact
+ -> native delivery
+ -> exact payment receipt
+ -> treasury
 ```
 
-With bounded bidding enabled:
+Repository verification job:
 
 ```text
-eligible Pitch task -> bid -> accepted contract
+discover explicit repo-verification task
+ -> require github.com + full commit SHA + allowlisted checks
+ -> signed fetch request
+ -> public immutable archive staging
+ -> path/symlink/size validation
+ -> file-hash manifest
+ -> no-network verifier
+ -> signed verification report
+ -> normal BountyForge delivery artifact
+ -> exact payment receipt
+ -> treasury
 ```
-
-With solving enabled:
-
-```text
-bound contract
-  -> classify deterministic task
-  -> signed work package
-  -> offline/no-network solver
-  -> signed result manifest
-  -> SHA-256 verification
-  -> delivery-ready artifact
-```
-
-With native delivery enabled:
-
-```text
-verified artifact
-  -> OpenTask delivery draft
-  -> native private upload
-  -> OpenTask processing
-  -> immutable delivery submit
-  -> buyer review
-```
-
-With payment reconciliation enabled:
-
-```text
-exact receipt + paid invoice unit
-  -> idempotent bounty_earnings row
-  -> same-currency treasury integration
-```
-
-Foreign-currency earnings remain separate until an explicit conversion process exists.
 
 ## Commands
 
-Run one complete coordinator cycle:
+One full cycle:
 
 ```bash
 python bountyforge.py scout
 ```
 
-Inspect local state:
+State:
 
 ```bash
 python bountyforge.py status
 ```
 
-Reconcile contracts and exact receipts without running discovery:
+Contract/payment reconciliation:
 
 ```bash
 python bountyforge.py reconcile
 ```
 
-Collect signed solver results without running discovery:
+Collect deterministic solver output:
 
 ```bash
 python bountyforge.py collect
 ```
 
-Run continuously:
+Collect repository verification output:
+
+```bash
+python bountyforge.py collect-repos
+```
+
+Continuous worker:
 
 ```bash
 python bountyforge.py worker
 ```
 
-Manual settlement remains available for independently verified external bounty sources:
-
-```bash
-python bountyforge.py settle \
-  --source SOURCE \
-  --external-id TASK_ID \
-  --settlement-ref RECEIPT_ID \
-  --gross-cents 2000 \
-  --fees-cents 0 \
-  --currency USDC
-```
+Manual recording for independently verified external bounty receipts remains available through `settle`.
 
 ## Profitability model
-
-The opportunity model remains conservative:
 
 ```text
 success_probability =
@@ -239,21 +284,17 @@ expected_hourly =
     expected_profit / estimated_minutes * 60
 ```
 
-The 0.955 multiplier is an opportunity-screening assumption, not settlement accounting. Verified settlement rows use actual seller proceeds from payment records.
+The 0.955 multiplier is an opportunity-screening estimate only. Verified settlement accounting uses actual seller proceeds.
 
-## Deployment
+## Deployment services
 
-Both production Compose stacks run four logical services:
+The production Compose stacks now separate six roles:
 
 1. `engine` — storefront, checkout, treasury API.
-2. `bountyforge` — marketplace coordinator and reconciler.
-3. `bounty-solver` — offline deterministic solver with no network or treasury mount.
-4. `backup` — verified SQLite backup worker.
+2. `bountyforge` — marketplace coordinator/reconciler.
+3. `bounty-solver` — no-network deterministic transform worker.
+4. `repo-stager` — public immutable GitHub archive fetcher with no business secrets.
+5. `repo-verifier` — no-network allowlisted repository test worker.
+6. `backup` — verified SQLite backup worker.
 
-The coordinator and solver share only `bounty_queue`. The solver never mounts `engine_data`.
-
-## Next capability boundary
-
-The next safe expansion is not arbitrary code execution. It is a larger library of objectively verifiable handlers, such as schema-constrained text/data transforms and generated documentation whose output can be validated without giving task content a shell.
-
-Repository/code-change bounties would require a separate disposable build sandbox with cloned-source allowlisting, outbound-network policy, test execution limits, secret scrubbing, and a clean artifact-only return channel. That should remain distinct from the revenue host and from this deterministic solver.
+The repository workers never mount `engine_data`. The deterministic solver never mounts `engine_data`. The coordinator is the only BountyForge component that combines marketplace authority with accounting state.

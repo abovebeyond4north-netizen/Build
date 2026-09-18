@@ -74,6 +74,9 @@ class Config:
     scout_interval_seconds: int = 900
     queue_dir: str = "/bounty-queue"
     queue_secret: str = ""
+    repo_verify_dir: str = "/repo-verify"
+    repo_verify_secret: str = ""
+    auto_repo_verify: bool = True
     minimum_reward_cents: int = 500
     maximum_reward_cents: int = 10_000
     minimum_success_probability: Decimal = Decimal("0.70")
@@ -104,6 +107,9 @@ class Config:
             scout_interval_seconds=max(60, env_int("BOUNTYFORGE_SCOUT_INTERVAL_SECONDS", 900)),
             queue_dir=os.getenv("BOUNTYFORGE_QUEUE_DIR", "/bounty-queue"),
             queue_secret=os.getenv("BOUNTYFORGE_QUEUE_SECRET", ""),
+            repo_verify_dir=os.getenv("BOUNTYFORGE_REPO_VERIFY_DIR", "/repo-verify"),
+            repo_verify_secret=os.getenv("BOUNTYFORGE_REPO_VERIFY_SECRET", ""),
+            auto_repo_verify=env_bool("BOUNTYFORGE_AUTO_REPO_VERIFY", True),
             minimum_reward_cents=max(0, env_int("BOUNTYFORGE_MIN_REWARD_CENTS", 500)),
             maximum_reward_cents=max(0, env_int("BOUNTYFORGE_MAX_REWARD_CENTS", 10_000)),
             minimum_success_probability=env_decimal("BOUNTYFORGE_MIN_SUCCESS_PROBABILITY", "0.70"),
@@ -589,6 +595,50 @@ def safe_solver_payload(title: str, description: str) -> dict[str, Any] | None:
     if re.search(r"\b(json\s*(?:to|->)\s*csv|convert\b.*\bjson\b.*\bcsv\b)", lower, re.DOTALL):
         raw = first_block("json", "text", "")
         return {"kind": "json_to_csv", "input_text": raw} if raw else None
+    if re.search(r"\b(jsonl|ndjson)\s*(?:to|->)\s*json\b", lower):
+        raw = first_block("jsonl", "ndjson", "text", "")
+        return {"kind": "jsonl_to_json", "input_text": raw} if raw else None
+    if re.search(r"\bjson\s*(?:to|->)\s*(?:jsonl|ndjson)\b", lower):
+        raw = first_block("json", "text", "")
+        return {"kind": "json_to_jsonl", "input_text": raw} if raw else None
+    if ("deduplicate" in lower or "remove duplicate" in lower) and "csv" in lower:
+        raw = first_block("csv", "text", "")
+        key_match = re.search(r"(?:by|using)\s+(?:column|columns|keys?)\s*[:=]?\s*([A-Za-z0-9_, -]+)", text, re.IGNORECASE)
+        payload = {"kind": "csv_deduplicate", "input_text": raw}
+        if key_match:
+            keys = [item.strip() for item in key_match.group(1).split(",") if item.strip()]
+            if keys:
+                payload["keys"] = keys
+        return payload if raw else None
+    if ("markdown table" in lower or "csv to markdown" in lower) and "csv" in lower:
+        raw = first_block("csv", "text", "")
+        return {"kind": "csv_to_markdown", "input_text": raw} if raw else None
+    if ("sort" in lower and ("unique" in lower or "deduplicate" in lower)) and ("lines" in lower or "list" in lower):
+        raw = first_block("text", "", "csv", "json")
+        return {
+            "kind": "lines_sort_unique",
+            "input_text": raw,
+            "case_sensitive": "case-insensitive" not in lower and "ignore case" not in lower,
+        } if raw is not None else None
+    if "base64" in lower and any(term in lower for term in ("encode", "to base64")):
+        raw = first_block("text", "", "json", "csv")
+        return {"kind": "base64_encode", "input_text": raw} if raw is not None else None
+    if "base64" in lower and any(term in lower for term in ("decode", "from base64")):
+        raw = first_block("text", "", "base64")
+        return {"kind": "base64_decode", "input_text": raw} if raw is not None else None
+    replace_match = re.search(
+        r"(?:replace|change)\s+['\"]([^'\"]+)['\"]\s+(?:with|to)\s+['\"]([^'\"]*)['\"]",
+        text,
+        re.IGNORECASE,
+    )
+    if replace_match:
+        raw = first_block("text", "", "md", "markdown")
+        return {
+            "kind": "text_replace",
+            "input_text": raw,
+            "old": replace_match.group(1),
+            "new": replace_match.group(2),
+        } if raw is not None else None
     if any(term in lower for term in ("pretty print json", "format json", "normalize json", "canonicalize json")):
         raw = first_block("json", "text", "")
         return {"kind": "json_format", "input_text": raw, "compact": "compact json" in lower} if raw else None
@@ -596,6 +646,40 @@ def safe_solver_payload(title: str, description: str) -> dict[str, Any] | None:
         raw = first_block("text", "", "json", "csv")
         return {"kind": "sha256", "input_text": raw} if raw is not None else None
     return None
+
+
+def safe_repo_verification_spec(title: str, description: str) -> dict[str, Any] | None:
+    text = f"{title}\n{description}"
+    lower = text.lower()
+    if not any(term in lower for term in ("verify", "run tests", "test this", "check this", "compile")):
+        return None
+
+    repo_match = re.search(
+        r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",
+        text,
+        re.IGNORECASE,
+    )
+    sha_match = re.search(r"\b[0-9a-fA-F]{40}\b", text)
+    if not repo_match or not sha_match:
+        return None
+
+    checks: list[str] = []
+    if any(term in lower for term in ("python unittest", "unittest", "unit tests", "run tests")):
+        checks.append("python_unittest")
+    if any(term in lower for term in ("compileall", "compile all", "python compile", "syntax check")):
+        checks.append("python_compileall")
+    if not checks:
+        return None
+
+    deduped = []
+    for check in checks:
+        if check not in deduped:
+            deduped.append(check)
+    return {
+        "repo_url": repo_match.group(0).rstrip("/").removesuffix(".git"),
+        "commit_sha": sha_match.group(0).lower(),
+        "checks": deduped[:3],
+    }
 
 
 def _queue_signature(secret: str, package: dict[str, Any]) -> str:
@@ -1001,6 +1085,167 @@ class BountyForge:
         self.store.mark_task_status(task_id, "solving")
         return True
 
+    def _repo_verify_root(self) -> Path:
+        root = Path(self.config.repo_verify_dir)
+        for folder in (
+            "fetch-inbox",
+            "fetch-outbox",
+            "fetch-processed",
+            "fetch-failed",
+            "inbox",
+            "outbox",
+            "processed",
+            "failed",
+            "consumed",
+            "quarantine",
+            "staged",
+        ):
+            (root / folder).mkdir(parents=True, exist_ok=True)
+        return root
+
+    def queue_repo_verification(
+        self,
+        *,
+        task_id: str,
+        title: str,
+        description: str,
+        execution_mode: str,
+        expected_task_updated_at: str,
+        contract_id: str | None = None,
+    ) -> bool:
+        if not self.config.auto_repo_verify or not self.config.repo_verify_secret:
+            return False
+        spec = safe_repo_verification_spec(title, description)
+        if spec is None:
+            return False
+
+        root = self._repo_verify_root()
+        job_id = _safe_queue_job_id("opentask-repo", task_id, contract_id)
+        for folder in (
+            "fetch-inbox",
+            "fetch-outbox",
+            "fetch-processed",
+            "fetch-failed",
+            "inbox",
+            "outbox",
+            "consumed",
+            "quarantine",
+        ):
+            if (root / folder / f"{job_id}.json").exists():
+                return False
+
+        package: dict[str, Any] = {
+            "version": 1,
+            "job_id": job_id,
+            "source": "opentask",
+            "task_id": task_id,
+            "contract_id": contract_id,
+            "execution_mode": execution_mode,
+            "expected_task_updated_at": expected_task_updated_at,
+            "title": title[:500],
+            **spec,
+        }
+        package["signature"] = _queue_signature(self.config.repo_verify_secret, package)
+        destination = root / "fetch-inbox" / f"{job_id}.json"
+        temporary = destination.with_suffix(".tmp")
+        temporary.write_text(json.dumps(package, indent=2, sort_keys=True) + "\n")
+        temporary.replace(destination)
+        self.store.mark_task_status(task_id, "repo_staging")
+        return True
+
+    def collect_repo_verification_results(self) -> dict[str, int]:
+        counts = {
+            "verified": 0,
+            "failed": 0,
+            "translated": 0,
+            "quarantined": 0,
+        }
+        if not self.config.repo_verify_secret or not self.config.queue_secret:
+            return counts
+
+        repo_root = self._repo_verify_root()
+        queue_root = self._queue_root()
+        for path in sorted((repo_root / "outbox").glob("*.json")):
+            try:
+                result = json.loads(path.read_text())
+            except Exception:
+                path.replace(repo_root / "quarantine" / path.name)
+                counts["quarantined"] += 1
+                continue
+
+            supplied = str(result.get("signature") or "")
+            expected = _queue_signature(self.config.repo_verify_secret, result)
+            if not supplied or not hmac.compare_digest(supplied, expected):
+                path.replace(repo_root / "quarantine" / path.name)
+                counts["quarantined"] += 1
+                continue
+
+            job_id = str(result.get("job_id") or path.stem)
+            task_id = str(result.get("task_id") or "")
+            contract_id = str(result.get("contract_id") or "")
+            passed = bool(result.get("passed"))
+
+            if not passed:
+                if task_id:
+                    self.store.mark_task_status(task_id, "repo_verification_failed")
+                path.replace(repo_root / "consumed" / path.name)
+                counts["failed"] += 1
+                continue
+
+            counts["verified"] += 1
+            artifact_dir = queue_root / "artifacts" / job_id
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            artifact_path = artifact_dir / "repository-verification.json"
+            report = dict(result)
+            artifact_bytes = (json.dumps(report, indent=2, sort_keys=True) + "\n").encode()
+            artifact_path.write_bytes(artifact_bytes)
+
+            manifest: dict[str, Any] = {
+                "version": 1,
+                "job_id": job_id,
+                "task_id": task_id or None,
+                "contract_id": contract_id or None,
+                "execution_mode": result.get("execution_mode"),
+                "expected_task_updated_at": result.get("expected_task_updated_at"),
+                "source": result.get("source") or "opentask",
+                "ok": True,
+                "handler": "repository_verification",
+                "artifact": {
+                    "relative_path": str(artifact_path.relative_to(queue_root)),
+                    "filename": artifact_path.name,
+                    "content_type": "application/json",
+                    "size_bytes": len(artifact_bytes),
+                    "sha256": hashlib.sha256(artifact_bytes).hexdigest(),
+                },
+                "verification": {
+                    "passed": True,
+                    "tree": result.get("tree"),
+                    "checks": [
+                        {
+                            "check": item.get("check"),
+                            "returncode": item.get("returncode"),
+                            "duration_ms": item.get("duration_ms"),
+                            "output_sha256": item.get("output_sha256"),
+                            "output_truncated": item.get("output_truncated"),
+                            "passed": item.get("passed"),
+                        }
+                        for item in (result.get("checks") or [])
+                    ],
+                },
+                "error": None,
+            }
+            manifest["signature"] = _queue_signature(self.config.queue_secret, manifest)
+            destination = queue_root / "outbox" / f"{job_id}.json"
+            if not destination.exists():
+                temporary = destination.with_suffix(".tmp")
+                temporary.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+                temporary.replace(destination)
+                counts["translated"] += 1
+            if task_id:
+                self.store.mark_task_status(task_id, "repo_verified")
+            path.replace(repo_root / "consumed" / path.name)
+        return counts
+
     def _verified_manifest_artifact(
         self, manifest: dict[str, Any]
     ) -> tuple[Path, dict[str, Any]] | None:
@@ -1215,7 +1460,7 @@ class BountyForge:
             if contract_status in {"submitted", "accepted", "rejected", "cancelled"}:
                 self.store.mark_task_status(task_id, contract_status)
 
-            if self.config.auto_solve and contract_status == "in_progress":
+            if (self.config.auto_solve or self.config.auto_repo_verify) and contract_status == "in_progress":
                 try:
                     detail = self.opentask.task_detail(task_id)
                     task_detail = dict(detail.get("task") or {})
@@ -1223,14 +1468,24 @@ class BountyForge:
                     description = str(task_detail.get("description") or "")
                     execution_mode = str(task_detail.get("executionMode") or "pitch")
                     updated_at = str(task_detail.get("updatedAt") or task_detail.get("createdAt") or utcnow())
-                    if self.queue_solver_task(
+                    queued = self.queue_solver_task(
                         task_id=task_id,
                         title=title,
                         description=description,
                         execution_mode=execution_mode,
                         expected_task_updated_at=updated_at,
                         contract_id=contract_id,
-                    ):
+                    )
+                    if not queued and safe_solver_payload(title, description) is None:
+                        queued = self.queue_repo_verification(
+                            task_id=task_id,
+                            title=title,
+                            description=description,
+                            execution_mode=execution_mode,
+                            expected_task_updated_at=updated_at,
+                            contract_id=contract_id,
+                        )
+                    if queued:
                         result["queued"] += 1
                 except Exception as exc:
                     print(
@@ -1275,29 +1530,37 @@ class BountyForge:
         if not self.config.enabled:
             return {"enabled": False, "discovered": 0, "eligible": 0, "bids": 0}
 
+        repo_results = self.collect_repo_verification_results()
         solver_results = self.collect_solver_results()
         contracts = self.reconcile_contracts()
 
         discovered = self.discover()
         eligible: list[tuple[Bounty, Decision]] = []
         queued_entries = 0
+        queued_repo_entries = 0
         for bounty in discovered:
             decision = decide(bounty, self.store, self.config)
             self.store.upsert_job(bounty, decision)
             if decision.eligible:
                 eligible.append((bounty, decision))
-                if (
-                    self.config.auto_solve
-                    and bounty.execution_mode in {"bounty", "benchmark"}
-                    and self.queue_solver_task(
+                if bounty.execution_mode in {"bounty", "benchmark"}:
+                    queued = self.queue_solver_task(
                         task_id=bounty.external_id,
                         title=bounty.title,
                         description=bounty.description,
                         execution_mode=bounty.execution_mode,
                         expected_task_updated_at=bounty.updated_at,
                     )
-                ):
-                    queued_entries += 1
+                    if queued:
+                        queued_entries += 1
+                    elif safe_solver_payload(bounty.title, bounty.description) is None and self.queue_repo_verification(
+                        task_id=bounty.external_id,
+                        title=bounty.title,
+                        description=bounty.description,
+                        execution_mode=bounty.execution_mode,
+                        expected_task_updated_at=bounty.updated_at,
+                    ):
+                        queued_repo_entries += 1
 
         eligible.sort(key=lambda pair: pair[1].score, reverse=True)
         bids = 0
@@ -1343,8 +1606,10 @@ class BountyForge:
             "discovered": len(discovered),
             "eligible": len(eligible),
             "queued_entries": queued_entries,
+            "queued_repo_entries": queued_repo_entries,
             "bids": bids,
             "contracts": contracts,
+            "repo_verifier": repo_results,
             "solver": solver_results,
             "summary": self.store.summary(),
         }
@@ -1367,6 +1632,7 @@ def cli() -> int:
     sub.add_parser("status")
     sub.add_parser("reconcile")
     sub.add_parser("collect")
+    sub.add_parser("collect-repos")
 
     settle = sub.add_parser("settle")
     settle.add_argument("--source", required=True)
@@ -1393,6 +1659,9 @@ def cli() -> int:
         return 0
     if args.command == "collect":
         print(json.dumps(forge.collect_solver_results(), indent=2, sort_keys=True))
+        return 0
+    if args.command == "collect-repos":
+        print(json.dumps(forge.collect_repo_verification_results(), indent=2, sort_keys=True))
         return 0
     if args.command == "settle":
         if args.gross_cents < 0 or args.fees_cents < 0 or args.fees_cents > args.gross_cents:
