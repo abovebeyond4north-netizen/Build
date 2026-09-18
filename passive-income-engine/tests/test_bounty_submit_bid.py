@@ -111,6 +111,18 @@ class ManualBidTests(unittest.TestCase):
         self.assertTrue(packet["packet_ready"])
         return packet["intent_sha256"]
 
+    def test_manual_workflow_is_dispatch_only_and_auto_bid_stays_off(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        workflow = (
+            repo_root / ".github" / "workflows" / "bountyforge-manual-bid.yml"
+        ).read_text()
+        self.assertIn("  workflow_dispatch:", workflow)
+        self.assertNotIn("\n  push:", workflow)
+        self.assertNotIn("\n  schedule:", workflow)
+        self.assertIn('BOUNTYFORGE_AUTO_BID: "false"', workflow)
+        self.assertIn("Type SUBMIT_BID", workflow)
+        self.assertIn("secrets.OPENTASK_TOKEN", workflow)
+
     def test_wrong_confirmation_blocks_before_any_network_call(self):
         client = FakeBidClient(self.task)
         result = submit_manual_bid(
