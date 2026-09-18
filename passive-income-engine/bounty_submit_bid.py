@@ -30,6 +30,23 @@ def _safe_bid_summary(value: Any) -> dict[str, Any]:
     }
 
 
+def _safe_auth_summary(auth: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ready_for_bid": bool(auth.get("ready_for_bid")),
+        "blocked_by": auth.get("blocked_by"),
+        "profile_identity_present": bool((auth.get("profile") or {}).get("id")),
+        "profile_read_verified": bool(auth.get("profile_read_verified")),
+        "onboarding_read_verified": bool(auth.get("onboarding_read_verified")),
+        "tasks_read_verified": bool(auth.get("tasks_read_verified")),
+        "bids_read_verified": bool(auth.get("bids_read_verified")),
+        "checkpoint": auth.get("checkpoint"),
+        "required_scopes": auth.get("required_scopes") or [],
+        "missing_declared_scopes": auth.get("missing_declared_scopes") or [],
+        "write_scope_verification": auth.get("write_scope_verification"),
+        "warnings": auth.get("warnings") or [],
+    }
+
+
 def _result_base(task_id: str, expected_intent_sha256: str) -> dict[str, Any]:
     return {
         "kind": "bountyforge.manualBidResult",
@@ -66,7 +83,7 @@ def submit_manual_bid(
     api = client or OpenTaskClient(cfg)
 
     auth = authenticated_bid_readiness(cfg, api)
-    report["auth_readiness"] = auth
+    report["auth_readiness"] = _safe_auth_summary(auth)
     if not auth.get("ready_for_bid"):
         report["blocked_by"] = auth.get("blocked_by") or "auth_not_ready"
         return report
