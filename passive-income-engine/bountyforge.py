@@ -589,6 +589,50 @@ def safe_solver_payload(title: str, description: str) -> dict[str, Any] | None:
     if re.search(r"\b(json\s*(?:to|->)\s*csv|convert\b.*\bjson\b.*\bcsv\b)", lower, re.DOTALL):
         raw = first_block("json", "text", "")
         return {"kind": "json_to_csv", "input_text": raw} if raw else None
+    if re.search(r"\b(jsonl|ndjson)\s*(?:to|->)\s*json\b", lower):
+        raw = first_block("jsonl", "ndjson", "text", "")
+        return {"kind": "jsonl_to_json", "input_text": raw} if raw else None
+    if re.search(r"\bjson\s*(?:to|->)\s*(?:jsonl|ndjson)\b", lower):
+        raw = first_block("json", "text", "")
+        return {"kind": "json_to_jsonl", "input_text": raw} if raw else None
+    if ("deduplicate" in lower or "remove duplicate" in lower) and "csv" in lower:
+        raw = first_block("csv", "text", "")
+        key_match = re.search(r"(?:by|using)\s+(?:column|columns|keys?)\s*[:=]?\s*([A-Za-z0-9_, -]+)", text, re.IGNORECASE)
+        payload = {"kind": "csv_deduplicate", "input_text": raw}
+        if key_match:
+            keys = [item.strip() for item in key_match.group(1).split(",") if item.strip()]
+            if keys:
+                payload["keys"] = keys
+        return payload if raw else None
+    if ("markdown table" in lower or "csv to markdown" in lower) and "csv" in lower:
+        raw = first_block("csv", "text", "")
+        return {"kind": "csv_to_markdown", "input_text": raw} if raw else None
+    if ("sort" in lower and ("unique" in lower or "deduplicate" in lower)) and ("lines" in lower or "list" in lower):
+        raw = first_block("text", "", "csv", "json")
+        return {
+            "kind": "lines_sort_unique",
+            "input_text": raw,
+            "case_sensitive": "case-insensitive" not in lower and "ignore case" not in lower,
+        } if raw is not None else None
+    if "base64" in lower and any(term in lower for term in ("encode", "to base64")):
+        raw = first_block("text", "", "json", "csv")
+        return {"kind": "base64_encode", "input_text": raw} if raw is not None else None
+    if "base64" in lower and any(term in lower for term in ("decode", "from base64")):
+        raw = first_block("text", "", "base64")
+        return {"kind": "base64_decode", "input_text": raw} if raw is not None else None
+    replace_match = re.search(
+        r"(?:replace|change)\s+['\"]([^'\"]+)['\"]\s+(?:with|to)\s+['\"]([^'\"]*)['\"]",
+        text,
+        re.IGNORECASE,
+    )
+    if replace_match:
+        raw = first_block("text", "", "md", "markdown")
+        return {
+            "kind": "text_replace",
+            "input_text": raw,
+            "old": replace_match.group(1),
+            "new": replace_match.group(2),
+        } if raw is not None else None
     if any(term in lower for term in ("pretty print json", "format json", "normalize json", "canonicalize json")):
         raw = first_block("json", "text", "")
         return {"kind": "json_format", "input_text": raw, "compact": "compact json" in lower} if raw else None
