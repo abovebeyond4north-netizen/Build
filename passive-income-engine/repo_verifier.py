@@ -142,6 +142,7 @@ def verify_job(package: dict[str, Any]) -> dict[str, Any]:
         "source": package.get("source"),
         "task_id": package.get("task_id"),
         "contract_id": package.get("contract_id"),
+        "execution_mode": package.get("execution_mode"),
         "expected_task_updated_at": package.get("expected_task_updated_at"),
         "title": package.get("title"),
         "passed": passed,
