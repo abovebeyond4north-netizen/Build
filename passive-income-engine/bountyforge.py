@@ -648,6 +648,40 @@ def safe_solver_payload(title: str, description: str) -> dict[str, Any] | None:
     return None
 
 
+def safe_repo_verification_spec(title: str, description: str) -> dict[str, Any] | None:
+    text = f"{title}\n{description}"
+    lower = text.lower()
+    if not any(term in lower for term in ("verify", "run tests", "test this", "check this", "compile")):
+        return None
+
+    repo_match = re.search(
+        r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?/?",
+        text,
+        re.IGNORECASE,
+    )
+    sha_match = re.search(r"\b[0-9a-fA-F]{40}\b", text)
+    if not repo_match or not sha_match:
+        return None
+
+    checks: list[str] = []
+    if any(term in lower for term in ("python unittest", "unittest", "unit tests", "run tests")):
+        checks.append("python_unittest")
+    if any(term in lower for term in ("compileall", "compile all", "python compile", "syntax check")):
+        checks.append("python_compileall")
+    if not checks:
+        return None
+
+    deduped = []
+    for check in checks:
+        if check not in deduped:
+            deduped.append(check)
+    return {
+        "repo_url": repo_match.group(0).removesuffix(".git").rstrip("/"),
+        "commit_sha": sha_match.group(0).lower(),
+        "checks": deduped[:3],
+    }
+
+
 def _queue_signature(secret: str, package: dict[str, Any]) -> str:
     unsigned = {key: value for key, value in package.items() if key != "signature"}
     body = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode()
