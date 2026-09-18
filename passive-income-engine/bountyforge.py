@@ -523,13 +523,32 @@ def classify(bounty: Bounty) -> tuple[str, int]:
     return "general", 90
 
 
+def estimated_minutes_for_bounty(bounty: Bounty, default_minutes: int) -> int:
+    title = bounty.title
+    description = bounty.description
+    text = f"{title}\n{description}".lower()
+
+    if safe_solver_payload(title, description) is not None:
+        return 5
+    if safe_repo_verification_spec(title, description) is not None:
+        return 15
+    if "csv" in text and "json" in text:
+        return 20
+    if any(term in text for term in ("jsonl", "ndjson", "base64", "sha256", "sha-256")):
+        return 10
+    if "csv" in text and any(term in text for term in ("deduplicate", "markdown table")):
+        return 10
+    return default_minutes
+
+
 def historical_success(store: Store, category: str) -> Decimal:
     attempts, wins = store.history(category)
     return Decimal(wins + 2) / Decimal(attempts + 4)
 
 
 def decide(bounty: Bounty, store: Store, config: Config) -> Decision:
-    category, minutes = classify(bounty)
+    category, default_minutes = classify(bounty)
+    minutes = estimated_minutes_for_bounty(bounty, default_minutes)
     text = f"{bounty.title}\n{bounty.description}".lower()
 
     if any(term in text for term in DISALLOWED_TERMS):
