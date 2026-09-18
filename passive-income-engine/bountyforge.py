@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import math
 import os
@@ -65,7 +67,13 @@ class Config:
     database_path: str = "/data/passive_income.db"
     enabled: bool = True
     auto_bid: bool = False
+    auto_submit_entries: bool = False
+    auto_solve: bool = True
+    auto_deliver: bool = False
+    reconcile_payments: bool = True
     scout_interval_seconds: int = 900
+    queue_dir: str = "/bounty-queue"
+    queue_secret: str = ""
     minimum_reward_cents: int = 500
     maximum_reward_cents: int = 10_000
     minimum_success_probability: Decimal = Decimal("0.70")
@@ -89,7 +97,13 @@ class Config:
             database_path=os.getenv("DATABASE_PATH", "/data/passive_income.db"),
             enabled=env_bool("BOUNTYFORGE_ENABLED", True),
             auto_bid=env_bool("BOUNTYFORGE_AUTO_BID", False),
+            auto_submit_entries=env_bool("BOUNTYFORGE_AUTO_SUBMIT_ENTRIES", False),
+            auto_solve=env_bool("BOUNTYFORGE_AUTO_SOLVE", True),
+            auto_deliver=env_bool("BOUNTYFORGE_AUTO_DELIVER", False),
+            reconcile_payments=env_bool("BOUNTYFORGE_RECONCILE_PAYMENTS", True),
             scout_interval_seconds=max(60, env_int("BOUNTYFORGE_SCOUT_INTERVAL_SECONDS", 900)),
+            queue_dir=os.getenv("BOUNTYFORGE_QUEUE_DIR", "/bounty-queue"),
+            queue_secret=os.getenv("BOUNTYFORGE_QUEUE_SECRET", ""),
             minimum_reward_cents=max(0, env_int("BOUNTYFORGE_MIN_REWARD_CENTS", 500)),
             maximum_reward_cents=max(0, env_int("BOUNTYFORGE_MAX_REWARD_CENTS", 10_000)),
             minimum_success_probability=env_decimal("BOUNTYFORGE_MIN_SUCCESS_PROBABILITY", "0.70"),
@@ -223,6 +237,17 @@ class Store:
                     currency TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     UNIQUE(source, settlement_ref)
+                );
+
+                CREATE TABLE IF NOT EXISTS bounty_contracts(
+                    contract_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    settlement_status TEXT NOT NULL,
+                    payment_verification_status TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    raw_json TEXT NOT NULL
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_bounty_jobs_status_score
@@ -383,6 +408,46 @@ class Store:
                 )
         return inserted
 
+    def upsert_contract(self, contract: dict[str, Any]) -> None:
+        contract_id = str(contract.get("id") or "")
+        task_id = str((contract.get("task") or {}).get("id") or "")
+        if not contract_id or not task_id:
+            return
+        with self.connect() as con:
+            con.execute(
+                """
+                INSERT INTO bounty_contracts(
+                  contract_id,task_id,status,settlement_status,payment_verification_status,
+                  source,updated_at,raw_json
+                ) VALUES(?,?,?,?,?,?,?,?)
+                ON CONFLICT(contract_id) DO UPDATE SET
+                  task_id=excluded.task_id,
+                  status=excluded.status,
+                  settlement_status=excluded.settlement_status,
+                  payment_verification_status=excluded.payment_verification_status,
+                  source=excluded.source,
+                  updated_at=excluded.updated_at,
+                  raw_json=excluded.raw_json
+                """,
+                (
+                    contract_id,
+                    task_id,
+                    str(contract.get("status") or "unknown"),
+                    str(contract.get("settlementStatus") or "unpaid"),
+                    str(contract.get("paymentVerificationStatus") or "unpaid"),
+                    str(contract.get("source") or "unknown"),
+                    utcnow(),
+                    json.dumps(contract, separators=(",", ":"), sort_keys=True)[:50000],
+                ),
+            )
+
+    def mark_task_status(self, task_id: str, status: str) -> None:
+        with self.connect() as con:
+            con.execute(
+                "UPDATE bounty_jobs SET status=?, last_seen_at=? WHERE source='opentask' AND external_id=?",
+                (status, utcnow(), task_id),
+            )
+
     def summary(self) -> dict[str, Any]:
         with self.connect() as con:
             statuses = {
@@ -413,7 +478,18 @@ class Store:
                     """
                 )
             ]
-        return {"statuses": statuses, "earnings": earnings, "top_candidates": top}
+            contracts = {
+                row["status"]: int(row["n"])
+                for row in con.execute(
+                    "SELECT status,COUNT(*) n FROM bounty_contracts GROUP BY status"
+                )
+            }
+        return {
+            "statuses": statuses,
+            "contract_statuses": contracts,
+            "earnings": earnings,
+            "top_candidates": top,
+        }
 
 
 def classify(bounty: Bounty) -> tuple[str, int]:
@@ -484,6 +560,75 @@ def decide(bounty: Bounty, store: Store, config: Config) -> Decision:
     )
 
 
+
+def _fenced_blocks(text: str) -> list[tuple[str, str]]:
+    return [
+        ((m.group(1) or "").strip().lower(), m.group(2).strip())
+        for m in re.finditer(r"\`\`\`([A-Za-z0-9_-]*)[ \t]*\n(.*?)\`\`\`", text, re.DOTALL)
+    ]
+
+
+def safe_solver_payload(title: str, description: str) -> dict[str, Any] | None:
+    """Return a deterministic, non-code-executing solver job for clear task types."""
+    text = f"{title}\n{description}"
+    lower = text.lower()
+    blocks = _fenced_blocks(text)
+    if not blocks:
+        return None
+
+    def first_block(*languages: str) -> str | None:
+        allowed = set(languages)
+        for language, body in blocks:
+            if language in allowed:
+                return body
+        return blocks[0][1] if blocks else None
+
+    if re.search(r"\b(csv\s*(?:to|->)\s*json|convert\b.*\bcsv\b.*\bjson\b)", lower, re.DOTALL):
+        raw = first_block("csv", "text", "")
+        return {"kind": "csv_to_json", "input_text": raw} if raw else None
+    if re.search(r"\b(json\s*(?:to|->)\s*csv|convert\b.*\bjson\b.*\bcsv\b)", lower, re.DOTALL):
+        raw = first_block("json", "text", "")
+        return {"kind": "json_to_csv", "input_text": raw} if raw else None
+    if any(term in lower for term in ("pretty print json", "format json", "normalize json", "canonicalize json")):
+        raw = first_block("json", "text", "")
+        return {"kind": "json_format", "input_text": raw, "compact": "compact json" in lower} if raw else None
+    if "sha256" in lower or "sha-256" in lower:
+        raw = first_block("text", "", "json", "csv")
+        return {"kind": "sha256", "input_text": raw} if raw is not None else None
+    return None
+
+
+def _queue_signature(secret: str, package: dict[str, Any]) -> str:
+    unsigned = {key: value for key, value in package.items() if key != "signature"}
+    body = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode()
+    return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+
+def _safe_queue_job_id(source: str, task_id: str, contract_id: str | None = None) -> str:
+    identity = f"{source}:{task_id}:{contract_id or 'entry'}"
+    digest = hashlib.sha256(identity.encode()).hexdigest()[:20]
+    return f"{source}-{digest}"
+
+
+def _settled_units(invoice: dict[str, Any], receipt_ids: set[str]) -> Iterable[dict[str, Any]]:
+    settlement = invoice.get("settlement") or {}
+    for unit in settlement.get("units") or []:
+        receipt_id = str(unit.get("receiptId") or "")
+        amount = unit.get("amount") or {}
+        if (
+            unit.get("status") == "paid"
+            and receipt_id
+            and receipt_id in receipt_ids
+            and amount.get("sellerAmount") is not None
+            and amount.get("currency")
+        ):
+            yield {
+                "receipt_id": receipt_id,
+                "seller_amount": str(amount["sellerAmount"]),
+                "currency": str(amount["currency"]).upper(),
+            }
+
+
 class OpenTaskClient:
     def __init__(self, config: Config):
         self.base = config.opentask_base_url
@@ -531,6 +676,190 @@ class OpenTaskClient:
 
     def task_detail(self, task_id: str) -> dict[str, Any]:
         return self._request("GET", f"/agent/tasks/{urllib.parse.quote(task_id, safe='')}")
+
+    def contracts(self, role: str = "seller") -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        cursor: str | None = None
+        for _ in range(10):
+            query = {"role": role, "limit": "100"}
+            if cursor:
+                query["cursor"] = cursor
+            data = self._request("GET", "/agent/contracts?" + urllib.parse.urlencode(query))
+            items.extend(list(data.get("contracts") or []))
+            cursor = data.get("nextCursor")
+            if not cursor:
+                break
+        return items
+
+    def contract_receipts(self, contract_id: str) -> list[dict[str, Any]]:
+        data = self._request(
+            "GET",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/receipts",
+        )
+        return list(data.get("receipts") or [])
+
+
+    def contract_invoices(self, contract_id: str) -> list[dict[str, Any]]:
+        data = self._request(
+            "GET",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/invoices",
+        )
+        return list(data.get("invoices") or [])
+
+    def create_delivery_draft(
+        self,
+        contract_id: str,
+        *,
+        title: str,
+        summary: str,
+        verification_instructions: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/deliveries",
+            {
+                "title": title[:200],
+                "summary": summary[:20000],
+                "verificationInstructions": verification_instructions[:20000],
+            },
+            {"Idempotency-Key": idempotency_key},
+        )
+
+    def create_delivery_upload_intent(
+        self,
+        contract_id: str,
+        package_id: str,
+        *,
+        filename: str,
+        content_type: str,
+        size_bytes: int,
+        sha256: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/deliveries/"
+            f"{urllib.parse.quote(package_id, safe='')}/upload-intents",
+            {
+                "filename": filename,
+                "contentType": content_type,
+                "sizeBytes": size_bytes,
+                "sha256": sha256,
+            },
+            {"Idempotency-Key": idempotency_key},
+        )
+
+    def complete_delivery_upload(
+        self, contract_id: str, package_id: str, upload_intent_id: str
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/deliveries/"
+            f"{urllib.parse.quote(package_id, safe='')}/upload-intents/"
+            f"{urllib.parse.quote(upload_intent_id, safe='')}/complete",
+            {},
+        )
+
+    def delivery_upload_status(
+        self, contract_id: str, package_id: str, upload_intent_id: str
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/deliveries/"
+            f"{urllib.parse.quote(package_id, safe='')}/upload-intents/"
+            f"{urllib.parse.quote(upload_intent_id, safe='')}",
+        )
+
+    def submit_delivery(
+        self,
+        contract_id: str,
+        package_id: str,
+        *,
+        expected_version: int,
+        file_id: str,
+        label: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/deliveries/"
+            f"{urllib.parse.quote(package_id, safe='')}/submit",
+            {
+                "expectedVersion": expected_version,
+                "nativeArtifacts": [{"fileId": file_id, "label": label[:200]}],
+                "confirmed": True,
+            },
+            {"Idempotency-Key": idempotency_key},
+        )
+
+    def create_task_entry_upload_intent(
+        self,
+        task_id: str,
+        *,
+        filename: str,
+        content_type: str,
+        size_bytes: int,
+        sha256: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/tasks/{urllib.parse.quote(task_id, safe='')}/entry-attachments/upload-intents",
+            {
+                "filename": filename,
+                "contentType": content_type,
+                "sizeBytes": size_bytes,
+                "sha256": sha256,
+                "disclosure": "restricted",
+            },
+            {"Idempotency-Key": idempotency_key},
+        )
+
+    def upload_authorized(self, authorization: dict[str, Any], data: bytes) -> None:
+        url = str(authorization.get("url") or "")
+        if not url.startswith("https://"):
+            raise RuntimeError("OpenTask upload authorization did not use HTTPS")
+        headers = {str(k): str(v) for k, v in (authorization.get("callerHeaders") or {}).items()}
+        req = urllib.request.Request(url, data=data, method="PUT", headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as response:
+            if response.status < 200 or response.status >= 300:
+                raise RuntimeError(f"artifact upload failed with HTTP {response.status}")
+
+    def complete_task_entry_upload(self, task_id: str, upload_intent_id: str) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/tasks/{urllib.parse.quote(task_id, safe='')}/entry-attachments/upload-intents/"
+            f"{urllib.parse.quote(upload_intent_id, safe='')}/complete",
+            {},
+        )
+
+    def task_entry_upload_status(self, task_id: str, upload_intent_id: str) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/agent/tasks/{urllib.parse.quote(task_id, safe='')}/entry-attachments/upload-intents/"
+            f"{urllib.parse.quote(upload_intent_id, safe='')}",
+        )
+
+    def submit_task_entry(
+        self,
+        task_id: str,
+        *,
+        expected_task_updated_at: str,
+        artifact: dict[str, Any],
+        notes: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/tasks/{urllib.parse.quote(task_id, safe='')}/entries",
+            {
+                "expectedTaskUpdatedAt": expected_task_updated_at,
+                "artifacts": [artifact],
+                "notes": notes[:20000],
+            },
+            {"Idempotency-Key": idempotency_key},
+        )
 
     def create_bid(
         self,
@@ -625,17 +954,350 @@ class BountyForge:
                 discovered.append(bounty)
         return discovered
 
+    def _queue_root(self) -> Path:
+        root = Path(self.config.queue_dir)
+        for folder in ("inbox", "outbox", "ready", "consumed", "quarantine", "artifacts"):
+            (root / folder).mkdir(parents=True, exist_ok=True)
+        return root
+
+    def queue_solver_task(
+        self,
+        *,
+        task_id: str,
+        title: str,
+        description: str,
+        execution_mode: str,
+        expected_task_updated_at: str,
+        contract_id: str | None = None,
+    ) -> bool:
+        if not self.config.auto_solve or not self.config.queue_secret:
+            return False
+        payload = safe_solver_payload(title, description)
+        if payload is None:
+            return False
+
+        root = self._queue_root()
+        job_id = _safe_queue_job_id("opentask", task_id, contract_id)
+        for folder in ("inbox", "outbox", "ready", "consumed"):
+            if (root / folder / f"{job_id}.json").exists():
+                return False
+
+        package: dict[str, Any] = {
+            "version": 1,
+            "job_id": job_id,
+            "source": "opentask",
+            "task_id": task_id,
+            "contract_id": contract_id,
+            "execution_mode": execution_mode,
+            "expected_task_updated_at": expected_task_updated_at,
+            "title": title[:500],
+            "payload": payload,
+        }
+        package["signature"] = _queue_signature(self.config.queue_secret, package)
+        destination = root / "inbox" / f"{job_id}.json"
+        temporary = destination.with_suffix(".tmp")
+        temporary.write_text(json.dumps(package, indent=2, sort_keys=True) + "\n")
+        temporary.replace(destination)
+        self.store.mark_task_status(task_id, "solving")
+        return True
+
+    def _verified_manifest_artifact(
+        self, manifest: dict[str, Any]
+    ) -> tuple[Path, dict[str, Any]] | None:
+        if not self.config.queue_secret:
+            return None
+        supplied = str(manifest.get("signature") or "")
+        expected = _queue_signature(self.config.queue_secret, manifest)
+        if not supplied or not hmac.compare_digest(supplied, expected):
+            return None
+        artifact = manifest.get("artifact")
+        if not isinstance(artifact, dict):
+            return None
+        relative = str(artifact.get("relative_path") or "")
+        root = self._queue_root().resolve()
+        path = (root / relative).resolve()
+        if path == root or root not in path.parents or not path.is_file():
+            return None
+        data = path.read_bytes()
+        expected_hash = str(artifact.get("sha256") or "")
+        if not expected_hash or hashlib.sha256(data).hexdigest() != expected_hash:
+            return None
+        if int(artifact.get("size_bytes") or -1) != len(data):
+            return None
+        return path, artifact
+
+    def deliver_solver_result(
+        self,
+        *,
+        contract_id: str,
+        task_id: str,
+        manifest: dict[str, Any],
+        artifact_path: Path,
+        artifact: dict[str, Any],
+    ) -> dict[str, Any]:
+        data = artifact_path.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        job_id = str(manifest.get("job_id") or "")
+        draft_response = self.opentask.create_delivery_draft(
+            contract_id,
+            title="BountyForge verified delivery",
+            summary=(
+                "Deterministic offline solver output. The artifact was generated without "
+                "network access and verified before submission."
+            ),
+            verification_instructions=json.dumps(
+                manifest.get("verification") or {}, sort_keys=True, default=str
+            )[:20000],
+            idempotency_key=f"bf-draft-{job_id}",
+        )
+        delivery = dict(draft_response.get("delivery") or {})
+        package_id = str(delivery.get("id") or "")
+        version = int(delivery.get("version") or 0)
+        if not package_id or version < 1:
+            raise RuntimeError("OpenTask did not return a usable delivery draft")
+
+        upload_response = self.opentask.create_delivery_upload_intent(
+            contract_id,
+            package_id,
+            filename=str(artifact.get("filename") or artifact_path.name)[:200],
+            content_type=str(artifact.get("content_type") or "application/octet-stream"),
+            size_bytes=len(data),
+            sha256=digest,
+            idempotency_key=f"bf-upload-{job_id}",
+        )
+        intent = dict(upload_response.get("uploadIntent") or {})
+        upload_intent_id = str(intent.get("id") or "")
+        file_id = str(intent.get("fileId") or "")
+        if not upload_intent_id or not file_id:
+            raise RuntimeError("OpenTask did not return a usable upload intent")
+
+        file_status = str(intent.get("fileStatus") or "")
+        if file_status == "pending_upload":
+            authorization = intent.get("upload")
+            if not isinstance(authorization, dict):
+                raise RuntimeError("OpenTask upload authorization is unavailable")
+            self.opentask.upload_authorized(authorization, data)
+            status_response = self.opentask.complete_delivery_upload(
+                contract_id, package_id, upload_intent_id
+            )
+        else:
+            status_response = {
+                "file": {"id": file_id, "status": file_status},
+                "pollAfterMs": upload_response.get("pollAfterMs"),
+            }
+
+        deadline = time.monotonic() + 120
+        while True:
+            file_info = dict(status_response.get("file") or {})
+            status = str(file_info.get("status") or "")
+            if status == "ready":
+                file_id = str(file_info.get("id") or file_id)
+                break
+            if status in {"processing_failed", "quarantined", "deleted"}:
+                raise RuntimeError(f"OpenTask rejected delivery artifact: {status}")
+            if time.monotonic() >= deadline:
+                raise RuntimeError("OpenTask delivery artifact processing timed out")
+            poll_ms = status_response.get("pollAfterMs")
+            try:
+                pause = float(poll_ms) / 1000 if poll_ms is not None else 1.0
+            except (TypeError, ValueError):
+                pause = 1.0
+            time.sleep(max(0.25, min(pause, 5.0)))
+            status_response = self.opentask.delivery_upload_status(
+                contract_id, package_id, upload_intent_id
+            )
+
+        response = self.opentask.submit_delivery(
+            contract_id,
+            package_id,
+            expected_version=version,
+            file_id=file_id,
+            label=str(artifact.get("filename") or artifact_path.name),
+            idempotency_key=f"bf-submit-{job_id}",
+        )
+        self.store.mark_task_status(task_id, "submitted")
+        return response
+
+    def collect_solver_results(self) -> dict[str, int]:
+        root = self._queue_root()
+        counts = {"verified": 0, "delivered": 0, "ready": 0, "failed": 0, "quarantined": 0}
+        paths = list((root / "outbox").glob("*.json")) + list((root / "ready").glob("*.json"))
+        for path in sorted(paths):
+            try:
+                manifest = json.loads(path.read_text())
+            except Exception:
+                path.replace(root / "quarantine" / path.name)
+                counts["quarantined"] += 1
+                continue
+
+            supplied = str(manifest.get("signature") or "")
+            expected = _queue_signature(self.config.queue_secret, manifest) if self.config.queue_secret else ""
+            if not supplied or not expected or not hmac.compare_digest(supplied, expected):
+                path.replace(root / "quarantine" / path.name)
+                counts["quarantined"] += 1
+                continue
+
+            task_id = str(manifest.get("task_id") or "")
+            contract_id = str(manifest.get("contract_id") or "")
+            if not manifest.get("ok"):
+                if task_id:
+                    self.store.mark_task_status(task_id, "solver_failed")
+                path.replace(root / "consumed" / path.name)
+                counts["failed"] += 1
+                continue
+
+            verified = self._verified_manifest_artifact(manifest)
+            if verified is None:
+                path.replace(root / "quarantine" / path.name)
+                counts["quarantined"] += 1
+                continue
+            artifact_path, artifact = verified
+            counts["verified"] += 1
+
+            if not contract_id:
+                if task_id:
+                    self.store.mark_task_status(task_id, "solved_entry_ready")
+                if path.parent.name != "ready":
+                    path.replace(root / "ready" / path.name)
+                counts["ready"] += 1
+                continue
+
+            if not self.config.auto_deliver or not self.config.opentask_token:
+                if task_id:
+                    self.store.mark_task_status(task_id, "delivery_ready")
+                if path.parent.name != "ready":
+                    path.replace(root / "ready" / path.name)
+                counts["ready"] += 1
+                continue
+
+            try:
+                self.deliver_solver_result(
+                    contract_id=contract_id,
+                    task_id=task_id,
+                    manifest=manifest,
+                    artifact_path=artifact_path,
+                    artifact=artifact,
+                )
+            except Exception as exc:
+                if task_id:
+                    self.store.mark_task_status(task_id, "delivery_error")
+                print(
+                    json.dumps(
+                        {"delivery_error": str(exc)[:1000], "task_id": task_id, "contract_id": contract_id}
+                    ),
+                    flush=True,
+                )
+                if path.parent.name != "ready":
+                    path.replace(root / "ready" / path.name)
+                counts["ready"] += 1
+                continue
+
+            path.replace(root / "consumed" / path.name)
+            counts["delivered"] += 1
+        return counts
+
+    def reconcile_contracts(self) -> dict[str, int]:
+        result = {"contracts": 0, "queued": 0, "settlements": 0}
+        if not self.config.opentask_token:
+            return result
+
+        contracts = self.opentask.contracts("seller")
+        result["contracts"] = len(contracts)
+        for contract in contracts:
+            self.store.upsert_contract(contract)
+            contract_id = str(contract.get("id") or "")
+            task = contract.get("task") or {}
+            task_id = str(task.get("id") or "")
+            contract_status = str(contract.get("status") or "")
+            if not contract_id or not task_id:
+                continue
+
+            if contract_status in {"submitted", "accepted", "rejected", "cancelled"}:
+                self.store.mark_task_status(task_id, contract_status)
+
+            if self.config.auto_solve and contract_status == "in_progress":
+                try:
+                    detail = self.opentask.task_detail(task_id)
+                    task_detail = dict(detail.get("task") or {})
+                    title = str(task_detail.get("title") or task.get("title") or "OpenTask contract")
+                    description = str(task_detail.get("description") or "")
+                    execution_mode = str(task_detail.get("executionMode") or "pitch")
+                    updated_at = str(task_detail.get("updatedAt") or task_detail.get("createdAt") or utcnow())
+                    if self.queue_solver_task(
+                        task_id=task_id,
+                        title=title,
+                        description=description,
+                        execution_mode=execution_mode,
+                        expected_task_updated_at=updated_at,
+                        contract_id=contract_id,
+                    ):
+                        result["queued"] += 1
+                except Exception as exc:
+                    print(
+                        json.dumps({"contract_queue_error": str(exc)[:1000], "contract_id": contract_id}),
+                        flush=True,
+                    )
+
+            if not self.config.reconcile_payments:
+                continue
+            try:
+                receipts = self.opentask.contract_receipts(contract_id)
+                receipt_ids = {
+                    str(receipt.get("id") or receipt.get("receiptId") or "")
+                    for receipt in receipts
+                    if receipt.get("id") or receipt.get("receiptId")
+                }
+                if not receipt_ids:
+                    continue
+                invoices = self.opentask.contract_invoices(contract_id)
+                for invoice in invoices:
+                    for unit in _settled_units(invoice, receipt_ids):
+                        seller_cents = to_minor(Decimal(unit["seller_amount"]))
+                        if seller_cents < 0:
+                            continue
+                        if self.store.record_earning(
+                            source="opentask",
+                            external_id=task_id,
+                            settlement_ref=unit["receipt_id"],
+                            gross_cents=seller_cents,
+                            fees_cents=0,
+                            currency=unit["currency"],
+                        ):
+                            result["settlements"] += 1
+            except (RuntimeError, InvalidOperation, ValueError) as exc:
+                print(
+                    json.dumps({"reconcile_error": str(exc)[:1000], "contract_id": contract_id}),
+                    flush=True,
+                )
+        return result
+
     def run_once(self) -> dict[str, Any]:
         if not self.config.enabled:
             return {"enabled": False, "discovered": 0, "eligible": 0, "bids": 0}
 
+        solver_results = self.collect_solver_results()
+        contracts = self.reconcile_contracts()
+
         discovered = self.discover()
         eligible: list[tuple[Bounty, Decision]] = []
+        queued_entries = 0
         for bounty in discovered:
             decision = decide(bounty, self.store, self.config)
             self.store.upsert_job(bounty, decision)
             if decision.eligible:
                 eligible.append((bounty, decision))
+                if (
+                    self.config.auto_solve
+                    and bounty.execution_mode in {"bounty", "benchmark"}
+                    and self.queue_solver_task(
+                        task_id=bounty.external_id,
+                        title=bounty.title,
+                        description=bounty.description,
+                        execution_mode=bounty.execution_mode,
+                        expected_task_updated_at=bounty.updated_at,
+                    )
+                ):
+                    queued_entries += 1
 
         eligible.sort(key=lambda pair: pair[1].score, reverse=True)
         bids = 0
@@ -644,19 +1306,10 @@ class BountyForge:
             remaining_slots = max(0, self.config.maximum_active_jobs - active)
             remaining_daily = max(0, self.config.maximum_new_bids_per_day - self.store.bids_today())
             quota = min(remaining_slots, remaining_daily)
-            for bounty, decision in eligible[:quota]:
+            for bounty, decision in eligible:
+                if quota <= 0:
+                    break
                 if bounty.execution_mode != "pitch":
-                    # Bounty/benchmark tasks are completed-entry workflows. They
-                    # need a solver + artifact verifier before safe submission.
-                    self.store.mark(
-                        bounty,
-                        "queued",
-                        "queue",
-                        {
-                            "reason": "completed-entry-workflow-needs-solver",
-                            "decision": asdict(decision),
-                        },
-                    )
                     continue
                 approach = (
                     f"BountyForge selected this task after automated fit and profitability checks. "
@@ -680,13 +1333,19 @@ class BountyForge:
                     {"response": response, "decision": asdict(decision)},
                 )
                 bids += 1
+                quota -= 1
 
         return {
             "enabled": True,
             "auto_bid": self.config.auto_bid,
+            "auto_solve": self.config.auto_solve,
+            "auto_deliver": self.config.auto_deliver,
             "discovered": len(discovered),
             "eligible": len(eligible),
+            "queued_entries": queued_entries,
             "bids": bids,
+            "contracts": contracts,
+            "solver": solver_results,
             "summary": self.store.summary(),
         }
 
@@ -706,6 +1365,8 @@ def cli() -> int:
     sub.add_parser("scout")
     sub.add_parser("worker")
     sub.add_parser("status")
+    sub.add_parser("reconcile")
+    sub.add_parser("collect")
 
     settle = sub.add_parser("settle")
     settle.add_argument("--source", required=True)
@@ -726,6 +1387,12 @@ def cli() -> int:
         return 0
     if args.command == "status":
         print(json.dumps(forge.store.summary(), indent=2, sort_keys=True))
+        return 0
+    if args.command == "reconcile":
+        print(json.dumps(forge.reconcile_contracts(), indent=2, sort_keys=True))
+        return 0
+    if args.command == "collect":
+        print(json.dumps(forge.collect_solver_results(), indent=2, sort_keys=True))
         return 0
     if args.command == "settle":
         if args.gross_cents < 0 or args.fees_cents < 0 or args.fees_cents > args.gross_cents:

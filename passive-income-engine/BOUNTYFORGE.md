@@ -1,59 +1,228 @@
-# BountyForge v1
+# BountyForge v2
 
-BountyForge is the active-work revenue subsystem for the Passive Income Engine. It discovers agent-compatible micro-bounties, normalizes them, rejects unsafe or uneconomic work, ranks eligible jobs by expected profit per hour, optionally places bounded bids, and records verified settlements into the shared treasury ledger.
+BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts micro-bounties, rejects unsafe or uneconomic work, ranks viable jobs by expected return, performs a narrow set of deterministic tasks in an offline solver, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
-## What v1 automates
+## Trust zones
 
-- Authenticated OpenTask seller-side task discovery using `GET /api/agent/me/task-recommendations`.
-- Task-detail enrichment before scoring.
-- Reward/currency normalization.
-- Hard rejection of disallowed task classes such as CAPTCHA solving, fake reviews, spam, credential abuse, phishing, malware, or identity-bypass work.
-- Reward caps and allowlisted settlement currencies.
-- Bayesian success estimates using task-match quality plus the local attempt history.
-- Expected-profit and expected-hourly calculations.
-- Active-job and daily-bid limits.
-- Optional OpenTask pitch-mode bid creation.
-- Queueing of Bounty/Benchmark completed-entry tasks until a sandboxed solver/verifier is attached.
-- Idempotent settlement accounting.
-- Shared treasury integration for settlements already denominated in the engine's configured currency.
+BountyForge deliberately separates marketplace authority from work execution.
 
-## Current platform integration
+### Coordinator
 
-OpenTask's current agent API supports scoped task recommendations, task reads, bids, contracts, entries, deliveries, and payment receipts. BountyForge v1 deliberately starts with discovery and pitch-mode bidding because those can be bounded cleanly before a general solver is attached.
+`bountyforge.py` runs with:
 
-The OpenTask base URL is:
+- the scoped OpenTask token;
+- the shared accounting database;
+- outbound network access;
+- the signed queue volume.
 
-```text
-https://opentask.ai/api
-```
+It may discover tasks, score them, place bounded bids when explicitly enabled, inspect seller contracts, submit verified native deliveries when enabled, and reconcile exact router-verified receipts.
 
-Authentication uses a scoped bearer token. Do not commit that token.
+It does **not** execute buyer-supplied commands or arbitrary code.
 
-## Activation
+### Offline solver
 
-BountyForge runs as a separate least-privilege service in both production Compose stacks. The service shares only the engine's persistent `/data` volume.
+`bounty_solver.py` runs with:
 
-The default configuration is observation-first:
+- no network;
+- no `/data` treasury volume;
+- no OpenTask or PayPal credentials;
+- a dedicated queue volume;
+- a queue authentication secret only;
+- all Linux capabilities dropped;
+- `no-new-privileges`;
+- a PID cap;
+- a memory limit;
+- a CPU limit;
+- a read-only container filesystem.
+
+The coordinator signs each work package with HMAC-SHA256. The solver rejects unsigned or altered packages. Solver result manifests are also signed and include artifact SHA-256 evidence; the coordinator verifies both signature and artifact hash before any delivery action.
+
+## Safe solver v2
+
+The first deterministic handlers are intentionally narrow:
+
+- `json_format`
+- `csv_to_json`
+- `json_to_csv`
+- `sha256`
+
+The task router activates a handler only when the task wording clearly identifies one of those operations and includes an inline fenced input block.
+
+The solver does not:
+
+- run shell commands;
+- execute Python, JavaScript, binaries, macros, or task-supplied code;
+- clone repositories;
+- browse the web;
+- read production credentials;
+- access the treasury database.
+
+Unsupported tasks remain unsolved rather than being guessed.
+
+## OpenTask integration
+
+Current integrations use OpenTask's scoped REST agent API.
+
+Discovery and marketplace state:
+
+- `GET /api/agent/me/task-recommendations`
+- `GET /api/agent/tasks/{taskId}`
+- `POST /api/agent/tasks/{taskId}/bids`
+- `GET /api/agent/contracts?role=seller`
+
+Native Pitch delivery:
+
+- `POST /api/agent/contracts/{contractId}/deliveries`
+- `POST /api/agent/contracts/{contractId}/deliveries/{packageId}/upload-intents`
+- direct authorized HTTPS PUT using the short-lived upload authorization;
+- upload completion and processing-status polling;
+- `POST /api/agent/contracts/{contractId}/deliveries/{packageId}/submit`
+
+The upload URL and caller headers are treated as short-lived credentials and are never logged.
+
+Payment reconciliation:
+
+- `GET /api/agent/contracts/{contractId}/receipts`
+- `GET /api/agent/contracts/{contractId}/invoices`
+
+BountyForge credits an earning only when an invoice settlement unit is `paid`, carries a receipt ID, and that exact receipt is present in the receipt collection. The seller amount on that unit becomes the recorded proceeds. Platform-fee estimates used during opportunity scoring are not deducted again from a verified seller amount.
+
+## Bounty and Benchmark entries
+
+OpenTask Bounty/Benchmark entry artifacts currently require an artifact URL in the entry schema. The native task-entry upload flow and the public artifact URL field are separate surfaces.
+
+Therefore v2 may safely solve supported Bounty/Benchmark work and stage the verified artifact as `solved_entry_ready`, but it does not invent a public URL or auto-submit that entry.
+
+This is an intentional correctness boundary.
+
+## Runtime controls
+
+The example environment contains:
 
 ```dotenv
 BOUNTYFORGE_ENABLED=true
 BOUNTYFORGE_AUTO_BID=false
+BOUNTYFORGE_AUTO_SOLVE=true
+BOUNTYFORGE_AUTO_DELIVER=false
+BOUNTYFORGE_AUTO_SUBMIT_ENTRIES=false
+BOUNTYFORGE_RECONCILE_PAYMENTS=true
+
+BOUNTYFORGE_SCOUT_INTERVAL_SECONDS=900
 BOUNTYFORGE_MIN_REWARD_CENTS=500
 BOUNTYFORGE_MAX_REWARD_CENTS=10000
 BOUNTYFORGE_MIN_SUCCESS_PROBABILITY=0.70
 BOUNTYFORGE_MIN_EXPECTED_PROFIT_CENTS=300
 BOUNTYFORGE_MIN_HOURLY_CENTS=1500
+BOUNTYFORGE_COMPUTE_BUDGET_CENTS=100
 BOUNTYFORGE_MAX_ACTIVE_JOBS=3
 BOUNTYFORGE_MAX_NEW_BIDS_PER_DAY=10
 BOUNTYFORGE_ALLOWED_CURRENCIES=USD,USDC,USDT
+
+BOUNTYFORGE_QUEUE_DIR=/bounty-queue
+BOUNTYFORGE_QUEUE_SECRET=replace-with-an-independent-long-random-secret
+
+OPENTASK_BASE_URL=https://opentask.ai/api
 OPENTASK_TOKEN=
 ```
 
-Once a scoped OpenTask credential exists, set it only in the production secret environment. A read-capable token is enough for discovery. Enable `BOUNTYFORGE_AUTO_BID=true` only when the credential also has the required bid-write scope and the seller profile is ready.
+Generate `BOUNTYFORGE_QUEUE_SECRET` independently from the admin, webhook, PayPal, and OpenTask secrets.
+
+A production OpenTask token should contain only the scopes required for the features actually enabled.
+
+## Autonomy sequence
+
+With discovery only:
+
+```text
+discover -> normalize -> safety filter -> profitability score -> ledger candidate
+```
+
+With bounded bidding enabled:
+
+```text
+eligible Pitch task -> bid -> accepted contract
+```
+
+With solving enabled:
+
+```text
+bound contract
+  -> classify deterministic task
+  -> signed work package
+  -> offline/no-network solver
+  -> signed result manifest
+  -> SHA-256 verification
+  -> delivery-ready artifact
+```
+
+With native delivery enabled:
+
+```text
+verified artifact
+  -> OpenTask delivery draft
+  -> native private upload
+  -> OpenTask processing
+  -> immutable delivery submit
+  -> buyer review
+```
+
+With payment reconciliation enabled:
+
+```text
+exact receipt + paid invoice unit
+  -> idempotent bounty_earnings row
+  -> same-currency treasury integration
+```
+
+Foreign-currency earnings remain separate until an explicit conversion process exists.
+
+## Commands
+
+Run one complete coordinator cycle:
+
+```bash
+python bountyforge.py scout
+```
+
+Inspect local state:
+
+```bash
+python bountyforge.py status
+```
+
+Reconcile contracts and exact receipts without running discovery:
+
+```bash
+python bountyforge.py reconcile
+```
+
+Collect signed solver results without running discovery:
+
+```bash
+python bountyforge.py collect
+```
+
+Run continuously:
+
+```bash
+python bountyforge.py worker
+```
+
+Manual settlement remains available for independently verified external bounty sources:
+
+```bash
+python bountyforge.py settle \
+  --source SOURCE \
+  --external-id TASK_ID \
+  --settlement-ref RECEIPT_ID \
+  --gross-cents 2000 \
+  --fees-cents 0 \
+  --currency USDC
+```
 
 ## Profitability model
 
-For each task, BountyForge estimates:
+The opportunity model remains conservative:
 
 ```text
 success_probability =
@@ -70,63 +239,21 @@ expected_hourly =
     expected_profit / estimated_minutes * 60
 ```
 
-The 0.955 factor is a conservative model of OpenTask's currently advertised 4.5% platform fee. Actual settlement accounting always records actual gross and fee amounts rather than relying on this estimate.
+The 0.955 multiplier is an opportunity-screening assumption, not settlement accounting. Verified settlement rows use actual seller proceeds from payment records.
 
-A job must satisfy every configured threshold before it becomes eligible.
+## Deployment
 
-## Execution boundary
+Both production Compose stacks run four logical services:
 
-BountyForge v1 does **not** run arbitrary bounty-supplied commands and does not clone untrusted code into the production container. That would break the existing least-privilege security model.
+1. `engine` — storefront, checkout, treasury API.
+2. `bountyforge` — marketplace coordinator and reconciler.
+3. `bounty-solver` — offline deterministic solver with no network or treasury mount.
+4. `backup` — verified SQLite backup worker.
 
-Pitch-mode jobs may be bid on when auto-bid is explicitly enabled. Bounty/Benchmark jobs are queued for the next layer: a disposable network-bounded sandbox that can receive a normalized work specification, create a candidate artifact, run task-specific verification, and submit only verified output.
+The coordinator and solver share only `bounty_queue`. The solver never mounts `engine_data`.
 
-This separation prevents a marketplace description from becoming an implicit shell command on the revenue server.
+## Next capability boundary
 
-## Commands
+The next safe expansion is not arbitrary code execution. It is a larger library of objectively verifiable handlers, such as schema-constrained text/data transforms and generated documentation whose output can be validated without giving task content a shell.
 
-Run one discovery/scoring cycle:
-
-```bash
-python bountyforge.py scout
-```
-
-Inspect the local bounty ledger:
-
-```bash
-python bountyforge.py status
-```
-
-Run continuously:
-
-```bash
-python bountyforge.py worker
-```
-
-Record a verified settlement:
-
-```bash
-python bountyforge.py settle \
-  --source opentask \
-  --external-id TASK_ID \
-  --settlement-ref RECEIPT_ID \
-  --gross-cents 2000 \
-  --fees-cents 90 \
-  --currency USDC
-```
-
-Settlement references are unique per source, making retries idempotent.
-
-## Next layer
-
-The next implementation stage is the **BountyForge Sandbox Solver**:
-
-1. Materialize only an allowlisted task/repository into a disposable workspace.
-2. Disable access to the production database and payment credentials.
-3. Apply CPU, memory, disk, time, and network limits.
-4. Generate a candidate deliverable through a configured coding/LLM agent.
-5. Run declared tests plus static/security checks.
-6. Produce a signed evidence manifest.
-7. Submit only after objective verification passes.
-8. Poll contract/payment receipts and record verified earnings automatically.
-
-The production engine remains the scout, policy, accounting, and orchestration layer; untrusted work execution belongs in the disposable sandbox.
+Repository/code-change bounties would require a separate disposable build sandbox with cloned-source allowlisting, outbound-network policy, test execution limits, secret scrubbing, and a clean artifact-only return channel. That should remain distinct from the revenue host and from this deterministic solver.
