@@ -76,15 +76,17 @@ jobs:
           if not candidates:
               lines.append("No candidates cleared the configured profitability and safety gates.")
           else:
-              lines.append("| Task | Mode | Fit | Reward | Expected profit | Expected hourly |")
-              lines.append("| --- | --- | ---: | ---: | ---: | ---: |")
+              lines.append("| Task | Mode | Fit | Bid ready | Fulfillment | Reward | Expected profit | Expected hourly |")
+              lines.append("| --- | --- | ---: | --- | --- | ---: | ---: | ---: |")
               for item in candidates[:10]:
                   title = str(item.get("title") or "").replace("|", "\\|")
                   url = str(item.get("task_url") or "")
                   label = f"[{title}]({url})" if url.startswith("https://") else title
+                  ready = "yes" if item.get("bid_ready") else "no"
+                  fulfillment = str(item.get("fulfillment_kind") or "")
                   lines.append(
                       f"| {label} | {item.get('execution_mode', '')} | "
-                      f"{item.get('match_score', 0)} | "
+                      f"{item.get('match_score', 0)} | {ready} | {fulfillment} | "
                       f"{item.get('reward_cents', 0) / 100:.2f} {item.get('currency', '')} | "
                       f"{item.get('expected_profit_cents', 0) / 100:.2f} | "
                       f"{item.get('expected_hourly_cents', 0) / 100:.2f}/h |"
