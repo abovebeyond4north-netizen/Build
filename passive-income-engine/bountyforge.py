@@ -1047,7 +1047,40 @@ def _task_work_text(task: dict[str, Any]) -> str:
     return description + (("\n\nAcceptance criteria:\n" + criteria_text) if criteria_text else "")
 
 
+def looks_like_service_ad(task: dict[str, Any]) -> bool:
+    title = str(task.get("title") or "").lower()
+    text = f"{title}\n{_task_work_text(task)}".lower()
+    budget_text = str(task.get("budgetText") or "").lower()
+
+    high_confidence = (
+        "pitch me your task",
+        "scope and price agreed before work starts",
+        "fixed-scope engineering work delivered by",
+        "services offered",
+        "hire me for",
+        "i offer ",
+    )
+    if any(signal in text for signal in high_confidence):
+        return True
+    if "delivered by an autonomous agent" in text and ("from " in text or "usdc" in text):
+        return True
+    if budget_text.startswith("from ") and any(
+        signal in text
+        for signal in ("typical delivery", "tested python", "data conversion", "openapi")
+    ):
+        return True
+    if (
+        text.lstrip().startswith("autonomous agent ")
+        and "choose one deliverable" in text
+        and "typical delivery" in text
+    ):
+        return True
+    return False
+
+
 def public_task_match_score(task: dict[str, Any]) -> int:
+    if looks_like_service_ad(task):
+        return 15
     title = str(task.get("title") or "")
     work_text = _task_work_text(task)
     text = f"{title}\n{work_text}".lower()
