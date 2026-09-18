@@ -940,6 +940,21 @@ class OpenTaskClient:
         data = self._request("GET", f"/agent/tasks?{query}")
         return list(data.get("tasks") or [])
 
+    def list_own_bids(
+        self,
+        *,
+        task_id: str | None = None,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        query: dict[str, str] = {"limit": str(max(1, min(limit, 100)))}
+        if task_id:
+            query["taskId"] = task_id
+        if status:
+            query["status"] = status
+        data = self._request("GET", "/agent/bids?" + urllib.parse.urlencode(query))
+        return list(data.get("bids") or [])
+
     def recommendations(self, limit: int = 25) -> list[dict[str, Any]]:
         data = self._request(
             "GET",
@@ -1268,7 +1283,7 @@ def normalize_opentask(rec: dict[str, Any], detail: dict[str, Any] | None = None
     )
 
 
-BID_AUTH_REQUIRED_SCOPES = frozenset({"profile:read", "tasks:read", "bids:write"})
+BID_AUTH_REQUIRED_SCOPES = frozenset({"profile:read", "tasks:read", "bids:read", "bids:write"})
 BID_ONBOARDING_ALLOWED_CHECKPOINTS = frozenset({"marketplace_action_required", "activated"})
 
 
@@ -1299,6 +1314,7 @@ def authenticated_bid_readiness(
         "write_scope_verification": "declared_not_verified",
         "profile_read_verified": False,
         "tasks_read_verified": False,
+        "bids_read_verified": False,
         "onboarding_read_verified": False,
         "profile": {"id": None, "handle": None, "display_name": None},
         "checkpoint": None,
@@ -1345,6 +1361,14 @@ def authenticated_bid_readiness(
         report["tasks_read_verified"] = True
     except Exception as exc:
         report["blocked_by"] = "tasks_read_failed"
+        report["error"] = str(exc)[:500]
+        return report
+
+    try:
+        client.list_own_bids(limit=1)
+        report["bids_read_verified"] = True
+    except Exception as exc:
+        report["blocked_by"] = "bids_read_failed"
         report["error"] = str(exc)[:500]
         return report
 
