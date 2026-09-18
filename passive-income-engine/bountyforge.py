@@ -499,6 +499,7 @@ class Store:
                            decision_reason,category,estimated_minutes,
                            reward_cents,currency,success_probability,
                            expected_profit_cents,expected_hourly_cents,score,status,
+                           description _description,
                            substr(description,1,800) description_excerpt
                     FROM bounty_jobs
                     WHERE decision='accept'
@@ -527,6 +528,13 @@ class Store:
                     "SELECT status,COUNT(*) n FROM bounty_contracts GROUP BY status"
                 )
             }
+        for item in top:
+            description = str(item.pop("_description", "") or "")
+            route = autonomous_fulfillment_route(str(item.get("title") or ""), description)
+            item["bid_ready"] = bool(item.get("execution_mode") == "pitch" and route)
+            item["fulfillment_route"] = None if route is None else route["route"]
+            item["fulfillment_kind"] = None if route is None else route["kind"]
+
         return {
             "statuses": statuses,
             "contract_statuses": contracts,
@@ -747,6 +755,47 @@ def safe_repo_verification_spec(title: str, description: str) -> dict[str, Any] 
         "commit_sha": sha_match.group(0).lower(),
         "checks": deduped[:3],
     }
+
+
+def autonomous_fulfillment_route(title: str, description: str) -> dict[str, str] | None:
+    payload = safe_solver_payload(title, description)
+    if payload is not None:
+        kind = str(payload.get("kind") or "")
+        if kind:
+            return {"route": "solver", "kind": kind}
+    repo_spec = safe_repo_verification_spec(title, description)
+    if repo_spec is not None:
+        return {"route": "repo_verifier", "kind": "repository_verification"}
+    return None
+
+
+def build_bid_approach(bounty: Bounty, decision: Decision) -> str | None:
+    route = autonomous_fulfillment_route(bounty.title, bounty.description)
+    if route is None:
+        return None
+
+    if route["kind"] == "csv_to_json_cli_package":
+        return (
+            "Plan: deliver a dependency-free Python 3 CSV-to-JSON converter as a CLI and "
+            "importable API. It will handle CSV quoting/special characters, common delimiter "
+            "auto-detection with an explicit delimiter override, UTF-8 JSON output, compact "
+            "output, and invalid-input errors. Deliverables include source, README, and unit "
+            "tests. Verification: run the included unittest suite and compileall, then provide "
+            "SHA-256 evidence for the package. Estimated automated preparation: "
+            f"{decision.estimated_minutes} minutes; ETA: 1 day."
+        )
+    if route["route"] == "repo_verifier":
+        return (
+            "Plan: verify the exact immutable public GitHub commit named in the task inside a "
+            "no-network sandbox using only the allowlisted requested checks. Deliver a signed "
+            "JSON report with return codes, durations, bounded output hashes, and repository "
+            f"tree statistics. Estimated effort: {decision.estimated_minutes} minutes; ETA: 1 day."
+        )
+    return (
+        f"Plan: complete the deterministic {route['kind']} operation in the isolated no-network "
+        "solver, verify the artifact hash and structural checks, and submit the verified output. "
+        f"Estimated effort: {decision.estimated_minutes} minutes; ETA: 1 day."
+    )
 
 
 def _queue_signature(secret: str, package: dict[str, Any]) -> str:
@@ -1807,11 +1856,9 @@ class BountyForge:
                     break
                 if bounty.execution_mode != "pitch":
                     continue
-                approach = (
-                    f"BountyForge selected this task after automated fit and profitability checks. "
-                    f"Plan: produce a minimal verified {decision.category} deliverable, run the task's "
-                    f"acceptance checks, and submit evidence. Estimated effort: {decision.estimated_minutes} minutes."
-                )
+                approach = build_bid_approach(bounty, decision)
+                if approach is None:
+                    continue
                 try:
                     response = self.opentask.create_bid(bounty, eta_days=1, approach=approach)
                 except Exception as exc:
