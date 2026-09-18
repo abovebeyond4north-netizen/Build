@@ -322,7 +322,7 @@ class Store:
                     bounty.external_id,
                     action,
                     status,
-                    json.dumps(payload, separators=(",", ":"), sort_keys=True)[:20_000],
+                    json.dumps(payload, separators=(",", ":"), sort_keys=True, default=str)[:20_000],
                     utcnow(),
                 ),
             )
