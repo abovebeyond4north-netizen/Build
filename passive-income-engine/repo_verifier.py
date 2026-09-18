@@ -8,6 +8,7 @@ import re
 import resource
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -66,8 +67,7 @@ def _limits() -> None:
     resource.setrlimit(resource.RLIMIT_CPU, (TIMEOUT_SECONDS, TIMEOUT_SECONDS + 1))
     resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
     resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
-    max_file = 16 * 1024 * 1024
-    resource.setrlimit(resource.RLIMIT_FSIZE, (max_file, max_file))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
 
 
 def run_check(worktree: Path, check: str) -> dict[str, Any]:
@@ -75,32 +75,45 @@ def run_check(worktree: Path, check: str) -> dict[str, Any]:
     if argv is None:
         raise ValueError(f"unsupported repository check: {check}")
     started = time.monotonic()
-    proc = subprocess.run(
-        argv,
-        cwd=worktree,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        timeout=TIMEOUT_SECONDS,
-        check=False,
-        env={
-            "PATH": os.environ.get("PATH", ""),
-            "HOME": "/tmp",
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONNOUSERSITE": "1",
-        },
-        preexec_fn=_limits,
-    )
-    output = proc.stdout[:MAX_OUTPUT_BYTES]
+    with tempfile.TemporaryFile() as capture:
+        try:
+            proc = subprocess.run(
+                argv,
+                cwd=worktree,
+                stdin=subprocess.DEVNULL,
+                stdout=capture,
+                stderr=subprocess.STDOUT,
+                timeout=TIMEOUT_SECONDS,
+                check=False,
+                env={
+                    "PATH": os.environ.get("PATH", ""),
+                    "HOME": "/tmp",
+                    "PYTHONDONTWRITEBYTECODE": "1",
+                    "PYTHONNOUSERSITE": "1",
+                },
+                preexec_fn=_limits,
+            )
+            returncode = proc.returncode
+            timed_out = False
+        except subprocess.TimeoutExpired:
+            returncode = 124
+            timed_out = True
+        capture.flush()
+        capture.seek(0)
+        output = capture.read(MAX_OUTPUT_BYTES)
+        capture.seek(0, 2)
+        produced = capture.tell()
+
     return {
         "check": check,
         "argv": argv,
-        "returncode": proc.returncode,
+        "returncode": returncode,
         "duration_ms": int((time.monotonic() - started) * 1000),
         "output_sha256": hashlib.sha256(output).hexdigest(),
         "output": output.decode("utf-8", "replace"),
-        "output_truncated": len(proc.stdout) > MAX_OUTPUT_BYTES,
-        "passed": proc.returncode == 0,
+        "output_truncated": produced >= MAX_OUTPUT_BYTES,
+        "timed_out": timed_out,
+        "passed": returncode == 0 and not timed_out,
     }
 
 
