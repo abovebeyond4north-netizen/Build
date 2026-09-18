@@ -184,6 +184,8 @@ DISALLOWED_TERMS = {
     "phishing",
     "malware",
     "ransomware",
+    "anti-detect",
+    "antidetect",
     "steal",
 }
 
@@ -493,11 +495,29 @@ class Store:
                 dict(row)
                 for row in con.execute(
                     """
-                    SELECT source,external_id,title,reward_cents,currency,category,
-                           success_probability,expected_profit_cents,expected_hourly_cents,score,status
+                    SELECT source,external_id,title,task_url,execution_mode,match_score,
+                           decision_reason,category,estimated_minutes,
+                           reward_cents,currency,success_probability,
+                           expected_profit_cents,expected_hourly_cents,score,status,
+                           substr(description,1,800) description_excerpt
                     FROM bounty_jobs
                     WHERE decision='accept'
                     ORDER BY score DESC LIMIT 10
+                    """
+                )
+            ]
+            rejected = [
+                dict(row)
+                for row in con.execute(
+                    """
+                    SELECT source,external_id,title,task_url,execution_mode,match_score,
+                           decision_reason,category,estimated_minutes,
+                           reward_cents,currency,success_probability,
+                           expected_profit_cents,expected_hourly_cents,score,status,
+                           substr(description,1,500) description_excerpt
+                    FROM bounty_jobs
+                    WHERE decision='reject'
+                    ORDER BY match_score DESC,reward_cents DESC LIMIT 10
                     """
                 )
             ]
@@ -512,6 +532,7 @@ class Store:
             "contract_statuses": contracts,
             "earnings": earnings,
             "top_candidates": top,
+            "top_rejections": rejected,
         }
 
 

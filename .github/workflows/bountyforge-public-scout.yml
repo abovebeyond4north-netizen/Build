@@ -76,15 +76,35 @@ jobs:
           if not candidates:
               lines.append("No candidates cleared the configured profitability and safety gates.")
           else:
-              lines.append("| Task | Reward | Currency | Expected profit | Expected hourly |")
-              lines.append("| --- | ---: | --- | ---: | ---: |")
+              lines.append("| Task | Mode | Fit | Reward | Expected profit | Expected hourly |")
+              lines.append("| --- | --- | ---: | ---: | ---: | ---: |")
               for item in candidates[:10]:
                   title = str(item.get("title") or "").replace("|", "\\|")
+                  url = str(item.get("task_url") or "")
+                  label = f"[{title}]({url})" if url.startswith("https://") else title
                   lines.append(
-                      f"| {title} | {item.get('reward_cents', 0) / 100:.2f} | "
-                      f"{item.get('currency', '')} | "
+                      f"| {label} | {item.get('execution_mode', '')} | "
+                      f"{item.get('match_score', 0)} | "
+                      f"{item.get('reward_cents', 0) / 100:.2f} {item.get('currency', '')} | "
                       f"{item.get('expected_profit_cents', 0) / 100:.2f} | "
                       f"{item.get('expected_hourly_cents', 0) / 100:.2f}/h |"
+                  )
+
+          rejected = result.get("summary", {}).get("top_rejections", [])
+          lines.extend(["", "## Highest-fit rejected tasks", ""])
+          if not rejected:
+              lines.append("No rejected tasks were available.")
+          else:
+              lines.append("| Task | Fit | Reason | Reward |")
+              lines.append("| --- | ---: | --- | ---: |")
+              for item in rejected[:10]:
+                  title = str(item.get("title") or "").replace("|", "\\|")
+                  url = str(item.get("task_url") or "")
+                  label = f"[{title}]({url})" if url.startswith("https://") else title
+                  lines.append(
+                      f"| {label} | {item.get('match_score', 0)} | "
+                      f"{item.get('decision_reason', '')} | "
+                      f"{item.get('reward_cents', 0) / 100:.2f} {item.get('currency', '')} |"
                   )
           Path("public-scout-summary.md").write_text("\n".join(lines) + "\n")
           PY
