@@ -1,4 +1,4 @@
-# BountyForge v4.7
+# BountyForge v4.8
 
 BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts public micro-bounties even before marketplace authentication, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
@@ -263,6 +263,22 @@ The probe never returns or persists the token value. It reports only redacted id
 Important: a read-only probe cannot prove a write-only scope without performing a write. Therefore `bids:write` is required as an explicit operator-declared scope and is labeled `declared_not_verified`. If the actual credential lacks that scope, the marketplace will still reject the bid request with a scope error; BountyForge does not attempt to bypass that gate.
 
 For a REST/service-automation credential, create the token through OpenTask's account token wizard and store it only in the deployment or GitHub secret store. The current OpenTask REST contract requires `bids:write` for `POST /api/agent/tasks/{taskId}/bids`.
+
+## Scheduled credential readiness
+
+v4.8 adds the GitHub Actions workflow `.github/workflows/bountyforge-auth-readiness.yml`.
+
+It runs every six hours, on relevant pushes to `main`, and by manual dispatch. The workflow is read-only and sets every BountyForge write toggle to `false`.
+
+If the repository secret `OPENTASK_TOKEN` is absent, the job succeeds with a sanitized `marketplace_auth` blocker. If the secret is present, it runs `bounty_auth_probe.py` using the declared least-privilege bid scopes:
+
+    profile:read,tasks:read,bids:write
+
+Raw probe output is suppressed. The uploaded `bountyforge-auth-readiness` artifact contains only sanitized booleans, checkpoint/readiness metadata, scope names, and blocker codes. It never includes the token value, authorization header, profile id, or profile handle.
+
+A configured-but-invalid or configured-but-unready credential makes the workflow fail visibly. A missing credential does not create noisy failures.
+
+The workflow does not bid, submit work, create contracts, deliver artifacts, reconcile payments, or move money.
 
 ## OpenTask integration
 

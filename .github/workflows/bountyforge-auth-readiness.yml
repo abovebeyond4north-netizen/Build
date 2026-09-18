@@ -1,0 +1,183 @@
+name: BountyForge Auth Readiness
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "passive-income-engine/bountyforge.py"
+      - "passive-income-engine/bounty_auth_probe.py"
+      - ".github/workflows/bountyforge-auth-readiness.yml"
+  schedule:
+    - cron: "43 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bountyforge-auth-readiness
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: passive-income-engine
+    env:
+      DATABASE_PATH: /tmp/bountyforge-auth-readiness.db
+      OPENTASK_TOKEN: ${{ secrets.OPENTASK_TOKEN }}
+      OPENTASK_DECLARED_SCOPES: profile:read,tasks:read,bids:write
+      BOUNTYFORGE_AUTO_BID: "false"
+      BOUNTYFORGE_AUTO_SOLVE: "false"
+      BOUNTYFORGE_AUTO_REPO_VERIFY: "false"
+      BOUNTYFORGE_AUTO_DELIVER: "false"
+      BOUNTYFORGE_AUTO_SUBMIT_ENTRIES: "false"
+      BOUNTYFORGE_RECONCILE_PAYMENTS: "false"
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: passive-income-engine/requirements.txt
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt
+
+      - name: Probe OpenTask credential readiness
+        id: auth_probe
+        shell: bash
+        run: |
+          if [ -z "${OPENTASK_TOKEN:-}" ]; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = {
+              "kind": "bountyforge.authReadiness.public",
+              "schema_version": 1,
+              "credential_configured": False,
+              "ready_for_bid": False,
+              "blocked_by": "marketplace_auth",
+              "profile_read_verified": False,
+              "onboarding_read_verified": False,
+              "tasks_read_verified": False,
+              "required_scopes": ["bids:write", "profile:read", "tasks:read"],
+              "write_actions_performed": False,
+          }
+          Path("auth-readiness.json").write_text(
+              json.dumps(report, indent=2, sort_keys=True) + "\n"
+          )
+          PY
+            echo "credential_configured=false" >> "$GITHUB_OUTPUT"
+            echo "probe_status=0" >> "$GITHUB_OUTPUT"
+          else
+            set +e
+            python bounty_auth_probe.py --json-out /tmp/auth-readiness-private.json >/dev/null
+            probe_status=$?
+            set -e
+
+            PROBE_STATUS="$probe_status" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          private_path = Path("/tmp/auth-readiness-private.json")
+          if private_path.is_file():
+              private = json.loads(private_path.read_text())
+          else:
+              private = {
+                  "ready_for_bid": False,
+                  "blocked_by": "probe_output_missing",
+                  "profile_read_verified": False,
+                  "onboarding_read_verified": False,
+                  "tasks_read_verified": False,
+                  "required_scopes": ["bids:write", "profile:read", "tasks:read"],
+                  "missing_declared_scopes": [],
+                  "checkpoint": None,
+                  "warnings": [],
+              }
+
+          profile = private.get("profile") or {}
+          safe = {
+              "kind": "bountyforge.authReadiness.public",
+              "schema_version": 1,
+              "credential_configured": True,
+              "ready_for_bid": bool(private.get("ready_for_bid")),
+              "blocked_by": private.get("blocked_by"),
+              "profile_identity_present": bool(profile.get("id")),
+              "profile_handle_present": bool(profile.get("handle")),
+              "profile_read_verified": bool(private.get("profile_read_verified")),
+              "onboarding_read_verified": bool(private.get("onboarding_read_verified")),
+              "tasks_read_verified": bool(private.get("tasks_read_verified")),
+              "checkpoint": private.get("checkpoint"),
+              "required_scopes": private.get("required_scopes") or [],
+              "missing_declared_scopes": private.get("missing_declared_scopes") or [],
+              "write_scope_verification": private.get("write_scope_verification"),
+              "warnings": private.get("warnings") or [],
+              "probe_exit_code": int(os.environ["PROBE_STATUS"]),
+              "write_actions_performed": False,
+          }
+          Path("auth-readiness.json").write_text(
+              json.dumps(safe, indent=2, sort_keys=True) + "\n"
+          )
+          try:
+              private_path.unlink()
+          except FileNotFoundError:
+              pass
+          PY
+
+            echo "credential_configured=true" >> "$GITHUB_OUTPUT"
+            echo "probe_status=$probe_status" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish sanitized readiness summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("auth-readiness.json")
+          if not path.is_file():
+              print("## BountyForge auth readiness\n\nProbe report was not produced.")
+              raise SystemExit(0)
+
+          report = json.loads(path.read_text())
+          checkpoint = report.get("checkpoint") or {}
+          lines = [
+              "## BountyForge auth readiness",
+              "",
+              f"- Credential configured: **{str(bool(report.get('credential_configured'))).lower()}**",
+              f"- Ready for bid loop: **{str(bool(report.get('ready_for_bid'))).lower()}**",
+              f"- Blocker: `{report.get('blocked_by') or 'none'}`",
+              f"- Profile read verified: **{str(bool(report.get('profile_read_verified'))).lower()}**",
+              f"- Onboarding read verified: **{str(bool(report.get('onboarding_read_verified'))).lower()}**",
+              f"- Task read verified: **{str(bool(report.get('tasks_read_verified'))).lower()}**",
+              f"- Onboarding checkpoint: `{checkpoint.get('code') or 'unknown'}`",
+              "- Marketplace writes performed: **false**",
+          ]
+          summary = "\n".join(lines) + "\n"
+          Path("auth-readiness-summary.md").write_text(summary)
+          print(summary)
+          PY
+          cat auth-readiness-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bountyforge-auth-readiness
+          path: |
+            passive-income-engine/auth-readiness.json
+            passive-income-engine/auth-readiness-summary.md
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Fail on configured-but-unready credential
+        if: steps.auth_probe.outputs.credential_configured == 'true' && steps.auth_probe.outputs.probe_status != '0'
+        run: |
+          echo "OpenTask credential is configured but did not pass read-only readiness checks." >&2
+          exit 1
