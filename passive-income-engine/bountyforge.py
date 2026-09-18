@@ -478,7 +478,18 @@ class Store:
                     """
                 )
             ]
-        return {"statuses": statuses, "earnings": earnings, "top_candidates": top}
+            contracts = {
+                row["status"]: int(row["n"])
+                for row in con.execute(
+                    "SELECT status,COUNT(*) n FROM bounty_contracts GROUP BY status"
+                )
+            }
+        return {
+            "statuses": statuses,
+            "contract_statuses": contracts,
+            "earnings": earnings,
+            "top_candidates": top,
+        }
 
 
 def classify(bounty: Bounty) -> tuple[str, int]:
@@ -1354,6 +1365,8 @@ def cli() -> int:
     sub.add_parser("scout")
     sub.add_parser("worker")
     sub.add_parser("status")
+    sub.add_parser("reconcile")
+    sub.add_parser("collect")
 
     settle = sub.add_parser("settle")
     settle.add_argument("--source", required=True)
@@ -1374,6 +1387,12 @@ def cli() -> int:
         return 0
     if args.command == "status":
         print(json.dumps(forge.store.summary(), indent=2, sort_keys=True))
+        return 0
+    if args.command == "reconcile":
+        print(json.dumps(forge.reconcile_contracts(), indent=2, sort_keys=True))
+        return 0
+    if args.command == "collect":
+        print(json.dumps(forge.collect_solver_results(), indent=2, sort_keys=True))
         return 0
     if args.command == "settle":
         if args.gross_cents < 0 or args.fees_cents < 0 or args.fees_cents > args.gross_cents:
