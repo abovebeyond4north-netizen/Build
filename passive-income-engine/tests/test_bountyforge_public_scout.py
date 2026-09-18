@@ -65,6 +65,35 @@ class PublicScoutTests(unittest.TestCase):
         self.fake = FakePublicOpenTask()
         self.forge.opentask = self.fake
 
+    def test_public_only_run_does_not_initialize_solver_or_repo_queues(self):
+        root = Path(self.tmp.name)
+        self.forge.config = Config(
+            database_path=str(root / "public-only.db"),
+            opentask_token="",
+            public_scout=True,
+            public_skill_signals=("csv",),
+            public_tasks_per_signal=20,
+            auto_solve=False,
+            auto_repo_verify=False,
+            auto_deliver=False,
+            reconcile_payments=False,
+            queue_dir=str(root / "must-not-create-bounty-queue"),
+            queue_secret="",
+            repo_verify_dir=str(root / "must-not-create-repo-verify"),
+            repo_verify_secret="",
+        )
+        self.forge.store = self.forge.store.__class__(self.forge.config.database_path)
+        self.forge.store.init()
+        self.forge.opentask = self.fake
+
+        result = self.forge.run_once()
+
+        self.assertTrue(result["enabled"])
+        self.assertFalse(Path(self.forge.config.queue_dir).exists())
+        self.assertFalse(Path(self.forge.config.repo_verify_dir).exists())
+        self.assertEqual(result["solver"]["verified"], 0)
+        self.assertEqual(result["repo_verifier"]["verified"], 0)
+
     def test_public_scout_discovers_without_token_and_deduplicates(self):
         found = self.forge.discover()
         self.assertFalse(self.fake.recommendation_called)
