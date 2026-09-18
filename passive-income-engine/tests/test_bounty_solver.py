@@ -1,8 +1,12 @@
 import hashlib
 import hmac
+import io
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 import bounty_solver
@@ -159,6 +163,52 @@ class BountySolverTests(unittest.TestCase):
         )
         self.assertEqual(result.output.decode(), "blue green blue")
         self.assertEqual(result.verification["replacements"], 2)
+
+    def test_csv_to_json_cli_package_runs_its_own_tests(self):
+        first = bounty_solver.solve_package(
+            self.package({"kind": "csv_to_json_cli_package"})
+        )
+        second = bounty_solver.solve_package(
+            self.package({"kind": "csv_to_json_cli_package"})
+        )
+        self.assertTrue(first.ok)
+        self.assertEqual(first.filename, "csv-to-json-converter.zip")
+        self.assertEqual(first.output, second.output)
+        self.assertTrue(first.verification["package_structure_valid"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with zipfile.ZipFile(io.BytesIO(first.output), "r") as archive:
+                self.assertEqual(
+                    sorted(archive.namelist()),
+                    ["README.md", "csv_to_json.py", "test_csv_to_json.py"],
+                )
+                archive.extractall(tmp)
+
+            proc = subprocess.run(
+                [sys.executable, "-m", "unittest", "-v", "test_csv_to_json.py"],
+                cwd=tmp,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout)
+
+            sample = Path(tmp) / "sample.csv"
+            sample.write_text('name;note\nAlice;"hello, world"\n', encoding="utf-8")
+            cli = subprocess.run(
+                [sys.executable, "csv_to_json.py", str(sample)],
+                cwd=tmp,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+            self.assertEqual(cli.returncode, 0, cli.stdout)
+            parsed = json.loads(cli.stdout)
+            self.assertEqual(parsed, [{"name": "Alice", "note": "hello, world"}])
 
     def test_queue_run_writes_signed_hash_verified_manifest(self):
         inbox = bounty_solver.QUEUE_DIR / "inbox"
