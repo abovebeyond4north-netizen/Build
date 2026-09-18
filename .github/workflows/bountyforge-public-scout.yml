@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "passive-income-engine/bountyforge.py"
+      - "passive-income-engine/bounty_solver.py"
+      - "passive-income-engine/bounty_preflight.py"
       - "passive-income-engine/requirements.txt"
       - ".github/workflows/bountyforge-public-scout.yml"
   schedule:
@@ -111,11 +113,80 @@ jobs:
           Path("public-scout-summary.md").write_text("\n".join(lines) + "\n")
           PY
           cat public-scout-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preflight top bid-ready tasks
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from bounty_preflight import preflight_task
+
+          scout = json.loads(Path("public-scout.json").read_text())
+          candidates = [
+              item
+              for item in scout.get("summary", {}).get("top_candidates", [])
+              if item.get("bid_ready")
+          ][:3]
+
+          results = []
+          for item in candidates:
+              task_id = str(item.get("external_id") or "")
+              if not task_id:
+                  continue
+              try:
+                  results.append(preflight_task(task_id))
+              except Exception as exc:
+                  results.append(
+                      {
+                          "task_id": task_id,
+                          "bid_ready": False,
+                          "blocked_by": "preflight_error",
+                          "error": str(exc)[:500],
+                          "write_actions_performed": False,
+                      }
+                  )
+
+          Path("public-preflight.json").write_text(
+              json.dumps(
+                  {
+                      "preflight_count": len(results),
+                      "write_actions_performed": False,
+                      "results": results,
+                  },
+                  indent=2,
+                  sort_keys=True,
+                  default=str,
+              )
+              + "\n"
+          )
+
+          lines = ["# BountyForge read-only preflight", ""]
+          if not results:
+              lines.append("No bid-ready candidates were available for preflight.")
+          else:
+              lines.append("| Task | Ready | Blocker | Fulfillment | Artifact SHA-256 |")
+              lines.append("| --- | --- | --- | --- | --- |")
+              for result in results:
+                  url = str(result.get("task_url") or "")
+                  title = str(result.get("title") or result.get("task_id") or "").replace("|", "\\|")
+                  label = f"[{title}]({url})" if url.startswith("https://") else title
+                  route = result.get("fulfillment") or {}
+                  artifact = result.get("artifact") or {}
+                  digest = str(artifact.get("sha256") or "")
+                  short_digest = (digest[:16] + "…") if digest else ""
+                  lines.append(
+                      f"| {label} | {'yes' if result.get('bid_ready') else 'no'} | "
+                      f"{result.get('blocked_by', '')} | {route.get('kind', '')} | {short_digest} |"
+                  )
+          Path("public-preflight-summary.md").write_text("\n".join(lines) + "\n")
+          PY
+          cat public-preflight-summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: bountyforge-public-scout
           path: |
             passive-income-engine/public-scout.json
             passive-income-engine/public-scout-summary.md
+            passive-income-engine/public-preflight.json
+            passive-income-engine/public-preflight-summary.md
           retention-days: 14
           if-no-files-found: error
