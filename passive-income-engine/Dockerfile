@@ -15,7 +15,7 @@ RUN groupadd --system app && useradd --system --gid app --home /srv app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY engine.py checkout_app.py hybrid.py bountyforge.py bounty_solver.py bounty_preflight.py bounty_auth_probe.py repo_stager.py repo_verifier.py ./
+COPY engine.py checkout_app.py hybrid.py bountyforge.py bounty_solver.py bounty_preflight.py bounty_bid_packet.py bounty_auth_probe.py repo_stager.py repo_verifier.py ./
 COPY scripts ./scripts
 
 RUN mkdir -p /data /backups /bounty-queue /repo-verify && chown -R app:app /srv /data /backups /bounty-queue /repo-verify

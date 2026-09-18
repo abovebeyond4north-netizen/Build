@@ -840,6 +840,21 @@ def _settled_units(invoice: dict[str, Any], receipt_ids: set[str]) -> Iterable[d
             }
 
 
+def build_bid_request_body(
+    bounty: Bounty,
+    *,
+    eta_days: int = 1,
+    approach: str,
+) -> dict[str, Any]:
+    return {
+        "expectedTaskUpdatedAt": bounty.updated_at,
+        "priceAmount": float(Decimal(bounty.reward_cents) / Decimal(100)),
+        "priceCurrency": bounty.currency,
+        "etaDays": max(1, int(eta_days)),
+        "approach": approach[:4000],
+    }
+
+
 class OpenTaskClient:
     def __init__(self, config: Config):
         self.base = config.opentask_base_url
@@ -1126,21 +1141,10 @@ class OpenTaskClient:
         eta_days: int = 1,
         approach: str,
     ) -> dict[str, Any]:
-        expected = bounty.updated_at
-        payload = {
-            "expectedTaskUpdatedAt": expected,
-            "priceAmount": Decimal(bounty.reward_cents) / Decimal(100),
-            "priceCurrency": bounty.currency,
-            "etaDays": max(1, eta_days),
-            "approach": approach[:4000],
-        }
-        # Decimal is not JSON serializable; preserve exact decimal as float here
-        # because the platform schema accepts a JSON number and our amounts are cents.
-        payload["priceAmount"] = float(payload["priceAmount"])
         return self._request(
             "POST",
             f"/agent/tasks/{urllib.parse.quote(bounty.external_id, safe='')}/bids",
-            payload,
+            build_bid_request_body(bounty, eta_days=eta_days, approach=approach),
         )
 
 
