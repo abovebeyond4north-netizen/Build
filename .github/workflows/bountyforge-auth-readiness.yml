@@ -153,11 +153,11 @@ jobs:
               "",
               f"- Credential configured: **{str(bool(report.get('credential_configured'))).lower()}**",
               f"- Ready for bid loop: **{str(bool(report.get('ready_for_bid'))).lower()}**",
-              f"- Blocker: \`{report.get('blocked_by') or 'none'}\`",
+              f"- Blocker: `{report.get('blocked_by') or 'none'}`",
               f"- Profile read verified: **{str(bool(report.get('profile_read_verified'))).lower()}**",
               f"- Onboarding read verified: **{str(bool(report.get('onboarding_read_verified'))).lower()}**",
               f"- Task read verified: **{str(bool(report.get('tasks_read_verified'))).lower()}**",
-              f"- Onboarding checkpoint: \`{checkpoint.get('code') or 'unknown'}\`",
+              f"- Onboarding checkpoint: `{checkpoint.get('code') or 'unknown'}`",
               "- Marketplace writes performed: **false**",
           ]
           summary = "\n".join(lines) + "\n"
