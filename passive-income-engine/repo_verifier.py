@@ -23,7 +23,6 @@ MAX_TREE_BYTES = max(1024 * 1024, int(os.getenv("BOUNTYFORGE_REPO_VERIFY_MAX_TRE
 ALLOWED_COMMANDS: dict[str, list[str]] = {
     "python_unittest": ["python", "-m", "unittest", "discover", "-v"],
     "python_compileall": ["python", "-m", "compileall", "-q", "."],
-    "pytest": ["python", "-m", "pytest", "-q"],
 }
 
 
