@@ -29,7 +29,7 @@ jobs:
     env:
       DATABASE_PATH: /tmp/bountyforge-auth-readiness.db
       OPENTASK_TOKEN: ${{ secrets.OPENTASK_TOKEN }}
-      OPENTASK_DECLARED_SCOPES: profile:read,tasks:read,bids:write
+      OPENTASK_DECLARED_SCOPES: profile:read,tasks:read,bids:read,bids:write
       BOUNTYFORGE_AUTO_BID: "false"
       BOUNTYFORGE_AUTO_SOLVE: "false"
       BOUNTYFORGE_AUTO_REPO_VERIFY: "false"
@@ -65,7 +65,8 @@ jobs:
               "profile_read_verified": False,
               "onboarding_read_verified": False,
               "tasks_read_verified": False,
-              "required_scopes": ["bids:write", "profile:read", "tasks:read"],
+              "bids_read_verified": False,
+              "required_scopes": ["bids:read", "bids:write", "profile:read", "tasks:read"],
               "write_actions_performed": False,
           }
           Path("auth-readiness.json").write_text(
@@ -95,7 +96,8 @@ jobs:
                   "profile_read_verified": False,
                   "onboarding_read_verified": False,
                   "tasks_read_verified": False,
-                  "required_scopes": ["bids:write", "profile:read", "tasks:read"],
+                  "bids_read_verified": False,
+                  "required_scopes": ["bids:read", "bids:write", "profile:read", "tasks:read"],
                   "missing_declared_scopes": [],
                   "checkpoint": None,
                   "warnings": [],
@@ -113,6 +115,7 @@ jobs:
               "profile_read_verified": bool(private.get("profile_read_verified")),
               "onboarding_read_verified": bool(private.get("onboarding_read_verified")),
               "tasks_read_verified": bool(private.get("tasks_read_verified")),
+              "bids_read_verified": bool(private.get("bids_read_verified")),
               "checkpoint": private.get("checkpoint"),
               "required_scopes": private.get("required_scopes") or [],
               "missing_declared_scopes": private.get("missing_declared_scopes") or [],
@@ -157,6 +160,7 @@ jobs:
               f"- Profile read verified: **{str(bool(report.get('profile_read_verified'))).lower()}**",
               f"- Onboarding read verified: **{str(bool(report.get('onboarding_read_verified'))).lower()}**",
               f"- Task read verified: **{str(bool(report.get('tasks_read_verified'))).lower()}**",
+              f"- Own-bids read verified: **{str(bool(report.get('bids_read_verified'))).lower()}**",
               f"- Onboarding checkpoint: `{checkpoint.get('code') or 'unknown'}`",
               "- Marketplace writes performed: **false**",
           ]
