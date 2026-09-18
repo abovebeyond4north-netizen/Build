@@ -74,6 +74,9 @@ class Config:
     scout_interval_seconds: int = 900
     queue_dir: str = "/bounty-queue"
     queue_secret: str = ""
+    repo_verify_dir: str = "/repo-verify"
+    repo_verify_secret: str = ""
+    auto_repo_verify: bool = True
     minimum_reward_cents: int = 500
     maximum_reward_cents: int = 10_000
     minimum_success_probability: Decimal = Decimal("0.70")
@@ -104,6 +107,9 @@ class Config:
             scout_interval_seconds=max(60, env_int("BOUNTYFORGE_SCOUT_INTERVAL_SECONDS", 900)),
             queue_dir=os.getenv("BOUNTYFORGE_QUEUE_DIR", "/bounty-queue"),
             queue_secret=os.getenv("BOUNTYFORGE_QUEUE_SECRET", ""),
+            repo_verify_dir=os.getenv("BOUNTYFORGE_REPO_VERIFY_DIR", "/repo-verify"),
+            repo_verify_secret=os.getenv("BOUNTYFORGE_REPO_VERIFY_SECRET", ""),
+            auto_repo_verify=env_bool("BOUNTYFORGE_AUTO_REPO_VERIFY", True),
             minimum_reward_cents=max(0, env_int("BOUNTYFORGE_MIN_REWARD_CENTS", 500)),
             maximum_reward_cents=max(0, env_int("BOUNTYFORGE_MAX_REWARD_CENTS", 10_000)),
             minimum_success_probability=env_decimal("BOUNTYFORGE_MIN_SUCCESS_PROBABILITY", "0.70"),
