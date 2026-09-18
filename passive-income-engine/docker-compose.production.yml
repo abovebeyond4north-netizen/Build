@@ -45,7 +45,8 @@ services:
         condition: service_healthy
 
   bounty-solver:
-    build:\n      context: .
+    build:
+      context: .
     restart: unless-stopped
     command: ["python", "bounty_solver.py"]
     network_mode: "none"
