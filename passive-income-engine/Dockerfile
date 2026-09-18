@@ -15,7 +15,7 @@ RUN groupadd --system app && useradd --system --gid app --home /srv app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY engine.py checkout_app.py hybrid.py ./
+COPY engine.py checkout_app.py hybrid.py bountyforge.py ./
 COPY scripts ./scripts
 
 RUN mkdir -p /data /backups && chown -R app:app /srv /data /backups
