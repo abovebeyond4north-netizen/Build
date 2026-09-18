@@ -1718,8 +1718,16 @@ class BountyForge:
         if not self.config.enabled:
             return {"enabled": False, "discovered": 0, "eligible": 0, "bids": 0}
 
-        repo_results = self.collect_repo_verification_results()
-        solver_results = self.collect_solver_results()
+        repo_results = (
+            self.collect_repo_verification_results()
+            if self.config.repo_verify_secret and self.config.queue_secret
+            else {"verified": 0, "failed": 0, "translated": 0, "quarantined": 0}
+        )
+        solver_results = (
+            self.collect_solver_results()
+            if self.config.queue_secret
+            else {"verified": 0, "delivered": 0, "ready": 0, "failed": 0, "quarantined": 0}
+        )
         contracts = self.reconcile_contracts()
 
         discovered = self.discover()
