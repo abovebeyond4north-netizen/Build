@@ -1,4 +1,4 @@
-# BountyForge v4.8
+# BountyForge v4.9
 
 BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts public micro-bounties even before marketplace authentication, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
@@ -279,6 +279,29 @@ Raw probe output is suppressed. The uploaded `bountyforge-auth-readiness` artifa
 A configured-but-invalid or configured-but-unready credential makes the workflow fail visibly. A missing credential does not create noisy failures.
 
 The workflow does not bid, submit work, create contracts, deliver artifacts, reconcile payments, or move money.
+
+## Immutable dry-run bid packets
+
+v4.9 prepares the exact marketplace request intent for every fresh bid-ready preflight without submitting it.
+
+`bounty_bid_packet.py` uses the same `build_bid_request_body()` function as the production `OpenTaskClient.create_bid()` path, preventing dry-run/request-shape drift.
+
+Each packet includes:
+
+- the task id, public URL, execution mode, current `updatedAt`, and task-state evidence;
+- the exact future POST path and JSON bid body;
+- the verified fulfillment route and deterministic artifact filename/SHA-256/size;
+- reward, modeled expected profit/hourly value, estimated effort, and success probability;
+- guards requiring exact task freshness, auth readiness, and an explicit write executor;
+- `write_action_enabled: false` and `write_actions_performed: false`.
+
+The stable `intent_sha256` hashes only the canonical task/request/fulfillment/economics/guard intent, so the same unchanged task produces the same intent digest across runs even though the envelope timestamp changes.
+
+Run manually:
+
+    python bounty_bid_packet.py <TASK_ID>
+
+The six-hour public scout now stores `public-bid-packets.json` and a compact summary next to the existing discovery and preflight reports. These packets are audit artifacts, not marketplace bids.
 
 ## OpenTask integration
 
