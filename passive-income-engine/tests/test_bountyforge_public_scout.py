@@ -264,7 +264,7 @@ class PublicScoutTests(unittest.TestCase):
             database_path=str(root / "bid-gate.db"),
             auto_bid=True,
             opentask_token="test-token",
-            opentask_declared_scopes=("bids:write", "profile:read", "tasks:read"),
+            opentask_declared_scopes=("bids:read", "bids:write", "profile:read", "tasks:read"),
             public_scout=False,
             reconcile_payments=False,
             queue_secret="",
@@ -305,6 +305,9 @@ class PublicScoutTests(unittest.TestCase):
             def list_tasks(self, *, status="open", limit=1):
                 return []
 
+            def list_own_bids(self, *, task_id=None, status=None, limit=20):
+                return []
+
             def create_bid(self, bounty, *, eta_days, approach):
                 self.calls.append((bounty.external_id, eta_days, approach))
                 return {"ok": True}
@@ -325,7 +328,7 @@ class PublicScoutTests(unittest.TestCase):
             database_path=str(root / "bid-ready.db"),
             auto_bid=True,
             opentask_token="test-token",
-            opentask_declared_scopes=("bids:write", "profile:read", "tasks:read"),
+            opentask_declared_scopes=("bids:read", "bids:write", "profile:read", "tasks:read"),
             public_scout=False,
             reconcile_payments=False,
             queue_secret="",
@@ -364,6 +367,9 @@ class PublicScoutTests(unittest.TestCase):
                 }
 
             def list_tasks(self, *, status="open", limit=1):
+                return []
+
+            def list_own_bids(self, *, task_id=None, status=None, limit=20):
                 return []
 
             def create_bid(self, bounty, *, eta_days, approach):
