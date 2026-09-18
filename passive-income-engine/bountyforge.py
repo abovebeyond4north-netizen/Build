@@ -88,6 +88,7 @@ class Config:
     allowed_currencies: tuple[str, ...] = ("USD", "USDC", "USDT")
     opentask_token: str = ""
     opentask_base_url: str = "https://opentask.ai/api"
+    opentask_declared_scopes: tuple[str, ...] = ()
     public_scout: bool = True
     public_skill_signals: tuple[str, ...] = ("csv", "json", "data", "python", "documentation")
     public_tasks_per_signal: int = 20
@@ -106,6 +107,15 @@ class Config:
                 "csv,json,data,python,documentation",
             ).split(",")
             if x.strip()
+        )
+        declared_scopes = tuple(
+            sorted(
+                {
+                    x.strip()
+                    for x in os.getenv("OPENTASK_DECLARED_SCOPES", "").split(",")
+                    if x.strip()
+                }
+            )
         )
         return cls(
             database_path=os.getenv("DATABASE_PATH", "/data/passive_income.db"),
@@ -132,6 +142,7 @@ class Config:
             allowed_currencies=allowed,
             opentask_token=os.getenv("OPENTASK_TOKEN", "").strip(),
             opentask_base_url=os.getenv("OPENTASK_BASE_URL", "https://opentask.ai/api").rstrip("/"),
+            opentask_declared_scopes=declared_scopes,
             public_scout=env_bool("BOUNTYFORGE_PUBLIC_SCOUT", True),
             public_skill_signals=public_skills,
             public_tasks_per_signal=max(
@@ -898,6 +909,22 @@ class OpenTaskClient:
     def public_task_detail(self, task_id: str) -> dict[str, Any]:
         return self._public_request(f"/tasks/{urllib.parse.quote(task_id, safe='')}")
 
+    def get_me(self) -> dict[str, Any]:
+        return dict(self._request("GET", "/agent/me") or {})
+
+    def get_onboarding_status(self) -> dict[str, Any]:
+        return dict(self._request("GET", "/agent/onboarding/status") or {})
+
+    def list_tasks(self, *, status: str = "open", limit: int = 1) -> list[dict[str, Any]]:
+        query = urllib.parse.urlencode(
+            {
+                "status": status,
+                "limit": max(1, min(limit, 100)),
+            }
+        )
+        data = self._request("GET", f"/agent/tasks?{query}")
+        return list(data.get("tasks") or [])
+
     def recommendations(self, limit: int = 25) -> list[dict[str, Any]]:
         data = self._request(
             "GET",
@@ -1235,6 +1262,103 @@ def normalize_opentask(rec: dict[str, Any], detail: dict[str, Any] | None = None
         updated_at=updated_at,
         raw={"recommendation": rec, "detail": detail or {}},
     )
+
+
+BID_AUTH_REQUIRED_SCOPES = frozenset({"profile:read", "tasks:read", "bids:write"})
+BID_ONBOARDING_ALLOWED_CHECKPOINTS = frozenset({"marketplace_action_required", "activated"})
+
+
+def _safe_profile_identity(me: dict[str, Any]) -> dict[str, Any]:
+    profile = dict(me.get("profile") or {})
+    return {
+        "id": str(profile.get("id") or "") or None,
+        "handle": str(profile.get("handle") or "") or None,
+        "display_name": str(profile.get("displayName") or profile.get("display_name") or "") or None,
+    }
+
+
+def authenticated_bid_readiness(
+    config: Config,
+    client: OpenTaskClient,
+) -> dict[str, Any]:
+    required_scopes = sorted(BID_AUTH_REQUIRED_SCOPES)
+    declared_scopes = sorted(set(config.opentask_declared_scopes))
+    missing_declared = sorted(BID_AUTH_REQUIRED_SCOPES - set(declared_scopes))
+
+    report: dict[str, Any] = {
+        "kind": "bountyforge.authReadiness",
+        "schema_version": 1,
+        "generated_at": utcnow(),
+        "required_scopes": required_scopes,
+        "declared_scopes": declared_scopes,
+        "missing_declared_scopes": missing_declared,
+        "write_scope_verification": "declared_not_verified",
+        "profile_read_verified": False,
+        "tasks_read_verified": False,
+        "onboarding_read_verified": False,
+        "profile": {"id": None, "handle": None, "display_name": None},
+        "checkpoint": None,
+        "ready_for_bid": False,
+        "blocked_by": None,
+        "warnings": [],
+    }
+
+    if not config.opentask_token:
+        report["blocked_by"] = "marketplace_auth"
+        return report
+    if missing_declared:
+        report["blocked_by"] = "declared_scopes_missing"
+        return report
+
+    try:
+        me = client.get_me()
+        report["profile"] = _safe_profile_identity(me)
+        report["profile_read_verified"] = True
+    except Exception as exc:
+        report["blocked_by"] = "profile_read_failed"
+        report["error"] = str(exc)[:500]
+        return report
+
+    try:
+        onboarding = client.get_onboarding_status()
+        report["onboarding_read_verified"] = True
+        checkpoint = dict(onboarding.get("checkpoint") or {})
+        checkpoint_code = str(checkpoint.get("code") or "") or None
+        checkpoint_status = str(checkpoint.get("status") or "") or None
+        report["checkpoint"] = {
+            "code": checkpoint_code,
+            "status": checkpoint_status,
+            "complete": bool(onboarding.get("complete", False)),
+            "progress": onboarding.get("progress"),
+        }
+    except Exception as exc:
+        report["blocked_by"] = "onboarding_read_failed"
+        report["error"] = str(exc)[:500]
+        return report
+
+    try:
+        client.list_tasks(status="open", limit=1)
+        report["tasks_read_verified"] = True
+    except Exception as exc:
+        report["blocked_by"] = "tasks_read_failed"
+        report["error"] = str(exc)[:500]
+        return report
+
+    checkpoint_code = ((report.get("checkpoint") or {}).get("code"))
+    if checkpoint_code not in BID_ONBOARDING_ALLOWED_CHECKPOINTS:
+        report["blocked_by"] = "onboarding_incomplete"
+        return report
+
+    if not report["profile"].get("id"):
+        report["blocked_by"] = "profile_identity_missing"
+        return report
+
+    report["ready_for_bid"] = True
+    report["blocked_by"] = None
+    report["warnings"] = [
+        "bids:write is operator-declared; read-only probes cannot prove a write scope"
+    ]
+    return report
 
 
 class BountyForge:
@@ -1846,7 +1970,15 @@ class BountyForge:
 
         eligible.sort(key=lambda pair: pair[1].score, reverse=True)
         bids = 0
-        if self.config.auto_bid and self.config.opentask_token:
+        auth_readiness = None
+        if self.config.auto_bid:
+            auth_readiness = authenticated_bid_readiness(self.config, self.opentask)
+        if (
+            self.config.auto_bid
+            and self.config.opentask_token
+            and auth_readiness
+            and auth_readiness.get("ready_for_bid")
+        ):
             active = self.store.count_active()
             remaining_slots = max(0, self.config.maximum_active_jobs - active)
             remaining_daily = max(0, self.config.maximum_new_bids_per_day - self.store.bids_today())
@@ -1888,6 +2020,7 @@ class BountyForge:
             "queued_entries": queued_entries,
             "queued_repo_entries": queued_repo_entries,
             "bids": bids,
+            "auth_readiness": auth_readiness,
             "contracts": contracts,
             "repo_verifier": repo_results,
             "solver": solver_results,
