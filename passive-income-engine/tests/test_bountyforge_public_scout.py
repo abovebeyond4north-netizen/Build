@@ -204,6 +204,9 @@ class PublicScoutTests(unittest.TestCase):
             "decision_reason",
             "estimated_minutes",
             "description_excerpt",
+            "bid_ready",
+            "fulfillment_route",
+            "fulfillment_kind",
         ):
             self.assertIn(key, candidate)
         self.assertTrue(candidate["task_url"].startswith("https://opentask.ai/tasks/"))
