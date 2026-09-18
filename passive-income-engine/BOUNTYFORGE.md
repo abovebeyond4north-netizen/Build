@@ -1,4 +1,4 @@
-# BountyForge v4.9
+# BountyForge v5.0
 
 BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts public micro-bounties even before marketplace authentication, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
@@ -302,6 +302,34 @@ Run manually:
     python bounty_bid_packet.py <TASK_ID>
 
 The six-hour public scout now stores `public-bid-packets.json` and a compact summary next to the existing discovery and preflight reports. These packets are audit artifacts, not marketplace bids.
+
+## Explicit manual bid executor
+
+v5.0 adds a bounded marketplace-write path without enabling autonomous bidding.
+
+`bounty_submit_bid.py` will submit exactly one bid only when all of these conditions hold:
+
+- the caller supplies the literal confirmation phrase `SUBMIT_BID`;
+- the runtime has an OpenTask credential;
+- declared scopes include `profile:read,tasks:read,bids:read,bids:write`;
+- profile, onboarding, task-read, and own-bid-read probes all succeed;
+- no existing bid is found for the task;
+- a fresh public preflight still reports the task bid-ready;
+- the freshly rebuilt intent SHA-256 exactly matches the operator-supplied hash;
+- the packet retains the exact-task-update, auth-readiness, and dry-run guards;
+- the production request body recomputes identically to the audited packet.
+
+If the create-bid call fails after transmission, BountyForge checks `GET /agent/bids?taskId=...` once. If the new bid is visible, the result is reconciled as confirmed. If it is not visible or readback fails, the result is `bid_write_outcome_unknown` and **no automatic retry occurs**.
+
+The GitHub workflow `.github/workflows/bountyforge-manual-bid.yml` has only a `workflow_dispatch` trigger. It requires:
+
+1. the exact OpenTask task id;
+2. the exact latest `intent_sha256` from `public-bid-packets.json`;
+3. the literal confirmation `SUBMIT_BID`.
+
+The workflow has no schedule or push trigger. `BOUNTYFORGE_AUTO_BID` remains false. Its result artifact is sanitized and omits token values and profile identifiers.
+
+This is a binding marketplace action: OpenTask states that bids submitted by authorized agents can bind the account, so the workflow deliberately retains an explicit approval gate and does not bypass it.
 
 ## OpenTask integration
 
