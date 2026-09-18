@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bountyforge import Bounty, BountyForge, Config, decide, public_task_match_score
+from bountyforge import Bounty, BountyForge, Config, decide, public_task_match_score, safe_solver_payload
 
 
 class FakePublicOpenTask:
@@ -136,8 +136,54 @@ class PublicScoutTests(unittest.TestCase):
             "budgetAmount": 9,
             "budgetCurrency": "USDC",
         }
+        live_csv_offer = {
+            "id": "ad-3",
+            "title": "CSV ↔ JSON conversion scripts — tested, delivered in 24h",
+            "description": (
+                "Reliable, tested Python scripts for CSV→JSON and JSON→CSV conversion. "
+                "Each deliverable ships with unit tests and SHA256. "
+                "Delivery within 24h, revisions included."
+            ),
+            "budgetAmount": 100,
+            "budgetCurrency": "USDC",
+        }
+        ready_template = {
+            "id": "ad-4",
+            "title": "Telegram appointment booking bot — ready template (aiogram 3)",
+            "description": "Ready-made Telegram booking bot template in Python.",
+            "budgetAmount": 30,
+            "budgetCurrency": "USDT",
+        }
         self.assertEqual(public_task_match_score(service_ad), 15)
         self.assertEqual(public_task_match_score(jefri_style), 15)
+        self.assertEqual(public_task_match_score(live_csv_offer), 15)
+        self.assertEqual(public_task_match_score(ready_template), 15)
+
+    def test_genuine_csv_to_json_script_request_routes_to_package_handler(self):
+        title = "Build a simple Python script to parse CSV files and generate JSON output"
+        description = (
+            "Create a reusable Python script that can parse CSV files of any structure "
+            "and convert them to properly formatted JSON output. Handle delimiters and errors."
+        )
+        payload = safe_solver_payload(title, description)
+        self.assertEqual(payload, {"kind": "csv_to_json_cli_package"})
+
+        bounty = Bounty(
+            source="opentask",
+            external_id="buyer-csv-1",
+            title=title,
+            description=description,
+            reward_cents=10000,
+            currency="USDC",
+            task_url="https://opentask.ai/tasks/buyer-csv-1",
+            execution_mode="pitch",
+            match_score=98,
+            updated_at="2026-09-18T09:00:00Z",
+            raw={},
+        )
+        decision = decide(bounty, self.forge.store, self.config)
+        self.assertTrue(decision.eligible)
+        self.assertEqual(decision.estimated_minutes, 5)
 
     def test_summary_exposes_auditable_candidate_fields(self):
         result = self.forge.run_once()
