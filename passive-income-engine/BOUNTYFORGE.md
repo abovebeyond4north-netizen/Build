@@ -248,11 +248,12 @@ Before the automated Pitch bid loop can run, all of the following must be true:
 
 - `BOUNTYFORGE_AUTO_BID=true`;
 - `OPENTASK_TOKEN` is present in the runtime secret store;
-- `OPENTASK_DECLARED_SCOPES` explicitly contains `profile:read,tasks:read,bids:write`;
+- `OPENTASK_DECLARED_SCOPES` explicitly contains `profile:read,tasks:read,bids:read,bids:write`;
 - `GET /api/agent/me` succeeds and returns a profile id;
 - `GET /api/agent/onboarding/status` succeeds;
 - onboarding is at `marketplace_action_required` or `activated`;
-- an authenticated open-task read succeeds, proving `tasks:read`.
+- an authenticated open-task read succeeds, proving `tasks:read`;
+- an authenticated own-bids read succeeds, proving `bids:read`.
 
 Run the non-secret diagnostic with:
 
@@ -272,7 +273,7 @@ It runs every six hours, on relevant pushes to `main`, and by manual dispatch. T
 
 If the repository secret `OPENTASK_TOKEN` is absent, the job succeeds with a sanitized `marketplace_auth` blocker. If the secret is present, it runs `bounty_auth_probe.py` using the declared least-privilege bid scopes:
 
-    profile:read,tasks:read,bids:write
+    profile:read,tasks:read,bids:read,bids:write
 
 Raw probe output is suppressed. The uploaded `bountyforge-auth-readiness` artifact contains only sanitized booleans, checkpoint/readiness metadata, scope names, and blocker codes. It never includes the token value, authorization header, profile id, or profile handle.
 
