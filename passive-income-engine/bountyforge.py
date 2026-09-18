@@ -88,12 +88,23 @@ class Config:
     allowed_currencies: tuple[str, ...] = ("USD", "USDC", "USDT")
     opentask_token: str = ""
     opentask_base_url: str = "https://opentask.ai/api"
+    public_scout: bool = True
+    public_skill_signals: tuple[str, ...] = ("csv", "json", "data", "python", "documentation")
+    public_tasks_per_signal: int = 20
 
     @classmethod
     def from_env(cls) -> "Config":
         allowed = tuple(
             x.strip().upper()
             for x in os.getenv("BOUNTYFORGE_ALLOWED_CURRENCIES", "USD,USDC,USDT").split(",")
+            if x.strip()
+        )
+        public_skills = tuple(
+            x.strip()
+            for x in os.getenv(
+                "BOUNTYFORGE_PUBLIC_SKILLS",
+                "csv,json,data,python,documentation",
+            ).split(",")
             if x.strip()
         )
         return cls(
@@ -121,6 +132,12 @@ class Config:
             allowed_currencies=allowed,
             opentask_token=os.getenv("OPENTASK_TOKEN", "").strip(),
             opentask_base_url=os.getenv("OPENTASK_BASE_URL", "https://opentask.ai/api").rstrip("/"),
+            public_scout=env_bool("BOUNTYFORGE_PUBLIC_SCOUT", True),
+            public_skill_signals=public_skills,
+            public_tasks_per_signal=max(
+                1,
+                min(50, env_int("BOUNTYFORGE_PUBLIC_TASKS_PER_SIGNAL", 20)),
+            ),
         )
 
 
@@ -506,13 +523,32 @@ def classify(bounty: Bounty) -> tuple[str, int]:
     return "general", 90
 
 
+def estimated_minutes_for_bounty(bounty: Bounty, default_minutes: int) -> int:
+    title = bounty.title
+    description = bounty.description
+    text = f"{title}\n{description}".lower()
+
+    if safe_solver_payload(title, description) is not None:
+        return 5
+    if safe_repo_verification_spec(title, description) is not None:
+        return 15
+    if "csv" in text and "json" in text:
+        return 20
+    if any(term in text for term in ("jsonl", "ndjson", "base64", "sha256", "sha-256")):
+        return 10
+    if "csv" in text and any(term in text for term in ("deduplicate", "markdown table")):
+        return 10
+    return default_minutes
+
+
 def historical_success(store: Store, category: str) -> Decimal:
     attempts, wins = store.history(category)
     return Decimal(wins + 2) / Decimal(attempts + 4)
 
 
 def decide(bounty: Bounty, store: Store, config: Config) -> Decision:
-    category, minutes = classify(bounty)
+    category, default_minutes = classify(bounty)
+    minutes = estimated_minutes_for_bounty(bounty, default_minutes)
     text = f"{bounty.title}\n{bounty.description}".lower()
 
     if any(term in text for term in DISALLOWED_TERMS):
@@ -751,6 +787,37 @@ class OpenTaskClient:
             raw = exc.read().decode("utf-8", "replace")
             raise RuntimeError(f"OpenTask HTTP {exc.code}: {raw[:1200]}") from exc
 
+    def _public_request(self, path: str) -> Any:
+        req = urllib.request.Request(
+            f"{self.base}{path}",
+            method="GET",
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "BountyForge/1.0",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=20) as response:
+                data = response.read()
+                return {} if not data else json.loads(data)
+        except urllib.error.HTTPError as exc:
+            raw = exc.read().decode("utf-8", "replace")
+            raise RuntimeError(f"OpenTask public HTTP {exc.code}: {raw[:1200]}") from exc
+
+    def public_tasks(self, *, skill: str, limit: int = 20) -> list[dict[str, Any]]:
+        query = urllib.parse.urlencode(
+            {
+                "skill": skill,
+                "sort": "new",
+                "limit": max(1, min(limit, 50)),
+            }
+        )
+        data = self._public_request(f"/tasks?{query}")
+        return list(data.get("tasks") or [])
+
+    def public_task_detail(self, task_id: str) -> dict[str, Any]:
+        return self._public_request(f"/tasks/{urllib.parse.quote(task_id, safe='')}")
+
     def recommendations(self, limit: int = 25) -> list[dict[str, Any]]:
         data = self._request(
             "GET",
@@ -970,6 +1037,43 @@ class OpenTaskClient:
         )
 
 
+def _task_work_text(task: dict[str, Any]) -> str:
+    description = str(task.get("description") or "")
+    criteria = task.get("acceptanceCriteria") or []
+    if isinstance(criteria, list):
+        criteria_text = "\n".join(f"- {item}" for item in criteria if isinstance(item, str))
+    else:
+        criteria_text = str(criteria or "")
+    return description + (("\n\nAcceptance criteria:\n" + criteria_text) if criteria_text else "")
+
+
+def public_task_match_score(task: dict[str, Any]) -> int:
+    title = str(task.get("title") or "")
+    work_text = _task_work_text(task)
+    text = f"{title}\n{work_text}".lower()
+
+    if safe_solver_payload(title, work_text) is not None:
+        return 98
+    if safe_repo_verification_spec(title, work_text) is not None:
+        return 96
+
+    # Strong capability fit can exist before buyer inputs are supplied. This
+    # affects scouting/bidding only; solving still requires an exact safe route.
+    if "csv" in text and "json" in text:
+        return 92
+    if "jsonl" in text or "ndjson" in text:
+        return 90
+    if "base64" in text or "sha256" in text or "sha-256" in text:
+        return 90
+    if "csv" in text and any(term in text for term in ("deduplicate", "duplicate", "markdown table")):
+        return 90
+    if any(term in text for term in ("data conversion", "data cleanup", "normalize data")):
+        return 84
+    if "python" in text and any(term in text for term in ("unittest", "unit test", "compileall", "syntax check")):
+        return 78
+    return 50
+
+
 def normalize_opentask(rec: dict[str, Any], detail: dict[str, Any] | None = None) -> Bounty | None:
     task = dict(rec.get("task") or {})
     detail_task = dict((detail or {}).get("task") or {})
@@ -1002,7 +1106,7 @@ def normalize_opentask(rec: dict[str, Any], detail: dict[str, Any] | None = None
         source="opentask",
         external_id=task_id,
         title=str(merged.get("title") or "Untitled task")[:500],
-        description=str(merged.get("description") or ""),
+        description=_task_work_text(merged),
         reward_cents=reward_cents,
         currency=currency,
         task_url=f"https://opentask.ai/tasks/{task_id}",
@@ -1021,22 +1125,72 @@ class BountyForge:
         self.opentask = OpenTaskClient(self.config)
 
     def discover(self) -> list[Bounty]:
-        if not self.config.opentask_token:
-            return []
-        discovered: list[Bounty] = []
-        for rec in self.opentask.recommendations(limit=30):
-            task = rec.get("task") or {}
-            task_id = str(task.get("id") or "")
-            if not task_id:
-                continue
+        by_id: dict[str, Bounty] = {}
+
+        # Authenticated recommendations remain the best signal when available.
+        if self.config.opentask_token:
             try:
-                detail = self.opentask.task_detail(task_id)
-            except RuntimeError:
-                detail = None
-            bounty = normalize_opentask(rec, detail)
-            if bounty:
-                discovered.append(bounty)
-        return discovered
+                recommendations = self.opentask.recommendations(limit=30)
+            except RuntimeError as exc:
+                print(json.dumps({"recommendation_error": str(exc)[:1000]}), flush=True)
+                recommendations = []
+            for rec in recommendations:
+                task = rec.get("task") or {}
+                task_id = str(task.get("id") or "")
+                if not task_id:
+                    continue
+                try:
+                    detail = self.opentask.task_detail(task_id)
+                except RuntimeError:
+                    detail = None
+                bounty = normalize_opentask(rec, detail)
+                if bounty:
+                    by_id[bounty.external_id] = bounty
+
+        # Public reads use OpenTask's documented /api/tasks surface and do not
+        # require marketplace identity. Writes still require scoped auth.
+        if self.config.public_scout:
+            public_items: dict[str, dict[str, Any]] = {}
+            for signal in self.config.public_skill_signals:
+                try:
+                    rows = self.opentask.public_tasks(
+                        skill=signal,
+                        limit=self.config.public_tasks_per_signal,
+                    )
+                except RuntimeError as exc:
+                    print(
+                        json.dumps(
+                            {"public_scout_error": str(exc)[:1000], "skill": signal}
+                        ),
+                        flush=True,
+                    )
+                    continue
+                for task in rows:
+                    task_id = str(task.get("id") or "")
+                    if task_id:
+                        public_items[task_id] = task
+
+            for task_id, task in public_items.items():
+                try:
+                    detail = self.opentask.public_task_detail(task_id)
+                except RuntimeError:
+                    detail = {"task": task}
+                detail_task = dict(detail.get("task") or detail or {})
+                merged = {**task, **detail_task}
+                score = public_task_match_score(merged)
+                rec = {"task": task, "score": score, "source": "public"}
+                bounty = normalize_opentask(rec, {"task": merged})
+                if not bounty:
+                    continue
+                existing = by_id.get(bounty.external_id)
+                if existing is None or bounty.match_score > existing.match_score:
+                    by_id[bounty.external_id] = bounty
+
+        return sorted(
+            by_id.values(),
+            key=lambda bounty: (bounty.match_score, bounty.updated_at),
+            reverse=True,
+        )
 
     def _queue_root(self) -> Path:
         root = Path(self.config.queue_dir)

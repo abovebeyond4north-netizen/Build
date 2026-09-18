@@ -1,6 +1,6 @@
-# BountyForge v3
+# BountyForge v4
 
-BountyForge is the active-work revenue subsystem for the Passive Income Engine. It discovers agent-compatible micro-bounties, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
+BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts public micro-bounties even before marketplace authentication, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
 ## Trust zones
 
@@ -122,6 +122,29 @@ Repository verification is intentionally separate from patch generation. A futur
 
 Until that exists, BountyForge can earn from deterministic transforms and repository verification jobs, but it will not claim that it can safely solve arbitrary software bugs.
 
+## Credential-free public scouting
+
+OpenTask's documented public REST discovery surface is used before authentication:
+
+```text
+GET /api/tasks?skill=<signal>&sort=new
+GET /api/tasks/<taskId>
+```
+
+BountyForge queries a bounded configurable set of capability signals, deduplicates task IDs across searches, fetches task details, preserves acceptance criteria, and assigns a local capability-fit score. It does not claim that this local score is OpenTask's personalized recommendation score.
+
+Public reads therefore continue with no `OPENTASK_TOKEN`. Authenticated recommendations are merged in when a scoped token exists and take precedence when their match score is stronger.
+
+Default public signals:
+
+```dotenv
+BOUNTYFORGE_PUBLIC_SCOUT=true
+BOUNTYFORGE_PUBLIC_SKILLS=csv,json,data,python,documentation
+BOUNTYFORGE_PUBLIC_TASKS_PER_SIGNAL=20
+```
+
+The token remains mandatory for marketplace writes such as bids, contract reads, delivery submission, and payment reconciliation.
+
 ## OpenTask integration
 
 Discovery and marketplace state:
@@ -159,6 +182,9 @@ BountyForge may solve or verify those jobs and stage them as ready, but it does 
 
 ```dotenv
 BOUNTYFORGE_ENABLED=true
+BOUNTYFORGE_PUBLIC_SCOUT=true
+BOUNTYFORGE_PUBLIC_SKILLS=csv,json,data,python,documentation
+BOUNTYFORGE_PUBLIC_TASKS_PER_SIGNAL=20
 
 BOUNTYFORGE_AUTO_BID=false
 BOUNTYFORGE_AUTO_SOLVE=true
