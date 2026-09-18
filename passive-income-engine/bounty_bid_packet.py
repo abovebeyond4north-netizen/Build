@@ -125,7 +125,11 @@ def build_bid_packet_from_preflight(preflight: dict[str, Any]) -> dict[str, Any]
             "expected_profit_cents": decision.get("expected_profit_cents"),
             "expected_hourly_cents": decision.get("expected_hourly_cents"),
             "estimated_minutes": decision.get("estimated_minutes"),
-            "success_probability": decision.get("success_probability"),
+            "success_probability": (
+                None
+                if decision.get("success_probability") is None
+                else str(decision.get("success_probability"))
+            ),
         },
         "guards": {
             "requires_exact_task_updated_at": True,
