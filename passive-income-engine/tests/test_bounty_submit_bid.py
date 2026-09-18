@@ -191,6 +191,10 @@ class ManualBidTests(unittest.TestCase):
         self.assertIsNone(result["blocked_by"])
         self.assertEqual(result["bid"]["id"], "bid-created-1")
         self.assertEqual(client.create_calls, 1)
+        serialized = __import__("json").dumps(result, sort_keys=True)
+        self.assertNotIn("profile-test", serialized)
+        self.assertNotIn("tester", serialized)
+        self.assertNotIn("test-token", serialized)
 
     def test_failure_after_commit_is_recovered_by_bid_readback(self):
         client = FakeBidClient(self.task, create_mode="fail_after_commit")
