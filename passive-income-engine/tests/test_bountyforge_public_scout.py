@@ -264,6 +264,7 @@ class PublicScoutTests(unittest.TestCase):
             database_path=str(root / "bid-gate.db"),
             auto_bid=True,
             opentask_token="test-token",
+            opentask_declared_scopes=("bids:write", "profile:read", "tasks:read"),
             public_scout=False,
             reconcile_payments=False,
             queue_secret="",
@@ -287,6 +288,22 @@ class PublicScoutTests(unittest.TestCase):
         class Recorder:
             def __init__(self):
                 self.calls = []
+
+            def get_me(self):
+                return {"profile": {"id": "profile-test", "handle": "tester"}}
+
+            def get_onboarding_status(self):
+                return {
+                    "complete": False,
+                    "progress": {"percentage": 90},
+                    "checkpoint": {
+                        "code": "marketplace_action_required",
+                        "status": "action_required",
+                    },
+                }
+
+            def list_tasks(self, *, status="open", limit=1):
+                return []
 
             def create_bid(self, bounty, *, eta_days, approach):
                 self.calls.append((bounty.external_id, eta_days, approach))
@@ -331,6 +348,22 @@ class PublicScoutTests(unittest.TestCase):
         class Recorder:
             def __init__(self):
                 self.calls = []
+
+            def get_me(self):
+                return {"profile": {"id": "profile-test", "handle": "tester"}}
+
+            def get_onboarding_status(self):
+                return {
+                    "complete": False,
+                    "progress": {"percentage": 90},
+                    "checkpoint": {
+                        "code": "marketplace_action_required",
+                        "status": "action_required",
+                    },
+                }
+
+            def list_tasks(self, *, status="open", limit=1):
+                return []
 
             def create_bid(self, bounty, *, eta_days, approach):
                 self.calls.append((bounty.external_id, eta_days, approach))
