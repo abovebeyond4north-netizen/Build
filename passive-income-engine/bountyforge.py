@@ -1085,6 +1085,167 @@ class BountyForge:
         self.store.mark_task_status(task_id, "solving")
         return True
 
+    def _repo_verify_root(self) -> Path:
+        root = Path(self.config.repo_verify_dir)
+        for folder in (
+            "fetch-inbox",
+            "fetch-outbox",
+            "fetch-processed",
+            "fetch-failed",
+            "inbox",
+            "outbox",
+            "processed",
+            "failed",
+            "consumed",
+            "quarantine",
+            "staged",
+        ):
+            (root / folder).mkdir(parents=True, exist_ok=True)
+        return root
+
+    def queue_repo_verification(
+        self,
+        *,
+        task_id: str,
+        title: str,
+        description: str,
+        execution_mode: str,
+        expected_task_updated_at: str,
+        contract_id: str | None = None,
+    ) -> bool:
+        if not self.config.auto_repo_verify or not self.config.repo_verify_secret:
+            return False
+        spec = safe_repo_verification_spec(title, description)
+        if spec is None:
+            return False
+
+        root = self._repo_verify_root()
+        job_id = _safe_queue_job_id("opentask-repo", task_id, contract_id)
+        for folder in (
+            "fetch-inbox",
+            "fetch-outbox",
+            "fetch-processed",
+            "fetch-failed",
+            "inbox",
+            "outbox",
+            "consumed",
+            "quarantine",
+        ):
+            if (root / folder / f"{job_id}.json").exists():
+                return False
+
+        package: dict[str, Any] = {
+            "version": 1,
+            "job_id": job_id,
+            "source": "opentask",
+            "task_id": task_id,
+            "contract_id": contract_id,
+            "execution_mode": execution_mode,
+            "expected_task_updated_at": expected_task_updated_at,
+            "title": title[:500],
+            **spec,
+        }
+        package["signature"] = _queue_signature(self.config.repo_verify_secret, package)
+        destination = root / "fetch-inbox" / f"{job_id}.json"
+        temporary = destination.with_suffix(".tmp")
+        temporary.write_text(json.dumps(package, indent=2, sort_keys=True) + "\n")
+        temporary.replace(destination)
+        self.store.mark_task_status(task_id, "repo_staging")
+        return True
+
+    def collect_repo_verification_results(self) -> dict[str, int]:
+        counts = {
+            "verified": 0,
+            "failed": 0,
+            "translated": 0,
+            "quarantined": 0,
+        }
+        if not self.config.repo_verify_secret or not self.config.queue_secret:
+            return counts
+
+        repo_root = self._repo_verify_root()
+        queue_root = self._queue_root()
+        for path in sorted((repo_root / "outbox").glob("*.json")):
+            try:
+                result = json.loads(path.read_text())
+            except Exception:
+                path.replace(repo_root / "quarantine" / path.name)
+                counts["quarantined"] += 1
+                continue
+
+            supplied = str(result.get("signature") or "")
+            expected = _queue_signature(self.config.repo_verify_secret, result)
+            if not supplied or not hmac.compare_digest(supplied, expected):
+                path.replace(repo_root / "quarantine" / path.name)
+                counts["quarantined"] += 1
+                continue
+
+            job_id = str(result.get("job_id") or path.stem)
+            task_id = str(result.get("task_id") or "")
+            contract_id = str(result.get("contract_id") or "")
+            passed = bool(result.get("passed"))
+
+            if not passed:
+                if task_id:
+                    self.store.mark_task_status(task_id, "repo_verification_failed")
+                path.replace(repo_root / "consumed" / path.name)
+                counts["failed"] += 1
+                continue
+
+            counts["verified"] += 1
+            artifact_dir = queue_root / "artifacts" / job_id
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            artifact_path = artifact_dir / "repository-verification.json"
+            report = dict(result)
+            artifact_bytes = (json.dumps(report, indent=2, sort_keys=True) + "\n").encode()
+            artifact_path.write_bytes(artifact_bytes)
+
+            manifest: dict[str, Any] = {
+                "version": 1,
+                "job_id": job_id,
+                "task_id": task_id or None,
+                "contract_id": contract_id or None,
+                "execution_mode": result.get("execution_mode"),
+                "expected_task_updated_at": result.get("expected_task_updated_at"),
+                "source": result.get("source") or "opentask",
+                "ok": True,
+                "handler": "repository_verification",
+                "artifact": {
+                    "relative_path": str(artifact_path.relative_to(queue_root)),
+                    "filename": artifact_path.name,
+                    "content_type": "application/json",
+                    "size_bytes": len(artifact_bytes),
+                    "sha256": hashlib.sha256(artifact_bytes).hexdigest(),
+                },
+                "verification": {
+                    "passed": True,
+                    "tree": result.get("tree"),
+                    "checks": [
+                        {
+                            "check": item.get("check"),
+                            "returncode": item.get("returncode"),
+                            "duration_ms": item.get("duration_ms"),
+                            "output_sha256": item.get("output_sha256"),
+                            "output_truncated": item.get("output_truncated"),
+                            "passed": item.get("passed"),
+                        }
+                        for item in (result.get("checks") or [])
+                    ],
+                },
+                "error": None,
+            }
+            manifest["signature"] = _queue_signature(self.config.queue_secret, manifest)
+            destination = queue_root / "outbox" / f"{job_id}.json"
+            if not destination.exists():
+                temporary = destination.with_suffix(".tmp")
+                temporary.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+                temporary.replace(destination)
+                counts["translated"] += 1
+            if task_id:
+                self.store.mark_task_status(task_id, "repo_verified")
+            path.replace(repo_root / "consumed" / path.name)
+        return counts
+
     def _verified_manifest_artifact(
         self, manifest: dict[str, Any]
     ) -> tuple[Path, dict[str, Any]] | None:
