@@ -8,6 +8,7 @@ on:
       - "passive-income-engine/bountyforge.py"
       - "passive-income-engine/bounty_solver.py"
       - "passive-income-engine/bounty_preflight.py"
+      - "passive-income-engine/bounty_bid_packet.py"
       - "passive-income-engine/requirements.txt"
       - ".github/workflows/bountyforge-public-scout.yml"
   schedule:
@@ -184,6 +185,63 @@ jobs:
           Path("public-preflight-summary.md").write_text("\n".join(lines) + "\n")
           PY
           cat public-preflight-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Build immutable dry-run bid packets
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from bounty_bid_packet import build_bid_packet_from_preflight
+
+          preflight = json.loads(Path("public-preflight.json").read_text())
+          packets = [
+              build_bid_packet_from_preflight(result)
+              for result in preflight.get("results", [])
+          ]
+
+          Path("public-bid-packets.json").write_text(
+              json.dumps(
+                  {
+                      "packet_count": len(packets),
+                      "write_actions_performed": False,
+                      "packets": packets,
+                  },
+                  indent=2,
+                  sort_keys=True,
+                  default=str,
+              )
+              + "\n"
+          )
+
+          lines = ["# BountyForge dry-run bid packets", ""]
+          ready = [packet for packet in packets if packet.get("packet_ready")]
+          if not ready:
+              lines.append("No immutable bid packets were ready.")
+          else:
+              lines.append("| Task | Intent SHA-256 | Preflight blocker | Write enabled |")
+              lines.append("| --- | --- | --- | --- |")
+              for packet in ready:
+                  intent = packet.get("intent") or {}
+                  task = intent.get("task") or {}
+                  task_id = str(task.get("id") or "")
+                  title = str(task.get("title") or task_id).replace("|", "\\|")
+                  url = str(task.get("url") or "")
+                  label = f"[{title}]({url})" if url.startswith("https://") else title
+                  digest = str(packet.get("intent_sha256") or "")
+                  guards = intent.get("guards") or {}
+                  lines.append(
+                      f"| {label} | {digest[:20]}… | "
+                      f"{packet.get('current_preflight_blocker') or 'none'} | "
+                      f"{'yes' if guards.get('write_action_enabled') else 'no'} |"
+                  )
+          lines.extend(
+              [
+                  "",
+                  "Packets are read-only audit artifacts. They are not bids and no marketplace write occurred.",
+              ]
+          )
+          Path("public-bid-packets-summary.md").write_text("\n".join(lines) + "\n")
+          PY
+          cat public-bid-packets-summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: bountyforge-public-scout
@@ -192,5 +250,7 @@ jobs:
             passive-income-engine/public-scout-summary.md
             passive-income-engine/public-preflight.json
             passive-income-engine/public-preflight-summary.md
+            passive-income-engine/public-bid-packets.json
+            passive-income-engine/public-bid-packets-summary.md
           retention-days: 14
           if-no-files-found: error
