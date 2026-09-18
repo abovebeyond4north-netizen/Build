@@ -1,6 +1,11 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
+
+# engine.py initializes its schema at import time. CI runners cannot write
+# to /data, so give that import-time initialization a disposable path.
+os.environ["DATABASE_PATH"] = "/tmp/bountyforge-engine-import.db"
 
 import engine
 
