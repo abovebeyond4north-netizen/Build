@@ -1,0 +1,132 @@
+name: BountyForge Manual Bid
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: "Exact OpenTask task ID from the latest public scout"
+        required: true
+        type: string
+      intent_sha256:
+        description: "Exact intent SHA-256 from the latest public-bid-packets.json"
+        required: true
+        type: string
+      confirmation:
+        description: "Type SUBMIT_BID to authorize this one marketplace bid"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bountyforge-manual-bid-${{ inputs.task_id }}
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: passive-income-engine
+    env:
+      DATABASE_PATH: /tmp/bountyforge-manual-bid.db
+      OPENTASK_TOKEN: ${{ secrets.OPENTASK_TOKEN }}
+      OPENTASK_DECLARED_SCOPES: profile:read,tasks:read,bids:read,bids:write
+      BOUNTYFORGE_AUTO_BID: "false"
+      BOUNTYFORGE_AUTO_SOLVE: "false"
+      BOUNTYFORGE_AUTO_REPO_VERIFY: "false"
+      BOUNTYFORGE_AUTO_DELIVER: "false"
+      BOUNTYFORGE_AUTO_SUBMIT_ENTRIES: "false"
+      BOUNTYFORGE_RECONCILE_PAYMENTS: "false"
+      TASK_ID: ${{ inputs.task_id }}
+      INTENT_SHA256: ${{ inputs.intent_sha256 }}
+      BID_CONFIRMATION: ${{ inputs.confirmation }}
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: passive-income-engine/requirements.txt
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt
+
+      - name: Submit one hash-pinned bid
+        id: submit_bid
+        shell: bash
+        run: |
+          set +e
+          python bounty_submit_bid.py "$TASK_ID" \
+            --intent-sha256 "$INTENT_SHA256" \
+            --confirm "$BID_CONFIRMATION" \
+            --json-out bid-result.json \
+            > /tmp/bountyforge-bid-stdout.json
+          status=$?
+          set -e
+          rm -f /tmp/bountyforge-bid-stdout.json
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Publish sanitized result summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("bid-result.json")
+          if not path.is_file():
+              report = {
+                  "blocked_by": "result_missing",
+                  "write_attempted": False,
+                  "write_confirmed": False,
+                  "write_outcome_unknown": False,
+              }
+          else:
+              report = json.loads(path.read_text())
+
+          auth = report.get("auth_readiness") or {}
+          bid = report.get("bid") or {}
+          expected = str(report.get("expected_intent_sha256") or "")
+          fresh = str(report.get("fresh_intent_sha256") or "")
+          lines = [
+              "## BountyForge manual bid",
+              "",
+              f"- Task: `{report.get('task_id') or 'unknown'}`",
+              f"- Expected intent: `{expected[:20] + '…' if expected else 'missing'}`",
+              f"- Fresh intent: `{fresh[:20] + '…' if fresh else 'unavailable'}`",
+              f"- Auth ready: **{str(bool(auth.get('ready_for_bid'))).lower()}**",
+              f"- Write attempted: **{str(bool(report.get('write_attempted'))).lower()}**",
+              f"- Write confirmed: **{str(bool(report.get('write_confirmed'))).lower()}**",
+              f"- Outcome unknown: **{str(bool(report.get('write_outcome_unknown'))).lower()}**",
+              f"- Blocker: `{report.get('blocked_by') or 'none'}`",
+              f"- Bid ID: `{bid.get('id') or 'none'}`",
+              f"- Bid status: `{bid.get('status') or 'unknown'}`",
+          ]
+          summary = "\n".join(lines) + "\n"
+          Path("bid-result-summary.md").write_text(summary)
+          print(summary)
+          PY
+          cat bid-result-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bountyforge-manual-bid-result
+          path: |
+            passive-income-engine/bid-result.json
+            passive-income-engine/bid-result-summary.md
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Enforce bid result
+        if: always()
+        env:
+          SUBMIT_STATUS: ${{ steps.submit_bid.outputs.status }}
+        run: |
+          if [ "${SUBMIT_STATUS:-3}" -ne 0 ]; then
+            echo "Manual bid was not confirmed successful. No automatic retry will occur." >&2
+            exit 1
+          fi
