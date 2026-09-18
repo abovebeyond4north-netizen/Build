@@ -1460,7 +1460,7 @@ class BountyForge:
             if contract_status in {"submitted", "accepted", "rejected", "cancelled"}:
                 self.store.mark_task_status(task_id, contract_status)
 
-            if self.config.auto_solve and contract_status == "in_progress":
+            if (self.config.auto_solve or self.config.auto_repo_verify) and contract_status == "in_progress":
                 try:
                     detail = self.opentask.task_detail(task_id)
                     task_detail = dict(detail.get("task") or {})
@@ -1468,14 +1468,24 @@ class BountyForge:
                     description = str(task_detail.get("description") or "")
                     execution_mode = str(task_detail.get("executionMode") or "pitch")
                     updated_at = str(task_detail.get("updatedAt") or task_detail.get("createdAt") or utcnow())
-                    if self.queue_solver_task(
+                    queued = self.queue_solver_task(
                         task_id=task_id,
                         title=title,
                         description=description,
                         execution_mode=execution_mode,
                         expected_task_updated_at=updated_at,
                         contract_id=contract_id,
-                    ):
+                    )
+                    if not queued and safe_solver_payload(title, description) is None:
+                        queued = self.queue_repo_verification(
+                            task_id=task_id,
+                            title=title,
+                            description=description,
+                            execution_mode=execution_mode,
+                            expected_task_updated_at=updated_at,
+                            contract_id=contract_id,
+                        )
+                    if queued:
                         result["queued"] += 1
                 except Exception as exc:
                     print(
@@ -1520,29 +1530,37 @@ class BountyForge:
         if not self.config.enabled:
             return {"enabled": False, "discovered": 0, "eligible": 0, "bids": 0}
 
+        repo_results = self.collect_repo_verification_results()
         solver_results = self.collect_solver_results()
         contracts = self.reconcile_contracts()
 
         discovered = self.discover()
         eligible: list[tuple[Bounty, Decision]] = []
         queued_entries = 0
+        queued_repo_entries = 0
         for bounty in discovered:
             decision = decide(bounty, self.store, self.config)
             self.store.upsert_job(bounty, decision)
             if decision.eligible:
                 eligible.append((bounty, decision))
-                if (
-                    self.config.auto_solve
-                    and bounty.execution_mode in {"bounty", "benchmark"}
-                    and self.queue_solver_task(
+                if bounty.execution_mode in {"bounty", "benchmark"}:
+                    queued = self.queue_solver_task(
                         task_id=bounty.external_id,
                         title=bounty.title,
                         description=bounty.description,
                         execution_mode=bounty.execution_mode,
                         expected_task_updated_at=bounty.updated_at,
                     )
-                ):
-                    queued_entries += 1
+                    if queued:
+                        queued_entries += 1
+                    elif safe_solver_payload(bounty.title, bounty.description) is None and self.queue_repo_verification(
+                        task_id=bounty.external_id,
+                        title=bounty.title,
+                        description=bounty.description,
+                        execution_mode=bounty.execution_mode,
+                        expected_task_updated_at=bounty.updated_at,
+                    ):
+                        queued_repo_entries += 1
 
         eligible.sort(key=lambda pair: pair[1].score, reverse=True)
         bids = 0
@@ -1588,8 +1606,10 @@ class BountyForge:
             "discovered": len(discovered),
             "eligible": len(eligible),
             "queued_entries": queued_entries,
+            "queued_repo_entries": queued_repo_entries,
             "bids": bids,
             "contracts": contracts,
+            "repo_verifier": repo_results,
             "solver": solver_results,
             "summary": self.store.summary(),
         }
@@ -1612,6 +1632,7 @@ def cli() -> int:
     sub.add_parser("status")
     sub.add_parser("reconcile")
     sub.add_parser("collect")
+    sub.add_parser("collect-repos")
 
     settle = sub.add_parser("settle")
     settle.add_argument("--source", required=True)
@@ -1638,6 +1659,9 @@ def cli() -> int:
         return 0
     if args.command == "collect":
         print(json.dumps(forge.collect_solver_results(), indent=2, sort_keys=True))
+        return 0
+    if args.command == "collect-repos":
+        print(json.dumps(forge.collect_repo_verification_results(), indent=2, sort_keys=True))
         return 0
     if args.command == "settle":
         if args.gross_cents < 0 or args.fees_cents < 0 or args.fees_cents > args.gross_cents:
