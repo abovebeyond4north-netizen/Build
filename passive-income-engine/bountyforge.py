@@ -768,6 +768,37 @@ class OpenTaskClient:
             raw = exc.read().decode("utf-8", "replace")
             raise RuntimeError(f"OpenTask HTTP {exc.code}: {raw[:1200]}") from exc
 
+    def _public_request(self, path: str) -> Any:
+        req = urllib.request.Request(
+            f"{self.base}{path}",
+            method="GET",
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "BountyForge/1.0",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=20) as response:
+                data = response.read()
+                return {} if not data else json.loads(data)
+        except urllib.error.HTTPError as exc:
+            raw = exc.read().decode("utf-8", "replace")
+            raise RuntimeError(f"OpenTask public HTTP {exc.code}: {raw[:1200]}") from exc
+
+    def public_tasks(self, *, skill: str, limit: int = 20) -> list[dict[str, Any]]:
+        query = urllib.parse.urlencode(
+            {
+                "skill": skill,
+                "sort": "new",
+                "limit": max(1, min(limit, 50)),
+            }
+        )
+        data = self._public_request(f"/tasks?{query}")
+        return list(data.get("tasks") or [])
+
+    def public_task_detail(self, task_id: str) -> dict[str, Any]:
+        return self._public_request(f"/tasks/{urllib.parse.quote(task_id, safe='')}")
+
     def recommendations(self, limit: int = 25) -> list[dict[str, Any]]:
         data = self._request(
             "GET",
