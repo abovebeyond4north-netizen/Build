@@ -68,7 +68,7 @@ services:
 
 
   repo-stager:
-    image: ghcr.io/abovebeyond4north-netizen/passive-income-engine:\${IMAGE_TAG:-latest}
+    image: ghcr.io/abovebeyond4north-netizen/passive-income-engine:${IMAGE_TAG:-latest}
     restart: unless-stopped
     command: ["python", "repo_stager.py"]
     read_only: true
@@ -91,7 +91,7 @@ services:
       - repo_verify:/repo-verify
 
   repo-verifier:
-    image: ghcr.io/abovebeyond4north-netizen/passive-income-engine:\${IMAGE_TAG:-latest}
+    image: ghcr.io/abovebeyond4north-netizen/passive-income-engine:${IMAGE_TAG:-latest}
     restart: unless-stopped
     command: ["python", "repo_verifier.py"]
     network_mode: "none"
