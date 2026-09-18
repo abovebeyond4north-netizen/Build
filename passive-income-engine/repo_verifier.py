@@ -139,6 +139,11 @@ def verify_job(package: dict[str, Any]) -> dict[str, Any]:
     return {
         "version": 1,
         "job_id": job_id,
+        "source": package.get("source"),
+        "task_id": package.get("task_id"),
+        "contract_id": package.get("contract_id"),
+        "expected_task_updated_at": package.get("expected_task_updated_at"),
+        "title": package.get("title"),
         "passed": passed,
         "tree": tree_stats,
         "checks": results,
