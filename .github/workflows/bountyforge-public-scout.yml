@@ -163,18 +163,22 @@ jobs:
           if not results:
               lines.append("No bid-ready candidates were available for preflight.")
           else:
-              lines.append("| Task | Ready | Blocker | Fulfillment | Artifact SHA-256 |")
-              lines.append("| --- | --- | --- | --- | --- |")
+              lines.append("| Task | Ready | Status | Age | Blocker | Fulfillment | Artifact SHA-256 |")
+              lines.append("| --- | --- | --- | ---: | --- | --- | --- |")
               for result in results:
                   url = str(result.get("task_url") or "")
                   title = str(result.get("title") or result.get("task_id") or "").replace("|", "\\|")
                   label = f"[{title}]({url})" if url.startswith("https://") else title
                   route = result.get("fulfillment") or {}
+                  state = result.get("task_state") or {}
                   artifact = result.get("artifact") or {}
                   digest = str(artifact.get("sha256") or "")
                   short_digest = (digest[:16] + "…") if digest else ""
+                  age = state.get("updated_age_days")
+                  age_text = "" if age is None else f"{age}d"
                   lines.append(
                       f"| {label} | {'yes' if result.get('bid_ready') else 'no'} | "
+                      f"{state.get('status') or 'unknown'} | {age_text} | "
                       f"{result.get('blocked_by', '')} | {route.get('kind', '')} | {short_digest} |"
                   )
           Path("public-preflight-summary.md").write_text("\n".join(lines) + "\n")
