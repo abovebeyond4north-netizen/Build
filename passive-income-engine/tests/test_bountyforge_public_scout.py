@@ -325,6 +325,7 @@ class PublicScoutTests(unittest.TestCase):
             database_path=str(root / "bid-ready.db"),
             auto_bid=True,
             opentask_token="test-token",
+            opentask_declared_scopes=("bids:write", "profile:read", "tasks:read"),
             public_scout=False,
             reconcile_payments=False,
             queue_secret="",
