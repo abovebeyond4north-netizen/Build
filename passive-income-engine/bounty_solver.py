@@ -244,6 +244,9 @@ def process_file(path: Path) -> dict[str, Any]:
         "verification": result.verification,
         "error": result.error,
     }
+    unsigned = dict(manifest)
+    body = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode()
+    manifest["signature"] = hmac.new(QUEUE_SECRET.encode(), body, hashlib.sha256).hexdigest()
     encoded = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
     atomic_write(QUEUE_DIR / "outbox" / f"{job_id}.json", encoded)
     path.replace(QUEUE_DIR / "processed" / path.name)
@@ -265,6 +268,9 @@ def run_once() -> list[dict[str, Any]]:
                 "ok": False,
                 "error": str(exc)[:1000],
             }
+            if QUEUE_SECRET:
+                body = json.dumps(failure, separators=(",", ":"), sort_keys=True).encode()
+                failure["signature"] = hmac.new(QUEUE_SECRET.encode(), body, hashlib.sha256).hexdigest()
             atomic_write(
                 QUEUE_DIR / "outbox" / f"{path.stem}.json",
                 (json.dumps(failure, indent=2, sort_keys=True) + "\n").encode(),
