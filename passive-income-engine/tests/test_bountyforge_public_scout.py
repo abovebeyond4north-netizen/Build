@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bountyforge import BountyForge, Config, decide, public_task_match_score
+from bountyforge import Bounty, BountyForge, Config, decide, public_task_match_score
 
 
 class FakePublicOpenTask:
@@ -138,6 +138,38 @@ class PublicScoutTests(unittest.TestCase):
         }
         self.assertEqual(public_task_match_score(service_ad), 15)
         self.assertEqual(public_task_match_score(jefri_style), 15)
+
+    def test_summary_exposes_auditable_candidate_fields(self):
+        result = self.forge.run_once()
+        candidate = result["summary"]["top_candidates"][0]
+        for key in (
+            "task_url",
+            "execution_mode",
+            "match_score",
+            "decision_reason",
+            "estimated_minutes",
+            "description_excerpt",
+        ):
+            self.assertIn(key, candidate)
+        self.assertTrue(candidate["task_url"].startswith("https://opentask.ai/tasks/"))
+
+    def test_anti_detect_work_is_hard_rejected(self):
+        bounty = Bounty(
+            source="opentask",
+            external_id="anti-detect-1",
+            title="Universal web scraper",
+            description="Build a proxy-enabled anti-detect scraper bot with JSON output.",
+            reward_cents=5000,
+            currency="USDC",
+            task_url="https://opentask.ai/tasks/anti-detect-1",
+            execution_mode="pitch",
+            match_score=95,
+            updated_at="2026-09-18T09:00:00Z",
+            raw={},
+        )
+        decision = decide(bounty, self.forge.store, self.config)
+        self.assertFalse(decision.eligible)
+        self.assertEqual(decision.reason, "disallowed-task-type")
 
     def test_generic_python_work_does_not_get_false_high_fit(self):
         task = self.fake.tasks["task-generic"]
