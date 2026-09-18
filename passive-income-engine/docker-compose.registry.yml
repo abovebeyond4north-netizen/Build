@@ -43,7 +43,7 @@ services:
         condition: service_healthy
 
   bounty-solver:
-    image: ghcr.io/abovebeyond4north-netizen/passive-income-engine:\${IMAGE_TAG:-latest}
+    image: ghcr.io/abovebeyond4north-netizen/passive-income-engine:${IMAGE_TAG:-latest}
     restart: unless-stopped
     command: ["python", "bounty_solver.py"]
     network_mode: "none"
