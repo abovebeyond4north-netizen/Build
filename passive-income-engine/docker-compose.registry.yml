@@ -38,6 +38,7 @@ services:
     volumes:
       - engine_data:/data
       - bounty_queue:/bounty-queue
+      - repo_verify:/repo-verify
     depends_on:
       engine:
         condition: service_healthy
