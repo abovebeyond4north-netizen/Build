@@ -2,7 +2,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bountyforge import Bounty, BountyForge, Config, decide, public_task_match_score, safe_solver_payload
+from bountyforge import (
+    Bounty,
+    BountyForge,
+    Config,
+    autonomous_fulfillment_route,
+    build_bid_approach,
+    decide,
+    public_task_match_score,
+    safe_solver_payload,
+)
 
 
 class FakePublicOpenTask:
@@ -216,6 +225,123 @@ class PublicScoutTests(unittest.TestCase):
         decision = decide(bounty, self.forge.store, self.config)
         self.assertFalse(decision.eligible)
         self.assertEqual(decision.reason, "disallowed-task-type")
+
+    def test_bid_readiness_reports_verified_csv_package_route(self):
+        title = "Build a simple Python script to parse CSV files and generate JSON output"
+        description = "Create a reusable Python script that parses CSV and outputs JSON."
+        route = autonomous_fulfillment_route(title, description)
+        self.assertEqual(
+            route,
+            {"route": "solver", "kind": "csv_to_json_cli_package"},
+        )
+
+        bounty = Bounty(
+            source="opentask",
+            external_id="bid-ready-csv",
+            title=title,
+            description=description,
+            reward_cents=10000,
+            currency="USDC",
+            task_url="https://opentask.ai/tasks/bid-ready-csv",
+            execution_mode="pitch",
+            match_score=98,
+            updated_at="2026-09-18T09:00:00Z",
+            raw={},
+        )
+        decision = decide(bounty, self.forge.store, self.config)
+        approach = build_bid_approach(bounty, decision)
+        self.assertIsNotNone(approach)
+        self.assertIn("dependency-free Python 3 CSV-to-JSON converter", approach)
+        self.assertIn("unit tests", approach)
+        self.assertIn("SHA-256", approach)
+
+    def test_auto_bid_skips_profitable_task_without_fulfillment_route(self):
+        root = Path(self.tmp.name)
+        config = Config(
+            database_path=str(root / "bid-gate.db"),
+            auto_bid=True,
+            opentask_token="test-token",
+            public_scout=False,
+            reconcile_payments=False,
+            queue_secret="",
+            repo_verify_secret="",
+        )
+        forge = BountyForge(config)
+        unsupported = Bounty(
+            source="opentask",
+            external_id="unsupported-profitable",
+            title="Implement a small Python statistics utility",
+            description="Create a Python utility that calculates descriptive statistics from a list.",
+            reward_cents=10000,
+            currency="USDC",
+            task_url="https://opentask.ai/tasks/unsupported-profitable",
+            execution_mode="pitch",
+            match_score=95,
+            updated_at="2026-09-18T09:00:00Z",
+            raw={},
+        )
+
+        class Recorder:
+            def __init__(self):
+                self.calls = []
+
+            def create_bid(self, bounty, *, eta_days, approach):
+                self.calls.append((bounty.external_id, eta_days, approach))
+                return {"ok": True}
+
+        recorder = Recorder()
+        forge.opentask = recorder
+        forge.discover = lambda: [unsupported]
+        forge.reconcile_contracts = lambda: {"contracts": 0, "queued": 0, "settlements": 0}
+
+        result = forge.run_once()
+        self.assertEqual(result["eligible"], 1)
+        self.assertEqual(result["bids"], 0)
+        self.assertEqual(recorder.calls, [])
+
+    def test_auto_bid_uses_tailored_approach_for_verified_route(self):
+        root = Path(self.tmp.name)
+        config = Config(
+            database_path=str(root / "bid-ready.db"),
+            auto_bid=True,
+            opentask_token="test-token",
+            public_scout=False,
+            reconcile_payments=False,
+            queue_secret="",
+            repo_verify_secret="",
+        )
+        forge = BountyForge(config)
+        bounty = Bounty(
+            source="opentask",
+            external_id="verified-csv-buyer",
+            title="Build a simple Python script to parse CSV files and generate JSON output",
+            description="Create a reusable Python script that parses CSV files and outputs JSON.",
+            reward_cents=10000,
+            currency="USDC",
+            task_url="https://opentask.ai/tasks/verified-csv-buyer",
+            execution_mode="pitch",
+            match_score=98,
+            updated_at="2026-09-18T09:00:00Z",
+            raw={},
+        )
+
+        class Recorder:
+            def __init__(self):
+                self.calls = []
+
+            def create_bid(self, bounty, *, eta_days, approach):
+                self.calls.append((bounty.external_id, eta_days, approach))
+                return {"bid": {"id": "bid-1"}}
+
+        recorder = Recorder()
+        forge.opentask = recorder
+        forge.discover = lambda: [bounty]
+        forge.reconcile_contracts = lambda: {"contracts": 0, "queued": 0, "settlements": 0}
+
+        result = forge.run_once()
+        self.assertEqual(result["bids"], 1)
+        self.assertEqual(len(recorder.calls), 1)
+        self.assertIn("dependency-free Python 3 CSV-to-JSON converter", recorder.calls[0][2])
 
     def test_generic_python_work_does_not_get_false_high_fit(self):
         task = self.fake.tasks["task-generic"]
