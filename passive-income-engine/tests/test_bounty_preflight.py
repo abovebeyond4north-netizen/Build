@@ -103,6 +103,59 @@ class BountyPreflightTests(unittest.TestCase):
         self.assertFalse(result["write_actions_performed"])
         self.assertEqual(client.reads, [self.task["id"]])
 
+    def test_explicit_closed_status_blocks_preflight(self):
+        task = dict(self.task)
+        task["status"] = "closed"
+        result = preflight_task(
+            task["id"],
+            config=self.config(),
+            client=FakePublicClient(task),
+        )
+        self.assertFalse(result["bid_ready"])
+        self.assertEqual(result["blocked_by"], "task_not_open")
+        self.assertEqual(result["task_state"]["status"], "closed")
+        self.assertIsNone(result["artifact"])
+
+    def test_expired_deadline_blocks_preflight(self):
+        task = dict(self.task)
+        task["status"] = "open"
+        task["deadlineAt"] = "2026-01-01T00:00:00Z"
+        result = preflight_task(
+            task["id"],
+            config=self.config(),
+            client=FakePublicClient(task),
+        )
+        self.assertFalse(result["bid_ready"])
+        self.assertEqual(result["blocked_by"], "task_deadline_passed")
+        self.assertEqual(result["task_state"]["deadline_field"], "deadlineAt")
+
+    def test_explicit_can_bid_false_blocks_preflight(self):
+        task = dict(self.task)
+        task["status"] = "open"
+        task["availableActions"] = {"canBid": False, "comment": True}
+        result = preflight_task(
+            task["id"],
+            config=self.config(),
+            client=FakePublicClient(task),
+        )
+        self.assertFalse(result["bid_ready"])
+        self.assertEqual(result["blocked_by"], "task_not_biddable")
+        self.assertTrue(result["task_state"]["explicit_bid_disabled"])
+
+    def test_open_state_and_can_bid_true_remains_ready(self):
+        task = dict(self.task)
+        task["status"] = "open"
+        task["availableActions"] = {"canBid": True, "comment": True}
+        result = preflight_task(
+            task["id"],
+            config=self.config(),
+            client=FakePublicClient(task),
+        )
+        self.assertTrue(result["bid_ready"])
+        self.assertEqual(result["blocked_by"], "marketplace_auth")
+        self.assertIn("canBid", result["task_state"]["available_actions"])
+        self.assertIsInstance(result["task_state"]["updated_age_days"], int)
+
     def test_unsupported_task_is_not_bid_ready(self):
         task = {
             "id": "generic-task",
