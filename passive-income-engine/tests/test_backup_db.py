@@ -35,6 +35,22 @@ class BackupDatabaseTests(unittest.TestCase):
             self.assertEqual(con.execute("SELECT value FROM values_table").fetchone()[0], "verified")
         self.assertEqual(list(self.backups.glob(".*.tmp")), [])
 
+    def test_same_second_backups_do_not_overwrite_each_other(self):
+        with patch.object(backup_db.uuid, "uuid4") as uuid4:
+            uuid4.side_effect = [
+                type("U", (), {"hex": "a" * 32})(),
+                type("U", (), {"hex": "b" * 32})(),
+                type("U", (), {"hex": "c" * 32})(),
+                type("U", (), {"hex": "d" * 32})(),
+            ]
+            first = backup_db.backup_once(self.source, self.backups, retention=2)
+            second = backup_db.backup_once(self.source, self.backups, retention=2)
+
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.exists())
+        self.assertTrue(second.exists())
+        self.assertEqual(len(list(self.backups.glob("passive_income_*.db"))), 2)
+
     def test_failed_publish_cleans_temporary_snapshot(self):
         with patch.object(backup_db.os, "replace", side_effect=OSError("publish failed")):
             with self.assertRaisesRegex(OSError, "publish failed"):

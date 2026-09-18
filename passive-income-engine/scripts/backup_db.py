@@ -12,7 +12,10 @@ from pathlib import Path
 def backup_once(source: Path, target_dir: Path, retention: int) -> Path:
     target_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    destination = target_dir / f"passive_income_{stamp}.db"
+    # A backup can be requested more than once within the same second (manual
+    # retries, overlapping workers, tests). Include a random suffix so a later
+    # verified snapshot never silently replaces an earlier one.
+    destination = target_dir / f"passive_income_{stamp}_{uuid.uuid4().hex}.db"
     temporary = target_dir / f".{destination.name}.{uuid.uuid4().hex}.tmp"
 
     source_uri = f"file:{source}?mode=ro"
