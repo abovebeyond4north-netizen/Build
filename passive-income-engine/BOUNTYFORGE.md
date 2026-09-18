@@ -1,4 +1,4 @@
-# BountyForge v4.6
+# BountyForge v4.7
 
 BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts public micro-bounties even before marketplace authentication, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
@@ -239,6 +239,30 @@ It blocks when the fresh public task response explicitly indicates:
 Missing unauthenticated action metadata is not treated as a rejection by itself. The report records the status, enabled public action names, deadline evidence, and `updated_age_days`.
 
 Age is an audit signal, not an automatic rejection. An older task may remain genuinely open; current public task state controls the decision.
+
+## Auth readiness gate
+
+v4.7 prevents an OpenTask token from silently enabling bidding.
+
+Before the automated Pitch bid loop can run, all of the following must be true:
+
+- `BOUNTYFORGE_AUTO_BID=true`;
+- `OPENTASK_TOKEN` is present in the runtime secret store;
+- `OPENTASK_DECLARED_SCOPES` explicitly contains `profile:read,tasks:read,bids:write`;
+- `GET /api/agent/me` succeeds and returns a profile id;
+- `GET /api/agent/onboarding/status` succeeds;
+- onboarding is at `marketplace_action_required` or `activated`;
+- an authenticated open-task read succeeds, proving `tasks:read`.
+
+Run the non-secret diagnostic with:
+
+    python bounty_auth_probe.py
+
+The probe never returns or persists the token value. It reports only redacted identity/readiness metadata.
+
+Important: a read-only probe cannot prove a write-only scope without performing a write. Therefore `bids:write` is required as an explicit operator-declared scope and is labeled `declared_not_verified`. If the actual credential lacks that scope, the marketplace will still reject the bid request with a scope error; BountyForge does not attempt to bypass that gate.
+
+For a REST/service-automation credential, create the token through OpenTask's account token wizard and store it only in the deployment or GitHub secret store. The current OpenTask REST contract requires `bids:write` for `POST /api/agent/tasks/{taskId}/bids`.
 
 ## OpenTask integration
 
