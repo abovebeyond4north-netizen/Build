@@ -65,7 +65,11 @@ class Config:
     database_path: str = "/data/passive_income.db"
     enabled: bool = True
     auto_bid: bool = False
+    auto_submit_entries: bool = False
+    reconcile_payments: bool = True
     scout_interval_seconds: int = 900
+    queue_dir: str = "/bounty-queue"
+    queue_secret: str = ""
     minimum_reward_cents: int = 500
     maximum_reward_cents: int = 10_000
     minimum_success_probability: Decimal = Decimal("0.70")
@@ -89,7 +93,11 @@ class Config:
             database_path=os.getenv("DATABASE_PATH", "/data/passive_income.db"),
             enabled=env_bool("BOUNTYFORGE_ENABLED", True),
             auto_bid=env_bool("BOUNTYFORGE_AUTO_BID", False),
+            auto_submit_entries=env_bool("BOUNTYFORGE_AUTO_SUBMIT_ENTRIES", False),
+            reconcile_payments=env_bool("BOUNTYFORGE_RECONCILE_PAYMENTS", True),
             scout_interval_seconds=max(60, env_int("BOUNTYFORGE_SCOUT_INTERVAL_SECONDS", 900)),
+            queue_dir=os.getenv("BOUNTYFORGE_QUEUE_DIR", "/bounty-queue"),
+            queue_secret=os.getenv("BOUNTYFORGE_QUEUE_SECRET", ""),
             minimum_reward_cents=max(0, env_int("BOUNTYFORGE_MIN_REWARD_CENTS", 500)),
             maximum_reward_cents=max(0, env_int("BOUNTYFORGE_MAX_REWARD_CENTS", 10_000)),
             minimum_success_probability=env_decimal("BOUNTYFORGE_MIN_SUCCESS_PROBABILITY", "0.70"),
@@ -223,6 +231,17 @@ class Store:
                     currency TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     UNIQUE(source, settlement_ref)
+                );
+
+                CREATE TABLE IF NOT EXISTS bounty_contracts(
+                    contract_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    settlement_status TEXT NOT NULL,
+                    payment_verification_status TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    raw_json TEXT NOT NULL
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_bounty_jobs_status_score
@@ -383,6 +402,46 @@ class Store:
                 )
         return inserted
 
+    def upsert_contract(self, contract: dict[str, Any]) -> None:
+        contract_id = str(contract.get("id") or "")
+        task_id = str((contract.get("task") or {}).get("id") or "")
+        if not contract_id or not task_id:
+            return
+        with self.connect() as con:
+            con.execute(
+                """
+                INSERT INTO bounty_contracts(
+                  contract_id,task_id,status,settlement_status,payment_verification_status,
+                  source,updated_at,raw_json
+                ) VALUES(?,?,?,?,?,?,?,?)
+                ON CONFLICT(contract_id) DO UPDATE SET
+                  task_id=excluded.task_id,
+                  status=excluded.status,
+                  settlement_status=excluded.settlement_status,
+                  payment_verification_status=excluded.payment_verification_status,
+                  source=excluded.source,
+                  updated_at=excluded.updated_at,
+                  raw_json=excluded.raw_json
+                """,
+                (
+                    contract_id,
+                    task_id,
+                    str(contract.get("status") or "unknown"),
+                    str(contract.get("settlementStatus") or "unpaid"),
+                    str(contract.get("paymentVerificationStatus") or "unpaid"),
+                    str(contract.get("source") or "unknown"),
+                    utcnow(),
+                    json.dumps(contract, separators=(",", ":"), sort_keys=True)[:50000],
+                ),
+            )
+
+    def mark_task_status(self, task_id: str, status: str) -> None:
+        with self.connect() as con:
+            con.execute(
+                "UPDATE bounty_jobs SET status=?, last_seen_at=? WHERE source='opentask' AND external_id=?",
+                (status, utcnow(), task_id),
+            )
+
     def summary(self) -> dict[str, Any]:
         with self.connect() as con:
             statuses = {
@@ -531,6 +590,95 @@ class OpenTaskClient:
 
     def task_detail(self, task_id: str) -> dict[str, Any]:
         return self._request("GET", f"/agent/tasks/{urllib.parse.quote(task_id, safe='')}")
+
+    def contracts(self, role: str = "seller") -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        cursor: str | None = None
+        for _ in range(10):
+            query = {"role": role, "limit": "100"}
+            if cursor:
+                query["cursor"] = cursor
+            data = self._request("GET", "/agent/contracts?" + urllib.parse.urlencode(query))
+            items.extend(list(data.get("contracts") or []))
+            cursor = data.get("nextCursor")
+            if not cursor:
+                break
+        return items
+
+    def contract_receipts(self, contract_id: str) -> list[dict[str, Any]]:
+        data = self._request(
+            "GET",
+            f"/agent/contracts/{urllib.parse.quote(contract_id, safe='')}/receipts",
+        )
+        return list(data.get("receipts") or [])
+
+    def create_task_entry_upload_intent(
+        self,
+        task_id: str,
+        *,
+        filename: str,
+        content_type: str,
+        size_bytes: int,
+        sha256: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/tasks/{urllib.parse.quote(task_id, safe='')}/entry-attachments/upload-intents",
+            {
+                "filename": filename,
+                "contentType": content_type,
+                "sizeBytes": size_bytes,
+                "sha256": sha256,
+                "disclosure": "restricted",
+            },
+            {"Idempotency-Key": idempotency_key},
+        )
+
+    def upload_authorized(self, authorization: dict[str, Any], data: bytes) -> None:
+        url = str(authorization.get("url") or "")
+        if not url.startswith("https://"):
+            raise RuntimeError("OpenTask upload authorization did not use HTTPS")
+        headers = {str(k): str(v) for k, v in (authorization.get("callerHeaders") or {}).items()}
+        req = urllib.request.Request(url, data=data, method="PUT", headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as response:
+            if response.status < 200 or response.status >= 300:
+                raise RuntimeError(f"artifact upload failed with HTTP {response.status}")
+
+    def complete_task_entry_upload(self, task_id: str, upload_intent_id: str) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/tasks/{urllib.parse.quote(task_id, safe='')}/entry-attachments/upload-intents/"
+            f"{urllib.parse.quote(upload_intent_id, safe='')}/complete",
+            {},
+        )
+
+    def task_entry_upload_status(self, task_id: str, upload_intent_id: str) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/agent/tasks/{urllib.parse.quote(task_id, safe='')}/entry-attachments/upload-intents/"
+            f"{urllib.parse.quote(upload_intent_id, safe='')}",
+        )
+
+    def submit_task_entry(
+        self,
+        task_id: str,
+        *,
+        expected_task_updated_at: str,
+        artifact: dict[str, Any],
+        notes: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/tasks/{urllib.parse.quote(task_id, safe='')}/entries",
+            {
+                "expectedTaskUpdatedAt": expected_task_updated_at,
+                "artifacts": [artifact],
+                "notes": notes[:20000],
+            },
+            {"Idempotency-Key": idempotency_key},
+        )
 
     def create_bid(
         self,
