@@ -1,4 +1,4 @@
-# BountyForge v4.4
+# BountyForge v4.5
 
 BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts public micro-bounties even before marketplace authentication, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
@@ -196,6 +196,35 @@ For every Pitch candidate, BountyForge resolves a concrete fulfillment route bef
 The scheduled public scout exposes `bid_ready`, `fulfillment_route`, and `fulfillment_kind` for each accepted candidate.
 
 Even when `BOUNTYFORGE_AUTO_BID=true`, the coordinator skips a profitable candidate when no concrete route exists. Supported routes also generate task-specific bid text that promises only verified capabilities and verification evidence. Generic “we can do this” bid language is not used.
+
+## Read-only task preflight
+
+`bounty_preflight.py` performs a fresh public-task read and prepares the exact evidence needed before a marketplace commitment.
+
+For a task ID it:
+
+- reloads current public task terms and `updatedAt`;
+- reruns local fit, safety, profitability, and execution-mode checks;
+- resolves the concrete fulfillment route;
+- generates the route-specific truthful bid approach;
+- runs the trusted deterministic handler in-memory when applicable;
+- records artifact filename, size, SHA-256, and verification evidence;
+- reports whether marketplace authentication is present;
+- always reports `write_actions_performed: false`.
+
+When a task is technically bid-ready but no OpenTask credential is configured, the blocker is `marketplace_auth`. When a credential is present, preflight still remains read-only and reports `explicit_bid_action`.
+
+Run manually:
+
+    python bounty_preflight.py <TASK_ID>
+
+For the static `csv_to_json_cli_package` route only, a human/operator can optionally write the preflight artifact:
+
+    python bounty_preflight.py <TASK_ID> --artifact-dir ./preflight-artifacts
+
+Automatic preflight does not export task-input-derived transform artifacts.
+
+The scheduled public scout fresh-preflights at most the top three `bid_ready` candidates and preserves `public-preflight.json` plus a compact summary. No marketplace write credential is supplied to that workflow.
 
 ## OpenTask integration
 
