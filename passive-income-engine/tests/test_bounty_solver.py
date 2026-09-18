@@ -88,6 +88,78 @@ class BountySolverTests(unittest.TestCase):
                 self.package({"kind": "python", "input_text": "print('no')"})
             )
 
+    def test_jsonl_to_json_and_back(self):
+        to_json = bounty_solver.solve_package(
+            self.package({"kind": "jsonl_to_json", "input_text": '{"a":1}\n{"a":2}\n'})
+        )
+        self.assertEqual(json.loads(to_json.output.decode()), [{"a": 1}, {"a": 2}])
+
+        to_jsonl = bounty_solver.solve_package(
+            self.package({"kind": "json_to_jsonl", "input_text": '[{"a":1},{"a":2}]'})
+        )
+        self.assertEqual(
+            [json.loads(line) for line in to_jsonl.output.decode().splitlines()],
+            [{"a": 1}, {"a": 2}],
+        )
+        self.assertTrue(to_jsonl.verification["round_trip_equal"])
+
+    def test_csv_deduplicate(self):
+        result = bounty_solver.solve_package(
+            self.package(
+                {
+                    "kind": "csv_deduplicate",
+                    "input_text": "id,name\n1,A\n1,A\n2,B\n",
+                    "keys": ["id"],
+                }
+            )
+        )
+        self.assertEqual(result.verification["removed_rows"], 1)
+        self.assertIn("2,B", result.output.decode())
+
+    def test_csv_to_markdown(self):
+        result = bounty_solver.solve_package(
+            self.package({"kind": "csv_to_markdown", "input_text": "name,value\na,1\n"})
+        )
+        self.assertIn("| name | value |", result.output.decode())
+        self.assertEqual(result.verification["rows"], 1)
+
+    def test_sort_unique_lines(self):
+        result = bounty_solver.solve_package(
+            self.package(
+                {
+                    "kind": "lines_sort_unique",
+                    "input_text": "Beta\nalpha\nBeta\n",
+                    "case_sensitive": False,
+                }
+            )
+        )
+        self.assertEqual(result.output.decode().splitlines(), ["alpha", "Beta"])
+        self.assertTrue(result.verification["unique"])
+
+    def test_base64_round_trip(self):
+        encoded = bounty_solver.solve_package(
+            self.package({"kind": "base64_encode", "input_text": "hello world"})
+        )
+        decoded = bounty_solver.solve_package(
+            self.package({"kind": "base64_decode", "input_text": encoded.output.decode().strip()})
+        )
+        self.assertEqual(decoded.output.decode(), "hello world")
+        self.assertTrue(decoded.verification["round_trip_equal"])
+
+    def test_explicit_text_replace(self):
+        result = bounty_solver.solve_package(
+            self.package(
+                {
+                    "kind": "text_replace",
+                    "input_text": "red green red",
+                    "old": "red",
+                    "new": "blue",
+                }
+            )
+        )
+        self.assertEqual(result.output.decode(), "blue green blue")
+        self.assertEqual(result.verification["replacements"], 2)
+
     def test_queue_run_writes_signed_hash_verified_manifest(self):
         inbox = bounty_solver.QUEUE_DIR / "inbox"
         inbox.mkdir(parents=True)
