@@ -1,4 +1,4 @@
-# BountyForge v4.5
+# BountyForge v4.6
 
 BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts public micro-bounties even before marketplace authentication, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
@@ -225,6 +225,20 @@ For the static `csv_to_json_cli_package` route only, a human/operator can option
 Automatic preflight does not export task-input-derived transform artifacts.
 
 The scheduled public scout fresh-preflights at most the top three `bid_ready` candidates and preserves `public-preflight.json` plus a compact summary. No marketplace write credential is supplied to that workflow.
+
+## Fresh task-state gate
+
+Preflight also validates current marketplace state before declaring a Pitch task bid-ready.
+
+It blocks when the fresh public task response explicitly indicates:
+
+- a closed/cancelled/completed/expired/filled/paused/draft state;
+- a passed `deadlineAt` or `expiresAt`;
+- an explicit bid control such as `canBid: false`.
+
+Missing unauthenticated action metadata is not treated as a rejection by itself. The report records the status, enabled public action names, deadline evidence, and `updated_age_days`.
+
+Age is an audit signal, not an automatic rejection. An older task may remain genuinely open; current public task state controls the decision.
 
 ## OpenTask integration
 
