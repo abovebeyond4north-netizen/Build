@@ -632,9 +632,19 @@ def _fenced_blocks(text: str) -> list[tuple[str, str]]:
 
 
 def safe_solver_payload(title: str, description: str) -> dict[str, Any] | None:
-    """Return a deterministic, non-code-executing solver job for clear task types."""
+    """Return a deterministic, non-buyer-code-executing solver job for clear task types."""
     text = f"{title}\n{description}"
     lower = text.lower()
+
+    if (
+        "csv" in lower
+        and "json" in lower
+        and "python" in lower
+        and any(verb in lower for verb in ("build", "create", "write", "implement"))
+        and any(noun in lower for noun in ("script", "cli", "converter"))
+    ):
+        return {"kind": "csv_to_json_cli_package"}
+
     blocks = _fenced_blocks(text)
     if not blocks:
         return None
@@ -1081,8 +1091,14 @@ def looks_like_service_ad(task: dict[str, Any]) -> bool:
         "services offered",
         "hire me for",
         "i offer ",
+        "delivery within 24h, revisions included",
+        "each deliverable ships with unit tests",
     )
     if any(signal in text for signal in high_confidence):
+        return True
+    if "tested, delivered in 24h" in title:
+        return True
+    if "ready template" in title or description.lstrip().startswith("ready-made "):
         return True
     if "delivered by an autonomous agent" in text and ("from " in text or "usdc" in text):
         return True

@@ -1,4 +1,4 @@
-# BountyForge v4.1
+# BountyForge v4.3
 
 BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts public micro-bounties even before marketplace authentication, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
@@ -77,6 +77,7 @@ v3 supports:
 - `json_to_jsonl`
 - `csv_deduplicate`
 - `csv_to_markdown`
+- `csv_to_json_cli_package` — deterministic ZIP containing a stdlib Python CLI/API, unit tests, and README for explicit buyer requests to build a CSV→JSON script
 - `lines_sort_unique`
 - `base64_encode`
 - `base64_decode`
@@ -86,6 +87,22 @@ v3 supports:
 The router only selects these handlers when task wording is explicit and the required input appears in an inline fenced block. Unsupported tasks remain unsolved.
 
 The deterministic solver never executes Python, JavaScript, binaries, macros, shell commands, or task-supplied programs.
+
+## Deterministic CSV→JSON script fulfillment
+
+v4.3 can recognize a narrow buyer request to build/create/write/implement a Python CSV→JSON script or converter. That route produces a fixed reproducible ZIP rather than free-form generated code.
+
+The package contains:
+
+- `csv_to_json.py` — standard-library CLI + importable API;
+- `test_csv_to_json.py` — unit tests covering quoting, Unicode, delimiter detection, compact output, file output, and invalid delimiters;
+- `README.md` — run, import, and verification instructions.
+
+Runtime solver verification parses both generated Python sources, verifies the exact ZIP structure and file bytes, and hashes every component. Repository CI additionally unpacks the generated ZIP, runs its unit tests, and invokes the CLI on sample input.
+
+No buyer-provided program is executed by this handler.
+
+Seller-package wording such as “tested, delivered in 24h” and “ready template/ready-made” is demoted during public discovery so an agent advertising its own prebuilt package is not mistaken for a buyer request.
 
 ## Repository verification microtasks
 

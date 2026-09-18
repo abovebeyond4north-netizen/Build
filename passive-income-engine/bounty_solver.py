@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import csv
 import hashlib
 import hmac
@@ -8,6 +9,7 @@ import json
 import os
 import re
 import time
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -389,6 +391,201 @@ def solve_text_replace(payload: dict[str, Any]) -> SolveResult:
     )
 
 
+CSV_TO_JSON_CLI_SOURCE = r'''from __future__ import annotations
+
+import argparse
+import csv
+import io
+import json
+import sys
+from pathlib import Path
+
+
+def detect_delimiter(sample: str, requested: str | None = None) -> str:
+    if requested:
+        if len(requested) != 1:
+            raise ValueError("delimiter must be exactly one character")
+        return requested
+    try:
+        return csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
+    except csv.Error:
+        return ","
+
+
+def convert_text(raw: str, *, delimiter: str | None = None, compact: bool = False) -> str:
+    chosen = detect_delimiter(raw[:8192], delimiter)
+    reader = csv.DictReader(io.StringIO(raw), delimiter=chosen)
+    if not reader.fieldnames:
+        raise ValueError("CSV header row is required")
+    rows = list(reader)
+    if compact:
+        return json.dumps(rows, ensure_ascii=False, separators=(",", ":")) + "\n"
+    return json.dumps(rows, ensure_ascii=False, indent=2) + "\n"
+
+
+def convert_file(
+    input_path: str,
+    output_path: str | None = None,
+    *,
+    delimiter: str | None = None,
+    encoding: str = "utf-8-sig",
+    compact: bool = False,
+) -> str:
+    raw = Path(input_path).read_text(encoding=encoding)
+    rendered = convert_text(raw, delimiter=delimiter, compact=compact)
+    if output_path:
+        Path(output_path).write_text(rendered, encoding="utf-8")
+    return rendered
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Convert CSV files to JSON using only Python's standard library.")
+    parser.add_argument("input", help="input CSV path")
+    parser.add_argument("-o", "--output", help="optional output JSON path; stdout when omitted")
+    parser.add_argument("-d", "--delimiter", help="one-character delimiter; auto-detected when omitted")
+    parser.add_argument("--encoding", default="utf-8-sig", help="input text encoding (default: utf-8-sig)")
+    parser.add_argument("--compact", action="store_true", help="emit compact JSON")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        rendered = convert_file(
+            args.input,
+            args.output,
+            delimiter=args.delimiter,
+            encoding=args.encoding,
+            compact=args.compact,
+        )
+    except (OSError, UnicodeError, csv.Error, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if not args.output:
+        sys.stdout.write(rendered)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''
+
+CSV_TO_JSON_TEST_SOURCE = r'''import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from csv_to_json import convert_file, convert_text, detect_delimiter
+
+
+class CsvToJsonTests(unittest.TestCase):
+    def test_standard_csv_and_special_characters(self):
+        raw = 'name,note\nAlice,"hello, world"\nZoë,"snowman ☃"\n'
+        parsed = json.loads(convert_text(raw))
+        self.assertEqual(parsed[0], {"name": "Alice", "note": "hello, world"})
+        self.assertEqual(parsed[1]["name"], "Zoë")
+        self.assertEqual(parsed[1]["note"], "snowman ☃")
+
+    def test_semicolon_auto_detection(self):
+        raw = "id;name\n1;alpha\n2;beta\n"
+        self.assertEqual(detect_delimiter(raw), ";")
+        parsed = json.loads(convert_text(raw))
+        self.assertEqual(parsed, [{"id": "1", "name": "alpha"}, {"id": "2", "name": "beta"}])
+
+    def test_compact_output(self):
+        rendered = convert_text("a,b\n1,2\n", compact=True)
+        self.assertEqual(rendered, '[{"a":"1","b":"2"}]\n')
+
+    def test_file_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "input.csv"
+            target = Path(tmp) / "output.json"
+            source.write_text("x|y\n3|4\n", encoding="utf-8")
+            rendered = convert_file(str(source), str(target), delimiter="|")
+            self.assertEqual(target.read_text(encoding="utf-8"), rendered)
+            self.assertEqual(json.loads(rendered), [{"x": "3", "y": "4"}])
+
+    def test_invalid_delimiter(self):
+        with self.assertRaises(ValueError):
+            convert_text("a,b\n1,2\n", delimiter="||")
+
+
+if __name__ == "__main__":
+    unittest.main()
+'''
+
+CSV_TO_JSON_README = """# CSV to JSON converter
+
+A dependency-free Python 3 CSV-to-JSON converter with both a CLI and importable API.
+
+Run:
+  python csv_to_json.py input.csv
+  python csv_to_json.py input.csv -o output.json
+  python csv_to_json.py input.csv --delimiter ';'
+  python csv_to_json.py input.csv --compact
+
+The converter auto-detects common delimiters (comma, semicolon, tab, pipe) when --delimiter is omitted, uses Python's csv module for quoting and escaping, writes UTF-8 JSON, and preserves Unicode.
+
+Import:
+  from csv_to_json import convert_text, convert_file
+
+Verify:
+  python -m unittest -v test_csv_to_json.py
+  python -m compileall -q csv_to_json.py test_csv_to_json.py
+
+No third-party packages or network access are required.
+"""
+
+
+def _deterministic_zip(files: dict[str, bytes]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_STORED) as archive:
+        for name in sorted(files):
+            info = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_STORED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, files[name])
+    return buf.getvalue()
+
+
+def solve_csv_to_json_cli_package(payload: dict[str, Any]) -> SolveResult:
+    del payload
+    source = CSV_TO_JSON_CLI_SOURCE.encode()
+    tests = CSV_TO_JSON_TEST_SOURCE.encode()
+    readme = CSV_TO_JSON_README.encode()
+    ast.parse(CSV_TO_JSON_CLI_SOURCE, filename="csv_to_json.py")
+    ast.parse(CSV_TO_JSON_TEST_SOURCE, filename="test_csv_to_json.py")
+
+    files = {
+        "README.md": readme,
+        "csv_to_json.py": source,
+        "test_csv_to_json.py": tests,
+    }
+    output = _deterministic_zip(files)
+    with zipfile.ZipFile(io.BytesIO(output), "r") as archive:
+        names = sorted(archive.namelist())
+        expected_names = sorted(files)
+        contents_match = names == expected_names and all(archive.read(name) == files[name] for name in expected_names)
+
+    return SolveResult(
+        True,
+        "csv_to_json_cli_package",
+        "csv-to-json-converter.zip",
+        "application/zip",
+        output,
+        {
+            "package_files": sorted(files),
+            "package_structure_valid": contents_match,
+            "source_syntax_valid": True,
+            "tests_syntax_valid": True,
+            "source_sha256": sha256_bytes(source),
+            "tests_sha256": sha256_bytes(tests),
+            "readme_sha256": sha256_bytes(readme),
+            "sha256": sha256_bytes(output),
+        },
+    )
+
+
 def solve_sha256(payload: dict[str, Any]) -> SolveResult:
     raw = payload.get("input_text")
     if not isinstance(raw, str):
@@ -420,6 +617,7 @@ HANDLERS = {
     "base64_encode": solve_base64_encode,
     "base64_decode": solve_base64_decode,
     "text_replace": solve_text_replace,
+    "csv_to_json_cli_package": solve_csv_to_json_cli_package,
     "sha256": solve_sha256,
 }
 
