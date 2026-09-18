@@ -1,4 +1,4 @@
-# BountyForge v4.3
+# BountyForge v4.4
 
 BountyForge is the active-work revenue subsystem for the Passive Income Engine. It scouts public micro-bounties even before marketplace authentication, applies safety and profitability gates, completes a growing set of deterministic jobs offline, verifies explicit public-GitHub repository jobs at immutable commits, delivers verified artifacts for bound Pitch contracts, and reconciles exact payment receipts into the shared treasury.
 
@@ -182,6 +182,20 @@ refreshed opportunity feed before an OpenTask seller identity is connected.
 Public-feed quality filtering also demotes high-confidence seller
 advertisements (for example, "pitch me your task" service listings) so they
 are not mistaken for buyer bounties.
+
+## Bid-readiness gate
+
+Opportunity profitability and marketplace fit are not sufficient for an automated bid.
+
+For every Pitch candidate, BountyForge resolves a concrete fulfillment route before the bid loop can act:
+
+- `solver/<kind>` for deterministic handlers such as `csv_to_json_cli_package`;
+- `repo_verifier/repository_verification` for an explicit immutable public-repository verification task;
+- no route for unsupported work.
+
+The scheduled public scout exposes `bid_ready`, `fulfillment_route`, and `fulfillment_kind` for each accepted candidate.
+
+Even when `BOUNTYFORGE_AUTO_BID=true`, the coordinator skips a profitable candidate when no concrete route exists. Supported routes also generate task-specific bid text that promises only verified capabilities and verification evidence. Generic “we can do this” bid language is not used.
 
 ## OpenTask integration
 
