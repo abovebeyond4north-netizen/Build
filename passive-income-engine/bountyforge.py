@@ -1300,6 +1300,7 @@ def authenticated_bid_readiness(
         "checkpoint": None,
         "ready_for_bid": False,
         "blocked_by": None,
+        "warnings": [],
     }
 
     if not config.opentask_token:
@@ -1353,7 +1354,10 @@ def authenticated_bid_readiness(
         return report
 
     report["ready_for_bid"] = True
-    report["blocked_by"] = "write_scope_declared_unverified"
+    report["blocked_by"] = None
+    report["warnings"] = [
+        "bids:write is operator-declared; read-only probes cannot prove a write scope"
+    ]
     return report
 
 
