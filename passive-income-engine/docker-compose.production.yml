@@ -71,7 +71,8 @@ services:
 
 
   repo-stager:
-    build:\n      context: .
+    build:
+      context: .
     restart: unless-stopped
     command: ["python", "repo_stager.py"]
     read_only: true
@@ -94,7 +95,8 @@ services:
       - repo_verify:/repo-verify
 
   repo-verifier:
-    build:\n      context: .
+    build:
+      context: .
     restart: unless-stopped
     command: ["python", "repo_verifier.py"]
     network_mode: "none"
