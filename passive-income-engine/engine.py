@@ -163,6 +163,18 @@ def init_db() -> None:
             detail TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS bounty_earnings(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            external_id TEXT NOT NULL,
+            settlement_ref TEXT NOT NULL,
+            gross_cents INTEGER NOT NULL,
+            fees_cents INTEGER NOT NULL,
+            net_cents INTEGER NOT NULL,
+            currency TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(source, settlement_ref)
+        );
         """)
         if not has_column(con, "deliveries", "downloads"):
             con.execute("ALTER TABLE deliveries ADD COLUMN downloads INTEGER NOT NULL DEFAULT 0")
@@ -181,6 +193,7 @@ def audit(kind: str, detail: dict | str) -> None:
 @dataclass(frozen=True)
 class Treasury:
     sales_cents: int
+    bounty_income_cents: int
     refunds_cents: int
     expenses_cents: int
     tax_reserve_cents: int
@@ -194,19 +207,21 @@ def treasury() -> Treasury:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
     with db() as con:
         sales = con.execute("SELECT COALESCE(SUM(net_cents),0) v FROM sales WHERE currency=?", (CURRENCY,)).fetchone()["v"]
+        bounty_income = con.execute("SELECT COALESCE(SUM(net_cents),0) v FROM bounty_earnings WHERE currency=?", (CURRENCY,)).fetchone()["v"]
         refunds = con.execute("SELECT COALESCE(SUM(amount_cents),0) v FROM refunds WHERE currency=?", (CURRENCY,)).fetchone()["v"]
         expenses = con.execute("SELECT COALESCE(SUM(amount_cents),0) v FROM expenses WHERE currency=?", (CURRENCY,)).fetchone()["v"]
         recent = con.execute("SELECT COALESCE(SUM(net_cents),0) v FROM sales WHERE currency=? AND created_at>=?", (CURRENCY, cutoff)).fetchone()["v"]
-    taxable = max(0, sales - refunds - expenses)
+    total_income = sales + bounty_income
+    taxable = max(0, total_income - refunds - expenses)
     tax = taxable * TAX_RESERVE_BPS // 10_000
     refund_reserve = recent * REFUND_RESERVE_BPS // 10_000
-    available = sales - refunds - expenses - tax - refund_reserve - OPERATING_RESERVE_CENTS - PROFIT_FLOOR_CENTS
+    available = total_income - refunds - expenses - tax - refund_reserve - OPERATING_RESERVE_CENTS - PROFIT_FLOOR_CENTS
     payout_ready = max(0, available)
     if payout_ready < MIN_SWEEP_CENTS:
         payout_ready = 0
     elif MAX_SWEEP_CENTS > 0:
         payout_ready = min(payout_ready, MAX_SWEEP_CENTS)
-    return Treasury(sales, refunds, expenses, tax, refund_reserve, OPERATING_RESERVE_CENTS, PROFIT_FLOOR_CENTS, payout_ready)
+    return Treasury(sales, bounty_income, refunds, expenses, tax, refund_reserve, OPERATING_RESERVE_CENTS, PROFIT_FLOOR_CENTS, payout_ready)
 
 
 def verify_signature(body: bytes, signature: str) -> bool:
