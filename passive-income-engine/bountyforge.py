@@ -1106,22 +1106,72 @@ class BountyForge:
         self.opentask = OpenTaskClient(self.config)
 
     def discover(self) -> list[Bounty]:
-        if not self.config.opentask_token:
-            return []
-        discovered: list[Bounty] = []
-        for rec in self.opentask.recommendations(limit=30):
-            task = rec.get("task") or {}
-            task_id = str(task.get("id") or "")
-            if not task_id:
-                continue
+        by_id: dict[str, Bounty] = {}
+
+        # Authenticated recommendations remain the best signal when available.
+        if self.config.opentask_token:
             try:
-                detail = self.opentask.task_detail(task_id)
-            except RuntimeError:
-                detail = None
-            bounty = normalize_opentask(rec, detail)
-            if bounty:
-                discovered.append(bounty)
-        return discovered
+                recommendations = self.opentask.recommendations(limit=30)
+            except RuntimeError as exc:
+                print(json.dumps({"recommendation_error": str(exc)[:1000]}), flush=True)
+                recommendations = []
+            for rec in recommendations:
+                task = rec.get("task") or {}
+                task_id = str(task.get("id") or "")
+                if not task_id:
+                    continue
+                try:
+                    detail = self.opentask.task_detail(task_id)
+                except RuntimeError:
+                    detail = None
+                bounty = normalize_opentask(rec, detail)
+                if bounty:
+                    by_id[bounty.external_id] = bounty
+
+        # Public reads use OpenTask's documented /api/tasks surface and do not
+        # require marketplace identity. Writes still require scoped auth.
+        if self.config.public_scout:
+            public_items: dict[str, dict[str, Any]] = {}
+            for signal in self.config.public_skill_signals:
+                try:
+                    rows = self.opentask.public_tasks(
+                        skill=signal,
+                        limit=self.config.public_tasks_per_signal,
+                    )
+                except RuntimeError as exc:
+                    print(
+                        json.dumps(
+                            {"public_scout_error": str(exc)[:1000], "skill": signal}
+                        ),
+                        flush=True,
+                    )
+                    continue
+                for task in rows:
+                    task_id = str(task.get("id") or "")
+                    if task_id:
+                        public_items[task_id] = task
+
+            for task_id, task in public_items.items():
+                try:
+                    detail = self.opentask.public_task_detail(task_id)
+                except RuntimeError:
+                    detail = {"task": task}
+                detail_task = dict(detail.get("task") or detail or {})
+                merged = {**task, **detail_task}
+                score = public_task_match_score(merged)
+                rec = {"task": task, "score": score, "source": "public"}
+                bounty = normalize_opentask(rec, {"task": merged})
+                if not bounty:
+                    continue
+                existing = by_id.get(bounty.external_id)
+                if existing is None or bounty.match_score > existing.match_score:
+                    by_id[bounty.external_id] = bounty
+
+        return sorted(
+            by_id.values(),
+            key=lambda bounty: (bounty.match_score, bounty.updated_at),
+            reverse=True,
+        )
 
     def _queue_root(self) -> Path:
         root = Path(self.config.queue_dir)
