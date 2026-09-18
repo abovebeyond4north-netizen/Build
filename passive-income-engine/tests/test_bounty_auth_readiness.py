@@ -47,6 +47,12 @@ class FakeAuthClient:
             raise RuntimeError("tasks failed")
         return []
 
+    def list_own_bids(self, *, task_id=None, status=None, limit=20):
+        self.calls.append(("list_own_bids", task_id, status, limit))
+        if self.fail == "bids":
+            raise RuntimeError("bids failed")
+        return []
+
 
 class AuthReadinessTests(unittest.TestCase):
     def setUp(self):
@@ -67,7 +73,7 @@ class AuthReadinessTests(unittest.TestCase):
         result = authenticated_bid_readiness(
             self.config(
                 token="",
-                scopes=("profile:read", "tasks:read", "bids:write"),
+                scopes=("profile:read", "tasks:read", "bids:read", "bids:write"),
             ),
             client,
         )
@@ -83,7 +89,7 @@ class AuthReadinessTests(unittest.TestCase):
         )
         self.assertFalse(result["ready_for_bid"])
         self.assertEqual(result["blocked_by"], "declared_scopes_missing")
-        self.assertEqual(result["missing_declared_scopes"], ["bids:write"])
+        self.assertEqual(result["missing_declared_scopes"], ["bids:read", "bids:write"])
         self.assertEqual(client.calls, [])
 
     def test_readiness_verifies_identity_onboarding_and_task_read(self):
@@ -102,7 +108,12 @@ class AuthReadinessTests(unittest.TestCase):
         self.assertIn("operator-declared", result["warnings"][0])
         self.assertEqual(
             client.calls,
-            ["get_me", "onboarding", ("list_tasks", "open", 1)],
+            [
+            "get_me",
+            "onboarding",
+            ("list_tasks", "open", 1),
+            ("list_own_bids", None, None, 1),
+        ],
         )
 
         serialized = json.dumps(result, sort_keys=True)
@@ -132,6 +143,7 @@ class AuthReadinessTests(unittest.TestCase):
             ("me", "profile_read_failed"),
             ("onboarding", "onboarding_read_failed"),
             ("tasks", "tasks_read_failed"),
+            ("bids", "bids_read_failed"),
         ):
             with self.subTest(failure=failure):
                 client = FakeAuthClient(fail=failure)
