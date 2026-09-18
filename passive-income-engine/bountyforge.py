@@ -655,7 +655,7 @@ def safe_repo_verification_spec(title: str, description: str) -> dict[str, Any] 
         return None
 
     repo_match = re.search(
-        r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?/?",
+        r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",
         text,
         re.IGNORECASE,
     )
@@ -676,7 +676,7 @@ def safe_repo_verification_spec(title: str, description: str) -> dict[str, Any] 
         if check not in deduped:
             deduped.append(check)
     return {
-        "repo_url": repo_match.group(0).removesuffix(".git").rstrip("/"),
+        "repo_url": repo_match.group(0).rstrip("/").removesuffix(".git"),
         "commit_sha": sha_match.group(0).lower(),
         "checks": deduped[:3],
     }
