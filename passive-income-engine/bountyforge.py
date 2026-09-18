@@ -1018,6 +1018,43 @@ class OpenTaskClient:
         )
 
 
+def _task_work_text(task: dict[str, Any]) -> str:
+    description = str(task.get("description") or "")
+    criteria = task.get("acceptanceCriteria") or []
+    if isinstance(criteria, list):
+        criteria_text = "\n".join(f"- {item}" for item in criteria if isinstance(item, str))
+    else:
+        criteria_text = str(criteria or "")
+    return description + (("\n\nAcceptance criteria:\n" + criteria_text) if criteria_text else "")
+
+
+def public_task_match_score(task: dict[str, Any]) -> int:
+    title = str(task.get("title") or "")
+    work_text = _task_work_text(task)
+    text = f"{title}\n{work_text}".lower()
+
+    if safe_solver_payload(title, work_text) is not None:
+        return 98
+    if safe_repo_verification_spec(title, work_text) is not None:
+        return 96
+
+    # Strong capability fit can exist before buyer inputs are supplied. This
+    # affects scouting/bidding only; solving still requires an exact safe route.
+    if "csv" in text and "json" in text:
+        return 92
+    if "jsonl" in text or "ndjson" in text:
+        return 90
+    if "base64" in text or "sha256" in text or "sha-256" in text:
+        return 90
+    if "csv" in text and any(term in text for term in ("deduplicate", "duplicate", "markdown table")):
+        return 90
+    if any(term in text for term in ("data conversion", "data cleanup", "normalize data")):
+        return 84
+    if "python" in text and any(term in text for term in ("unittest", "unit test", "compileall", "syntax check")):
+        return 78
+    return 50
+
+
 def normalize_opentask(rec: dict[str, Any], detail: dict[str, Any] | None = None) -> Bounty | None:
     task = dict(rec.get("task") or {})
     detail_task = dict((detail or {}).get("task") or {})
@@ -1050,7 +1087,7 @@ def normalize_opentask(rec: dict[str, Any], detail: dict[str, Any] | None = None
         source="opentask",
         external_id=task_id,
         title=str(merged.get("title") or "Untitled task")[:500],
-        description=str(merged.get("description") or ""),
+        description=_task_work_text(merged),
         reward_cents=reward_cents,
         currency=currency,
         task_url=f"https://opentask.ai/tasks/{task_id}",
