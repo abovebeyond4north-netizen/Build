@@ -6,21 +6,26 @@ LABEL org.opencontainers.image.source="https://github.com/abovebeyond4north-neti
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /srv
 
-RUN groupadd --system app && useradd --system --gid app --home /srv app
+RUN groupadd --system app \
+    && useradd --system --gid app --home /srv app \
+    && python -m venv "$VIRTUAL_ENV" \
+    && mkdir -p /data /backups /bounty-queue /repo-verify \
+    && chown -R app:app "$VIRTUAL_ENV" /data /backups /bounty-queue /repo-verify
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY engine.py checkout_app.py hybrid.py bountyforge.py bounty_solver.py bounty_preflight.py bounty_bid_packet.py bounty_auth_probe.py repo_stager.py repo_verifier.py ./
-COPY scripts ./scripts
-
-RUN mkdir -p /data /backups /bounty-queue /repo-verify && chown -R app:app /srv /data /backups /bounty-queue /repo-verify
+COPY --chown=app:app requirements.txt .
 
 USER app
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY --chown=app:app engine.py checkout_app.py hybrid.py bountyforge.py bounty_solver.py bounty_preflight.py bounty_bid_packet.py bounty_auth_probe.py repo_stager.py repo_verifier.py ./
+COPY --chown=app:app scripts ./scripts
 
 EXPOSE 8000
 
