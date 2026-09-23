@@ -16,6 +16,13 @@ class ProtectedVerifierPatchBoundaryTests(unittest.TestCase):
             "src/dgm_zero/self_patch.py",
         }
         self.assertTrue(protected.isdisjoint(DEFAULT_EDITABLE_PATHS))
+        self.assertNotIn(
+            "verifier_authority/authority.py",
+            DEFAULT_EDITABLE_PATHS,
+        )
+        self.assertTrue(
+            all(path.startswith("src/dgm_zero/") for path in DEFAULT_EDITABLE_PATHS)
+        )
 
 
 if __name__ == "__main__":
