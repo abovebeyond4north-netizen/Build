@@ -13,7 +13,7 @@ export function getLearningSignals({ verified, meta, value }) {
   const codeWriteSucceeded = benchmarkPassed && lastVerified.decision !== 'rejected';
 
   const skillSignals = [
-    Number(lastMeta.learningScore || 0) > 0 ? 'meta_learning_measurement' : null,
+    lastMeta.capabilityEvidenceAccepted === true ? 'verified_capability_evidence' : null,
     lastValue.id ? 'value_experiment_selection' : null,
     Number(lastVerified.afterScore ?? -1) >= Number(lastVerified.beforeScore ?? 0) ? 'quality_score_preserved' : null
   ].filter(Boolean);
