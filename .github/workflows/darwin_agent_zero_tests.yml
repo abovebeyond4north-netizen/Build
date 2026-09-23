@@ -5,11 +5,17 @@ on:
     branches: [main]
     paths:
       - 'darwin_agent_zero/**'
+      - 'verified-coding-loop-dashboard/scripts/lib/capability-evidence.mjs'
+      - 'verified-coding-loop-dashboard/scripts/verify-capability-evidence.mjs'
+      - 'verified-coding-loop-dashboard/package.json'
       - '.github/workflows/darwin_agent_zero_tests.yml'
   pull_request:
     branches: [main]
     paths:
       - 'darwin_agent_zero/**'
+      - 'verified-coding-loop-dashboard/scripts/lib/capability-evidence.mjs'
+      - 'verified-coding-loop-dashboard/scripts/verify-capability-evidence.mjs'
+      - 'verified-coding-loop-dashboard/package.json'
       - '.github/workflows/darwin_agent_zero_tests.yml'
 
 permissions:
@@ -39,6 +45,11 @@ jobs:
           cache: pip
           cache-dependency-path: darwin_agent_zero/pyproject.toml
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Install package
         run: |
           cd darwin_agent_zero
@@ -58,3 +69,25 @@ jobs:
         run: |
           cd darwin_agent_zero
           python scripts/validate_capabilities.py
+
+      - name: Generate sealed dashboard capability evidence
+        run: |
+          cd darwin_agent_zero
+          python scripts/validate_dashboard_evidence.py
+
+      - name: Verify dashboard capability evidence contract
+        run: |
+          node verified-coding-loop-dashboard/scripts/verify-capability-evidence.mjs \
+            darwin_agent_zero/.dgm_dashboard_evidence/capability-evidence.json
+
+      - name: Upload capability evidence receipt
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v7
+        with:
+          name: darwin-capability-evidence-${{ github.sha }}
+          path: |
+            darwin_agent_zero/.dgm_dashboard_evidence/capability-evidence.json
+            darwin_agent_zero/.dgm_dashboard_evidence/reliability_gate.jsonl
+            darwin_agent_zero/.dgm_dashboard_evidence/capability_certifications.jsonl
+            darwin_agent_zero/.dgm_dashboard_evidence/capability_acquisition_report.json
+          retention-days: 14
