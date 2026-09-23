@@ -152,7 +152,7 @@ class ProtectedEvaluationLedger:
             self.path,
             "".join(
                 json.dumps(
-                    asdict(row),
+                    serialized_record(row),
                     sort_keys=True,
                     allow_nan=False,
                 )
@@ -1214,11 +1214,32 @@ def validate_decision(
         )
 
 
+def serialized_record(
+    record: ProtectedEvaluationDecision,
+) -> dict[str, Any]:
+    data = asdict(record)
+    if record.ledger_version == 1:
+        for field in (
+            "authority_version",
+            "manifest_digest",
+            "public_key_sha256",
+            "authority_signature",
+            "evaluation_id",
+            "metamorphic_pair_count",
+            "baseline_metamorphic_score",
+            "finalist_metamorphic_score",
+            "replay_verified",
+            "replay_signature",
+        ):
+            data.pop(field, None)
+    return data
+
+
 def protected_record_hash(
     record: ProtectedEvaluationDecision,
 ) -> str:
     return protected_record_hash_dict(
-        asdict(record)
+        serialized_record(record)
     )
 
 
