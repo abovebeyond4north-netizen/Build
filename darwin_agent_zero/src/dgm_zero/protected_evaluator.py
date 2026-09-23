@@ -1,23 +1,30 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import math
 import os
-import secrets
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from . import protected_evaluator_worker
 
-
-PROTECTED_EVALUATOR_LEDGER_VERSION = 1
-PROTECTED_EVALUATOR_PROTOCOL_VERSION = protected_evaluator_worker.PROTOCOL_VERSION
-PROTECTED_CAPABILITIES = protected_evaluator_worker.SUPPORTED_CAPABILITIES
+PROTECTED_EVALUATOR_LEDGER_VERSION = 2
+PROTECTED_EVALUATOR_PROTOCOL_VERSION = 2
+PROTECTED_CAPABILITIES = frozenset(
+    {
+        "normalize_text",
+        "sequence_span",
+        "clamp_value",
+        "python_error_diagnosis",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -29,7 +36,7 @@ class ProtectedEvaluationDecision:
     finalist_digest: str
     evaluator_digest: str
     suite_digest: str
-    seed: int
+    seed: int | None
     case_count: int
     containment_passed: bool
     baseline_score: float
@@ -42,10 +49,20 @@ class ProtectedEvaluationDecision:
     created_at: float
     previous_hash: str | None = None
     record_hash: str | None = None
+    authority_version: str | None = None
+    manifest_digest: str | None = None
+    public_key_sha256: str | None = None
+    authority_signature: str | None = None
+    evaluation_id: str | None = None
+    metamorphic_pair_count: int = 0
+    baseline_metamorphic_score: float | None = None
+    finalist_metamorphic_score: float | None = None
+    replay_verified: bool = False
+    replay_signature: str | None = None
 
 
 class ProtectedEvaluationLedger:
-    """Hash-chained audit log for one-shot protected evaluator decisions."""
+    """Hash-chained public audit log for protected authority decisions."""
 
     def __init__(self, workspace: Path) -> None:
         self.path = workspace / "protected_evaluator.jsonl"
@@ -66,37 +83,43 @@ class ProtectedEvaluationLedger:
                 raw = json.loads(line)
                 if not isinstance(raw, dict):
                     raise ValueError("record must be an object")
-                record = ProtectedEvaluationDecision(**raw)
-                validate_decision(record)
-                if record.previous_hash != previous_hash:
+                record_hash = raw.get("record_hash")
+                if not is_sha256(record_hash):
+                    raise ValueError("record hash is malformed")
+                if raw.get("previous_hash") != previous_hash:
                     raise ValueError("hash-chain predecessor mismatch")
-                if protected_record_hash(record) != record.record_hash:
+                if protected_record_hash_dict(raw) != record_hash:
                     raise ValueError("record hash mismatch")
+                data = dict(raw)
+                version = data.get("ledger_version")
+                if version == 1:
+                    data.setdefault("authority_version", None)
+                    data.setdefault("manifest_digest", None)
+                    data.setdefault("public_key_sha256", None)
+                    data.setdefault("authority_signature", None)
+                    data.setdefault("evaluation_id", None)
+                    data.setdefault("metamorphic_pair_count", 0)
+                    data.setdefault("baseline_metamorphic_score", None)
+                    data.setdefault("finalist_metamorphic_score", None)
+                    data.setdefault("replay_verified", False)
+                    data.setdefault("replay_signature", None)
+                record = ProtectedEvaluationDecision(**data)
+                validate_decision(record)
                 previous_hash = record.record_hash
             except (json.JSONDecodeError, TypeError, ValueError) as exc:
                 raise ValueError(
-                    f"invalid protected evaluator record on line {line_number}: {exc}"
+                    f"invalid protected evaluator record on line "
+                    f"{line_number}: {exc}"
                 ) from exc
             output.append(record)
         return output
 
-    def find(
+    def by_evaluation_id(
         self,
-        *,
-        capability: str,
-        baseline_digest: str,
-        finalist_digest: str,
-        evaluator_digest: str,
-        protocol_version: int,
+        evaluation_id: str,
     ) -> ProtectedEvaluationDecision | None:
         for record in reversed(self.records()):
-            if (
-                record.capability == capability
-                and record.baseline_digest == baseline_digest
-                and record.finalist_digest == finalist_digest
-                and record.evaluator_digest == evaluator_digest
-                and record.protocol_version == protocol_version
-            ):
+            if record.evaluation_id == evaluation_id:
                 return record
         return None
 
@@ -105,7 +128,11 @@ class ProtectedEvaluationLedger:
         decision: ProtectedEvaluationDecision,
     ) -> ProtectedEvaluationDecision:
         existing = self.records()
-        previous_hash = existing[-1].record_hash if existing else None
+        previous_hash = (
+            existing[-1].record_hash
+            if existing
+            else None
+        )
         unsigned = ProtectedEvaluationDecision(
             **{
                 **asdict(decision),
@@ -120,36 +147,76 @@ class ProtectedEvaluationLedger:
             }
         )
         validate_decision(sealed)
+        rows = [*existing, sealed]
         atomic_write_text(
             self.path,
             "".join(
-                json.dumps(asdict(item), sort_keys=True) + "\n"
-                for item in [*existing, sealed]
+                json.dumps(
+                    asdict(row),
+                    sort_keys=True,
+                    allow_nan=False,
+                )
+                + "\n"
+                for row in rows
             ),
         )
         return sealed
 
 
 class ProtectedEvaluator:
-    """Run fresh, hidden built-in capability tests in a separate process.
+    """Client for the separately versioned verifier authority.
 
-    Candidate generation receives no protected cases or seeds. A finalist is
-    evaluated at most once for a fixed evaluator version; repeated calls reuse the
-    sealed decision rather than drawing fresh tests that could become adaptive
-    tuning feedback.
+    Hidden test generation, the signing key, private seeds, and the independent
+    candidate sandbox live outside the learner package. The learner receives only
+    a signed receipt. The public-key fingerprint is pinned on first use unless an
+    explicit fingerprint is supplied, and identity changes fail closed.
     """
 
     def __init__(
         self,
         workspace: Path,
         *,
-        timeout_seconds: float = 20.0,
+        timeout_seconds: float = 30.0,
+        authority_path: Path | None = None,
+        authority_state: Path | None = None,
+        trusted_public_key_sha256: str | None = None,
     ) -> None:
-        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
-            raise ValueError("timeout_seconds must be finite and positive")
+        if (
+            not math.isfinite(timeout_seconds)
+            or timeout_seconds <= 0
+        ):
+            raise ValueError(
+                "timeout_seconds must be finite and positive"
+            )
         self.workspace = workspace
+        self.workspace.mkdir(parents=True, exist_ok=True)
         self.timeout_seconds = float(timeout_seconds)
         self.ledger = ProtectedEvaluationLedger(workspace)
+        self.authority_path = (
+            Path(authority_path).resolve()
+            if authority_path is not None
+            else default_authority_path()
+        )
+        self.authority_state = (
+            Path(authority_state).expanduser().resolve()
+            if authority_state is not None
+            else default_authority_state()
+        )
+        configured_pin = (
+            trusted_public_key_sha256
+            or os.environ.get(
+                "DGM_VERIFIER_PUBLIC_KEY_SHA256"
+            )
+        )
+        if configured_pin is not None:
+            require_sha256(
+                configured_pin,
+                "trusted_public_key_sha256",
+            )
+        self.configured_pin = configured_pin
+        self.trust_path = (
+            workspace / "verifier_authority_trust.json"
+        )
 
     def required_for(self, capability: str) -> bool:
         return capability in PROTECTED_CAPABILITIES
@@ -166,134 +233,697 @@ class ProtectedEvaluator:
     ) -> ProtectedEvaluationDecision | None:
         if not self.required_for(capability):
             return None
-        for name, value in (
-            ("required_score", required_score),
-            ("minimum_gain", minimum_gain),
-        ):
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or not math.isfinite(float(value))
-                or not 0.0 <= float(value) <= 1.0
-            ):
-                raise ValueError(f"{name} must be finite and between 0 and 1")
-        if not isinstance(entrypoint, str) or not entrypoint.isidentifier():
-            raise ValueError("entrypoint must be a Python identifier")
-        if not isinstance(baseline_source, str) or not baseline_source.strip():
-            raise ValueError("baseline_source must be non-empty")
-        if not isinstance(finalist_source, str) or not finalist_source.strip():
-            raise ValueError("finalist_source must be non-empty")
-
-        evaluator_digest = worker_digest()
-        baseline_digest = source_digest(baseline_source)
-        finalist_digest = source_digest(finalist_source)
-        cached = self.ledger.find(
-            capability=capability,
-            baseline_digest=baseline_digest,
-            finalist_digest=finalist_digest,
-            evaluator_digest=evaluator_digest,
-            protocol_version=PROTECTED_EVALUATOR_PROTOCOL_VERSION,
+        required = require_score(
+            required_score,
+            "required_score",
         )
-        if cached is not None:
-            if (
-                abs(cached.required_score - float(required_score)) > 1e-12
-                or abs(cached.minimum_gain - float(minimum_gain)) > 1e-12
-            ):
-                raise ValueError(
-                    "protected evaluator evidence already consumed under different "
-                    "acceptance thresholds"
-                )
-            return cached
+        gain = require_score(
+            minimum_gain,
+            "minimum_gain",
+        )
+        if (
+            not isinstance(entrypoint, str)
+            or not entrypoint.isidentifier()
+            or entrypoint.startswith("_")
+        ):
+            raise ValueError(
+                "entrypoint must be a public Python identifier"
+            )
+        if (
+            not isinstance(baseline_source, str)
+            or not baseline_source.strip()
+        ):
+            raise ValueError(
+                "baseline_source must be non-empty"
+            )
+        if (
+            not isinstance(finalist_source, str)
+            or not finalist_source.strip()
+        ):
+            raise ValueError(
+                "finalist_source must be non-empty"
+            )
 
-        seed = self._fresh_seed()
+        identity_response = self._run_authority(
+            "describe",
+            None,
+        )
+        identity = require_object(
+            identity_response.get("identity"),
+            "authority identity",
+        )
+        public_key_pem = require_text(
+            identity_response.get("public_key_pem"),
+            "authority public key",
+        )
+        identity_signature = require_text(
+            identity_response.get(
+                "identity_signature"
+            ),
+            "authority identity signature",
+        )
+        self._verify_and_pin_identity(
+            identity,
+            identity_signature,
+            public_key_pem,
+        )
+
         request = {
-            "protocol_version": PROTECTED_EVALUATOR_PROTOCOL_VERSION,
+            "protocol_version": (
+                PROTECTED_EVALUATOR_PROTOCOL_VERSION
+            ),
             "capability": capability,
             "entrypoint": entrypoint,
             "baseline_source": baseline_source,
             "finalist_source": finalist_source,
-            "seed": seed,
+            "required_score": required,
+            "minimum_gain": gain,
         }
-        response = self._run_worker(request)
-        if response.get("protocol_version") != PROTECTED_EVALUATOR_PROTOCOL_VERSION:
-            raise ValueError("protected evaluator protocol mismatch")
-        if response.get("evaluator_digest") != evaluator_digest:
-            raise ValueError("protected evaluator source digest mismatch")
+        evaluation_response = self._run_authority(
+            "evaluate",
+            request,
+        )
+        receipt = require_object(
+            evaluation_response.get("receipt"),
+            "authority receipt",
+        )
+        signature = require_text(
+            evaluation_response.get("signature"),
+            "authority receipt signature",
+        )
+        response_public_key = require_text(
+            evaluation_response.get(
+                "public_key_pem"
+            ),
+            "authority response public key",
+        )
+        if (
+            sha256_text(response_public_key)
+            != sha256_text(public_key_pem)
+        ):
+            raise ValueError(
+                "authority public key changed during evaluation"
+            )
+        verify_signature(
+            public_key_pem,
+            receipt,
+            signature,
+        )
+        self._validate_receipt(
+            receipt=receipt,
+            identity=identity,
+            capability=capability,
+            baseline_source=baseline_source,
+            finalist_source=finalist_source,
+            required_score=required,
+            minimum_gain=gain,
+        )
 
-        suite_digest = require_sha256(response.get("suite_digest"), "suite_digest")
-        case_count = require_positive_int(response.get("case_count"), "case_count")
-        containment_passed = response.get("containment_passed")
-        if not isinstance(containment_passed, bool):
-            raise ValueError("protected evaluator returned invalid containment status")
-        baseline_score = require_score(response.get("baseline_score"), "baseline_score")
-        finalist_score = require_score(response.get("finalist_score"), "finalist_score")
-        delta = finalist_score - baseline_score
-        threshold = float(required_score)
-        gain = float(minimum_gain)
+        evaluation_id = require_text(
+            receipt.get("evaluation_id"),
+            "evaluation_id",
+        )
+        existing = self.ledger.by_evaluation_id(
+            evaluation_id
+        )
+        if existing is not None:
+            if (
+                existing.authority_signature
+                != signature
+            ):
+                raise ValueError(
+                    "authority reused evaluation_id "
+                    "with a different signature"
+                )
+            return existing
 
-        if not containment_passed:
-            passed = False
-            reason = "containment_probe_failed"
-        elif finalist_digest == baseline_digest:
-            passed = False
-            reason = "identical_to_baseline"
-        elif finalist_score + 1e-12 < threshold:
-            passed = False
-            reason = "hidden_suite_below_required_score"
-        elif delta + 1e-12 < gain:
-            passed = False
-            reason = "hidden_suite_insufficient_gain"
-        else:
-            passed = True
-            reason = "passed"
+        replay_response = self._run_authority(
+            "replay",
+            {
+                "protocol_version": (
+                    PROTECTED_EVALUATOR_PROTOCOL_VERSION
+                ),
+                "evaluation_id": evaluation_id,
+                "baseline_source": baseline_source,
+                "finalist_source": finalist_source,
+            },
+        )
+        replay = require_object(
+            replay_response.get("replay"),
+            "authority replay",
+        )
+        replay_signature = require_text(
+            replay_response.get(
+                "replay_signature"
+            ),
+            "authority replay signature",
+        )
+        replay_public_key = require_text(
+            replay_response.get(
+                "public_key_pem"
+            ),
+            "authority replay public key",
+        )
+        if (
+            sha256_text(replay_public_key)
+            != sha256_text(public_key_pem)
+        ):
+            raise ValueError(
+                "authority public key changed during replay"
+            )
+        verify_signature(
+            public_key_pem,
+            replay,
+            replay_signature,
+        )
+        self._validate_replay(
+            replay,
+            receipt,
+            identity,
+            signature,
+        )
 
         decision = ProtectedEvaluationDecision(
-            ledger_version=PROTECTED_EVALUATOR_LEDGER_VERSION,
-            protocol_version=PROTECTED_EVALUATOR_PROTOCOL_VERSION,
+            ledger_version=(
+                PROTECTED_EVALUATOR_LEDGER_VERSION
+            ),
+            protocol_version=(
+                PROTECTED_EVALUATOR_PROTOCOL_VERSION
+            ),
             capability=capability,
-            baseline_digest=baseline_digest,
-            finalist_digest=finalist_digest,
-            evaluator_digest=evaluator_digest,
-            suite_digest=suite_digest,
-            seed=seed,
-            case_count=case_count,
-            containment_passed=containment_passed,
-            baseline_score=baseline_score,
-            finalist_score=finalist_score,
-            delta=delta,
-            required_score=threshold,
+            baseline_digest=require_sha256(
+                receipt.get("baseline_digest"),
+                "baseline_digest",
+            ),
+            finalist_digest=require_sha256(
+                receipt.get("finalist_digest"),
+                "finalist_digest",
+            ),
+            evaluator_digest=require_sha256(
+                receipt.get("authority_digest"),
+                "authority_digest",
+            ),
+            suite_digest=require_sha256(
+                receipt.get("suite_digest"),
+                "suite_digest",
+            ),
+            seed=None,
+            case_count=require_positive_int(
+                receipt.get("hidden_case_count"),
+                "hidden_case_count",
+            ),
+            containment_passed=require_bool(
+                receipt.get("containment_passed"),
+                "containment_passed",
+            ),
+            baseline_score=require_score(
+                receipt.get("baseline_score"),
+                "baseline_score",
+            ),
+            finalist_score=require_score(
+                receipt.get("finalist_score"),
+                "finalist_score",
+            ),
+            delta=require_delta(
+                receipt.get("delta"),
+                "delta",
+            ),
+            required_score=required,
             minimum_gain=gain,
-            passed=passed,
-            reason=reason,
-            created_at=time.time(),
+            passed=require_bool(
+                receipt.get("passed"),
+                "passed",
+            ),
+            reason=require_text(
+                receipt.get("reason"),
+                "reason",
+            ),
+            created_at=require_positive_float(
+                receipt.get("created_at"),
+                "created_at",
+            ),
+            authority_version=require_text(
+                receipt.get("authority_version"),
+                "authority_version",
+            ),
+            manifest_digest=require_sha256(
+                receipt.get("manifest_digest"),
+                "manifest_digest",
+            ),
+            public_key_sha256=require_sha256(
+                receipt.get(
+                    "public_key_sha256"
+                ),
+                "public_key_sha256",
+            ),
+            authority_signature=signature,
+            evaluation_id=evaluation_id,
+            metamorphic_pair_count=(
+                require_positive_int(
+                    receipt.get(
+                        "metamorphic_pair_count"
+                    ),
+                    "metamorphic_pair_count",
+                )
+            ),
+            baseline_metamorphic_score=(
+                require_score(
+                    receipt.get(
+                        "baseline_metamorphic_score"
+                    ),
+                    "baseline_metamorphic_score",
+                )
+            ),
+            finalist_metamorphic_score=(
+                require_score(
+                    receipt.get(
+                        "finalist_metamorphic_score"
+                    ),
+                    "finalist_metamorphic_score",
+                )
+            ),
+            replay_verified=True,
+            replay_signature=replay_signature,
         )
         return self.ledger.append(decision)
 
-    def _fresh_seed(self) -> int:
-        used = {record.seed for record in self.ledger.records()}
-        for _ in range(128):
-            seed = secrets.randbits(63)
-            if seed not in used:
-                return seed
-        raise RuntimeError("unable to allocate a fresh protected evaluator seed")
+    def _verify_and_pin_identity(
+        self,
+        identity: dict[str, Any],
+        signature: str,
+        public_key_pem: str,
+    ) -> None:
+        verify_signature(
+            public_key_pem,
+            identity,
+            signature,
+        )
+        fingerprint = sha256_text(
+            public_key_pem
+        )
+        if (
+            require_sha256(
+                identity.get("public_key_sha256"),
+                "identity public_key_sha256",
+            )
+            != fingerprint
+        ):
+            raise ValueError(
+                "authority identity public-key digest mismatch"
+            )
+        if (
+            identity.get("protocol_version")
+            != PROTECTED_EVALUATOR_PROTOCOL_VERSION
+        ):
+            raise ValueError(
+                "authority protocol version mismatch"
+            )
+        authority_version = require_text(
+            identity.get("authority_version"),
+            "authority_version",
+        )
+        authority_digest = require_sha256(
+            identity.get("authority_digest"),
+            "authority_digest",
+        )
+        manifest_digest = require_sha256(
+            identity.get("manifest_digest"),
+            "manifest_digest",
+        )
+        supported = identity.get(
+            "supported_capabilities"
+        )
+        if (
+            not isinstance(supported, list)
+            or set(supported)
+            != set(PROTECTED_CAPABILITIES)
+        ):
+            raise ValueError(
+                "authority capability manifest mismatch"
+            )
 
-    def _run_worker(self, request: dict[str, Any]) -> dict[str, Any]:
+        if (
+            self.configured_pin is not None
+            and fingerprint
+            != self.configured_pin
+        ):
+            raise ValueError(
+                "authority public key does not match "
+                "configured trust pin"
+            )
+
+        if self.trust_path.exists():
+            try:
+                trust = json.loads(
+                    self.trust_path.read_text(
+                        encoding="utf-8"
+                    )
+                )
+            except (
+                OSError,
+                json.JSONDecodeError,
+            ) as exc:
+                raise ValueError(
+                    "invalid verifier authority trust file"
+                ) from exc
+            if not isinstance(trust, dict):
+                raise ValueError(
+                    "invalid verifier authority trust file"
+                )
+            if (
+                trust.get("public_key_sha256")
+                != fingerprint
+            ):
+                raise ValueError(
+                    "verifier authority identity changed"
+                )
+            first_seen = trust.get(
+                "first_seen"
+            )
+            if (
+                isinstance(first_seen, bool)
+                or not isinstance(
+                    first_seen,
+                    (int, float),
+                )
+                or not math.isfinite(
+                    float(first_seen)
+                )
+                or float(first_seen) <= 0
+            ):
+                raise ValueError(
+                    "invalid verifier authority trust timestamp"
+                )
+        else:
+            first_seen = time.time()
+
+        trust_record = {
+            "schema_version": 1,
+            "public_key_sha256": fingerprint,
+            "first_seen": float(first_seen),
+            "last_seen": time.time(),
+            "authority_version": authority_version,
+            "authority_digest": authority_digest,
+            "manifest_digest": manifest_digest,
+            "trust_mode": (
+                "explicit_pin"
+                if self.configured_pin
+                is not None
+                else "trust_on_first_use"
+            ),
+        }
+        atomic_write_text(
+            self.trust_path,
+            json.dumps(
+                trust_record,
+                indent=2,
+                sort_keys=True,
+            ),
+        )
+
+    def _validate_receipt(
+        self,
+        *,
+        receipt: dict[str, Any],
+        identity: dict[str, Any],
+        capability: str,
+        baseline_source: str,
+        finalist_source: str,
+        required_score: float,
+        minimum_gain: float,
+    ) -> None:
+        if (
+            receipt.get("protocol_version")
+            != PROTECTED_EVALUATOR_PROTOCOL_VERSION
+        ):
+            raise ValueError(
+                "protected authority receipt protocol mismatch"
+            )
+        for field in (
+            "authority_version",
+            "authority_digest",
+            "manifest_digest",
+            "public_key_sha256",
+        ):
+            if receipt.get(field) != identity.get(field):
+                raise ValueError(
+                    f"authority receipt {field} "
+                    "does not match signed identity"
+                )
+        if receipt.get("capability") != capability:
+            raise ValueError(
+                "authority receipt capability mismatch"
+            )
+        if (
+            receipt.get("baseline_digest")
+            != source_digest(baseline_source)
+        ):
+            raise ValueError(
+                "authority receipt baseline digest mismatch"
+            )
+        if (
+            receipt.get("finalist_digest")
+            != source_digest(finalist_source)
+        ):
+            raise ValueError(
+                "authority receipt finalist digest mismatch"
+            )
+        if (
+            abs(
+                require_score(
+                    receipt.get("required_score"),
+                    "receipt required_score",
+                )
+                - required_score
+            )
+            > 1e-12
+        ):
+            raise ValueError(
+                "authority receipt required-score mismatch"
+            )
+        if (
+            abs(
+                require_score(
+                    receipt.get("minimum_gain"),
+                    "receipt minimum_gain",
+                )
+                - minimum_gain
+            )
+            > 1e-12
+        ):
+            raise ValueError(
+                "authority receipt minimum-gain mismatch"
+            )
+        require_sha256(
+            receipt.get("suite_digest"),
+            "suite_digest",
+        )
+        require_positive_int(
+            receipt.get("hidden_case_count"),
+            "hidden_case_count",
+        )
+        require_positive_int(
+            receipt.get(
+                "metamorphic_pair_count"
+            ),
+            "metamorphic_pair_count",
+        )
+        require_bool(
+            receipt.get("containment_passed"),
+            "containment_passed",
+        )
+        require_score(
+            receipt.get("baseline_score"),
+            "baseline_score",
+        )
+        require_score(
+            receipt.get("finalist_score"),
+            "finalist_score",
+        )
+        require_score(
+            receipt.get(
+                "baseline_metamorphic_score"
+            ),
+            "baseline_metamorphic_score",
+        )
+        require_score(
+            receipt.get(
+                "finalist_metamorphic_score"
+            ),
+            "finalist_metamorphic_score",
+        )
+        require_delta(
+            receipt.get("delta"),
+            "delta",
+        )
+        require_bool(
+            receipt.get("passed"),
+            "passed",
+        )
+        require_text(
+            receipt.get("reason"),
+            "reason",
+        )
+        require_positive_float(
+            receipt.get("created_at"),
+            "created_at",
+        )
+
+    @staticmethod
+    def _validate_replay(
+        replay: dict[str, Any],
+        receipt: dict[str, Any],
+        identity: dict[str, Any],
+        original_signature: str,
+    ) -> None:
+        if (
+            replay.get("protocol_version")
+            != PROTECTED_EVALUATOR_PROTOCOL_VERSION
+        ):
+            raise ValueError(
+                "authority replay protocol mismatch"
+            )
+        for field in (
+            "authority_version",
+            "authority_digest",
+            "manifest_digest",
+            "public_key_sha256",
+        ):
+            if replay.get(field) != identity.get(field):
+                raise ValueError(
+                    f"authority replay {field} mismatch"
+                )
+        if (
+            replay.get("evaluation_id")
+            != receipt.get("evaluation_id")
+        ):
+            raise ValueError(
+                "authority replay evaluation_id mismatch"
+            )
+        if (
+            replay.get("replay_of_signature")
+            != original_signature
+        ):
+            raise ValueError(
+                "authority replay does not reference "
+                "the original signed receipt"
+            )
+        if (
+            replay.get("matches_original")
+            is not True
+        ):
+            raise ValueError(
+                "authority replay did not reproduce "
+                "the original evidence"
+            )
+        comparisons = (
+            (
+                "suite_digest",
+                replay.get("suite_digest"),
+                receipt.get("suite_digest"),
+            ),
+            (
+                "baseline_score",
+                replay.get("baseline_score"),
+                receipt.get("baseline_score"),
+            ),
+            (
+                "finalist_score",
+                replay.get("finalist_score"),
+                receipt.get("finalist_score"),
+            ),
+            (
+                "baseline_metamorphic_score",
+                replay.get(
+                    "baseline_metamorphic_score"
+                ),
+                receipt.get(
+                    "baseline_metamorphic_score"
+                ),
+            ),
+            (
+                "finalist_metamorphic_score",
+                replay.get(
+                    "finalist_metamorphic_score"
+                ),
+                receipt.get(
+                    "finalist_metamorphic_score"
+                ),
+            ),
+        )
+        for name, actual, expected in comparisons:
+            if actual != expected:
+                raise ValueError(
+                    f"authority replay {name} mismatch"
+                )
+
+    def _run_authority(
+        self,
+        command: str,
+        request: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if (
+            not self.authority_path.exists()
+            or not self.authority_path.is_file()
+        ):
+            raise ValueError(
+                "verifier authority executable is missing: "
+                f"{self.authority_path}"
+            )
+        manifest = self.authority_path.with_name(
+            "manifest.json"
+        )
+        if (
+            not manifest.exists()
+            or not manifest.is_file()
+        ):
+            raise ValueError(
+                "verifier authority manifest is missing"
+            )
+        self.authority_state.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
         env = {
             "PATH": os.environ.get("PATH", ""),
+            "HOME": os.environ.get(
+                "HOME",
+                str(Path.home()),
+            ),
+            "DGM_VERIFIER_AUTHORITY_STATE": (
+                str(self.authority_state)
+            ),
+            "DGM_OPENSSL_BIN": os.environ.get(
+                "DGM_OPENSSL_BIN",
+                "openssl",
+            ),
             "PYTHONHASHSEED": "0",
-            "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
             "PYTHONNOUSERSITE": "1",
             "PYTHONDONTWRITEBYTECODE": "1",
-            "LANG": os.environ.get("LANG", "C.UTF-8"),
+            "LANG": os.environ.get(
+                "LANG",
+                "C.UTF-8",
+            ),
         }
+        payload = (
+            ""
+            if request is None
+            else json.dumps(
+                request,
+                sort_keys=True,
+                allow_nan=False,
+            )
+        )
         try:
             completed = subprocess.run(
                 [
                     sys.executable,
-                    "-m",
-                    "dgm_zero.protected_evaluator_worker",
+                    "-I",
+                    "-S",
+                    str(self.authority_path),
+                    command,
                 ],
-                input=json.dumps(request, sort_keys=True, allow_nan=False),
+                input=payload,
                 capture_output=True,
                 text=True,
                 env=env,
@@ -301,91 +931,305 @@ class ProtectedEvaluator:
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
-            raise ValueError("protected evaluator process timed out") from exc
-        if completed.returncode != 0:
-            detail = (completed.stdout or completed.stderr).strip()[:1000]
-            raise ValueError(f"protected evaluator process failed: {detail}")
+            raise ValueError(
+                "verifier authority process timed out"
+            ) from exc
+        detail = (
+            completed.stdout
+            or completed.stderr
+            or ""
+        ).strip()
         try:
-            response = json.loads(completed.stdout)
+            response = json.loads(detail)
         except json.JSONDecodeError as exc:
-            raise ValueError("protected evaluator returned invalid JSON") from exc
+            raise ValueError(
+                "verifier authority returned invalid JSON"
+            ) from exc
         if not isinstance(response, dict):
-            raise ValueError("protected evaluator response must be an object")
-        if response.get("error"):
-            raise ValueError(f"protected evaluator error: {response['error']}")
+            raise ValueError(
+                "verifier authority response "
+                "must be an object"
+            )
+        if (
+            completed.returncode != 0
+            or response.get("error")
+        ):
+            raise ValueError(
+                "verifier authority failed: "
+                f"{response.get('error') or detail[:1000]}"
+            )
         return response
 
 
-def worker_digest() -> str:
-    path = Path(protected_evaluator_worker.__file__).resolve()
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+def default_authority_path() -> Path:
+    configured = os.environ.get(
+        "DGM_VERIFIER_AUTHORITY_PATH"
+    )
+    if configured:
+        return Path(
+            configured
+        ).expanduser().resolve()
+    return (
+        Path(__file__).resolve().parents[3]
+        / "verifier_authority"
+        / "authority.py"
+    )
+
+
+def default_authority_state() -> Path:
+    configured = os.environ.get(
+        "DGM_VERIFIER_AUTHORITY_STATE"
+    )
+    if configured:
+        return Path(
+            configured
+        ).expanduser().resolve()
+    return (
+        Path.home()
+        / ".dgm-verifier-authority"
+    ).resolve()
 
 
 def source_digest(source: str) -> str:
-    return hashlib.sha256(source.encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        source.encode("utf-8")
+    ).hexdigest()
 
 
-def require_score(value: object, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{name} must be numeric")
-    score = float(value)
-    if not math.isfinite(score) or not 0.0 <= score <= 1.0:
-        raise ValueError(f"{name} must be finite and between 0 and 1")
-    return score
+def sha256_text(value: str) -> str:
+    return hashlib.sha256(
+        value.encode("utf-8")
+    ).hexdigest()
 
 
-def require_positive_int(value: object, name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ValueError(f"{name} must be a positive integer")
-    return value
+def canonical_json(
+    value: dict[str, Any],
+) -> bytes:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
 
 
-def require_sha256(value: object, name: str) -> str:
-    if not isinstance(value, str) or len(value) != 64:
-        raise ValueError(f"{name} must be a lowercase SHA-256 digest")
-    if any(character not in "0123456789abcdef" for character in value):
-        raise ValueError(f"{name} must be a lowercase SHA-256 digest")
-    return value
+def openssl_bin() -> str:
+    configured = os.environ.get(
+        "DGM_OPENSSL_BIN",
+        "openssl",
+    )
+    resolved = shutil.which(configured)
+    if resolved is None:
+        raise ValueError(
+            "OpenSSL is required to verify "
+            "verifier-authority signatures"
+        )
+    return resolved
 
 
-def validate_decision(record: ProtectedEvaluationDecision) -> None:
-    if record.ledger_version != PROTECTED_EVALUATOR_LEDGER_VERSION:
-        raise ValueError("unsupported protected evaluator ledger version")
-    if record.protocol_version != PROTECTED_EVALUATOR_PROTOCOL_VERSION:
-        raise ValueError("unsupported protected evaluator protocol version")
+def verify_signature(
+    public_key_pem: str,
+    payload: dict[str, Any],
+    signature_b64: str,
+) -> None:
+    try:
+        signature = base64.b64decode(
+            signature_b64,
+            validate=True,
+        )
+    except (
+        ValueError,
+        base64.binascii.Error,
+    ) as exc:
+        raise ValueError(
+            "authority signature is not valid base64"
+        ) from exc
+
+    with tempfile.TemporaryDirectory(
+        prefix="dgm-authority-verify-"
+    ) as tmp:
+        root = Path(tmp)
+        public_key = root / "public.pem"
+        signature_path = root / "signature.bin"
+        public_key.write_text(
+            public_key_pem,
+            encoding="utf-8",
+        )
+        signature_path.write_bytes(signature)
+        completed = subprocess.run(
+            [
+                openssl_bin(),
+                "dgst",
+                "-sha256",
+                "-verify",
+                str(public_key),
+                "-signature",
+                str(signature_path),
+            ],
+            input=canonical_json(payload),
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise ValueError(
+                "verifier authority signature "
+                "verification failed"
+            )
+
+
+def validate_decision(
+    record: ProtectedEvaluationDecision,
+) -> None:
+    if record.ledger_version not in (1, 2):
+        raise ValueError(
+            "unsupported protected evaluator "
+            "ledger version"
+        )
+    if record.protocol_version not in (1, 2):
+        raise ValueError(
+            "unsupported protected evaluator "
+            "protocol version"
+        )
     for name, digest in (
-        ("baseline_digest", record.baseline_digest),
-        ("finalist_digest", record.finalist_digest),
-        ("evaluator_digest", record.evaluator_digest),
-        ("suite_digest", record.suite_digest),
+        (
+            "baseline_digest",
+            record.baseline_digest,
+        ),
+        (
+            "finalist_digest",
+            record.finalist_digest,
+        ),
+        (
+            "evaluator_digest",
+            record.evaluator_digest,
+        ),
+        (
+            "suite_digest",
+            record.suite_digest,
+        ),
     ):
         require_sha256(digest, name)
-    if isinstance(record.seed, bool) or not isinstance(record.seed, int) or record.seed < 0:
-        raise ValueError("seed must be a non-negative integer")
-    require_positive_int(record.case_count, "case_count")
-    require_score(record.baseline_score, "baseline_score")
-    require_score(record.finalist_score, "finalist_score")
-    if not math.isfinite(record.delta) or not -1.0 <= record.delta <= 1.0:
-        raise ValueError("delta must be finite and between -1 and 1")
-    require_score(record.required_score, "required_score")
-    require_score(record.minimum_gain, "minimum_gain")
-    if not isinstance(record.containment_passed, bool):
-        raise ValueError("containment_passed must be boolean")
-    if not isinstance(record.passed, bool):
-        raise ValueError("passed must be boolean")
-    if not isinstance(record.reason, str) or not record.reason:
-        raise ValueError("reason must be non-empty")
-    if not math.isfinite(record.created_at) or record.created_at <= 0:
-        raise ValueError("created_at must be finite and positive")
+    if record.seed is not None and (
+        isinstance(record.seed, bool)
+        or not isinstance(record.seed, int)
+        or record.seed < 0
+    ):
+        raise ValueError(
+            "seed must be null or a "
+            "non-negative integer"
+        )
+    require_positive_int(
+        record.case_count,
+        "case_count",
+    )
+    require_bool(
+        record.containment_passed,
+        "containment_passed",
+    )
+    require_score(
+        record.baseline_score,
+        "baseline_score",
+    )
+    require_score(
+        record.finalist_score,
+        "finalist_score",
+    )
+    require_delta(
+        record.delta,
+        "delta",
+    )
+    require_score(
+        record.required_score,
+        "required_score",
+    )
+    require_score(
+        record.minimum_gain,
+        "minimum_gain",
+    )
+    require_bool(
+        record.passed,
+        "passed",
+    )
+    require_text(
+        record.reason,
+        "reason",
+    )
+    require_positive_float(
+        record.created_at,
+        "created_at",
+    )
+
+    if record.ledger_version == 2:
+        require_text(
+            record.authority_version,
+            "authority_version",
+        )
+        require_sha256(
+            record.manifest_digest,
+            "manifest_digest",
+        )
+        require_sha256(
+            record.public_key_sha256,
+            "public_key_sha256",
+        )
+        require_text(
+            record.authority_signature,
+            "authority_signature",
+        )
+        require_text(
+            record.evaluation_id,
+            "evaluation_id",
+        )
+        require_positive_int(
+            record.metamorphic_pair_count,
+            "metamorphic_pair_count",
+        )
+        require_score(
+            record.baseline_metamorphic_score,
+            "baseline_metamorphic_score",
+        )
+        require_score(
+            record.finalist_metamorphic_score,
+            "finalist_metamorphic_score",
+        )
+        if record.replay_verified is not True:
+            raise ValueError(
+                "version-2 protected evidence "
+                "must have a verified replay"
+            )
+        require_text(
+            record.replay_signature,
+            "replay_signature",
+        )
+
     if record.previous_hash is not None:
-        require_sha256(record.previous_hash, "previous_hash")
+        require_sha256(
+            record.previous_hash,
+            "previous_hash",
+        )
     if record.record_hash is not None:
-        require_sha256(record.record_hash, "record_hash")
+        require_sha256(
+            record.record_hash,
+            "record_hash",
+        )
 
 
-def protected_record_hash(record: ProtectedEvaluationDecision) -> str:
-    payload = asdict(record)
-    payload.pop("record_hash", None)
+def protected_record_hash(
+    record: ProtectedEvaluationDecision,
+) -> str:
+    return protected_record_hash_dict(
+        asdict(record)
+    )
+
+
+def protected_record_hash_dict(
+    row: dict[str, Any],
+) -> str:
+    payload = {
+        key: value
+        for key, value in row.items()
+        if key != "record_hash"
+    }
     encoded = json.dumps(
         payload,
         sort_keys=True,
@@ -395,8 +1239,172 @@ def protected_record_hash(record: ProtectedEvaluationDecision) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def atomic_write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(f".{path.name}.{time.time_ns()}.tmp")
-    temp.write_text(content, encoding="utf-8")
+def require_object(
+    value: object,
+    name: str,
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"{name} must be an object"
+        )
+    return value
+
+
+def require_text(
+    value: object,
+    name: str,
+) -> str:
+    if (
+        not isinstance(value, str)
+        or not value
+    ):
+        raise ValueError(
+            f"{name} must be non-empty text"
+        )
+    return value
+
+
+def require_bool(
+    value: object,
+    name: str,
+) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(
+            f"{name} must be boolean"
+        )
+    return value
+
+
+def require_positive_int(
+    value: object,
+    name: str,
+) -> int:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or value <= 0
+    ):
+        raise ValueError(
+            f"{name} must be a positive integer"
+        )
+    return value
+
+
+def require_positive_float(
+    value: object,
+    name: str,
+) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(
+            value,
+            (int, float),
+        )
+    ):
+        raise ValueError(
+            f"{name} must be numeric"
+        )
+    number = float(value)
+    if (
+        not math.isfinite(number)
+        or number <= 0
+    ):
+        raise ValueError(
+            f"{name} must be finite and positive"
+        )
+    return number
+
+
+def require_score(
+    value: object,
+    name: str,
+) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(
+            value,
+            (int, float),
+        )
+    ):
+        raise ValueError(
+            f"{name} must be numeric"
+        )
+    score = float(value)
+    if (
+        not math.isfinite(score)
+        or not 0.0 <= score <= 1.0
+    ):
+        raise ValueError(
+            f"{name} must be finite "
+            "and between 0 and 1"
+        )
+    return score
+
+
+def require_delta(
+    value: object,
+    name: str,
+) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(
+            value,
+            (int, float),
+        )
+    ):
+        raise ValueError(
+            f"{name} must be numeric"
+        )
+    delta = float(value)
+    if (
+        not math.isfinite(delta)
+        or not -1.0 <= delta <= 1.0
+    ):
+        raise ValueError(
+            f"{name} must be finite "
+            "and between -1 and 1"
+        )
+    return delta
+
+
+def require_sha256(
+    value: object,
+    name: str,
+) -> str:
+    if not is_sha256(value):
+        raise ValueError(
+            f"{name} must be a lowercase "
+            "SHA-256 digest"
+        )
+    return str(value)
+
+
+def is_sha256(value: object) -> bool:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+    ):
+        return False
+    return all(
+        character
+        in "0123456789abcdef"
+        for character in value
+    )
+
+
+def atomic_write_text(
+    path: Path,
+    content: str,
+) -> None:
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    temp = path.with_name(
+        f".{path.name}.{time.time_ns()}.tmp"
+    )
+    temp.write_text(
+        content,
+        encoding="utf-8",
+    )
     temp.replace(path)
