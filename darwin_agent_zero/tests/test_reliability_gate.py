@@ -30,7 +30,7 @@ class OrderSensitiveSandbox:
         if source == BASELINE:
             passed = 0
         else:
-            passed = len(cases) if cases[0].name == "a" else len(cases) - 1
+            passed = len(cases) if cases[0].name in {"b", "c"} else len(cases) - 1
         return SuiteScore(
             passed=passed,
             total=len(cases),
