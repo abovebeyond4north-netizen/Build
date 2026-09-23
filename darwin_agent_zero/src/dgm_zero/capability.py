@@ -18,6 +18,7 @@ from .capability_model import (
 from .capability_sandbox import SkillSandbox
 from .capability_synthesis import TemplateSynthesizer
 from .memory import KnowledgeBank
+from .reliability_gate import IndependentReliabilityGate
 from .skill_library import SkillLibrary, holdout_digest, write_report
 
 
@@ -84,6 +85,7 @@ class CapabilityAcquirer:
         self.library = SkillLibrary(workspace)
         self.memory = KnowledgeBank(workspace)
         self.planner = CapabilityPlanner()
+        self.reliability = IndependentReliabilityGate(workspace)
 
     def acquire(
         self,
@@ -332,7 +334,40 @@ class CapabilityAcquirer:
             validation_survivors[0]
         )
 
-        # The holdout boundary opens only after the finalist is immutable.
+        # Independent promotion evidence is collected only after finalist
+        # selection. The generator cannot alter this gate, its replay seeds,
+        # ledger, or acceptance rule through the acquisition interface.
+        reliability = self.reliability.evaluate(
+            capability=spec.name,
+            baseline_source=baseline_source,
+            finalist_source=finalist.source,
+            entrypoint=spec.entrypoint,
+            validation_cases=validation_cases,
+            sandbox=self.sandbox,
+            minimum_gain=spec.thresholds.min_gain,
+        )
+        if not reliability.passed:
+            return self._finish(
+                spec,
+                holdout_digest_value=certification_digest,
+                status="reliability_gate_failed",
+                promoted=False,
+                baseline=baseline,
+                baseline_score=baseline_score,
+                finalist=finalist,
+                final_score=None,
+                train_score=train_score.correctness,
+                validation_score=validation_score.correctness,
+                holdout_score=None,
+                generated=len(generated),
+                trained=len(evaluated_train),
+                validated=len(validation_evidence),
+                holdout_evaluations=0,
+                tasks=tasks,
+            )
+
+        # The holdout boundary opens only after the finalist is immutable and
+        # the paired replay/ablation gate has passed.
         # The installed baseline is a fixed control, not another search candidate.
         baseline_holdout = self.sandbox.evaluate(
             baseline_source,
