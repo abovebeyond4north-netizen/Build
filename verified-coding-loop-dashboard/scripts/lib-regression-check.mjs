@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { includesAll, prependHistory, rankByScore, uniqueCount } from './lib/history-tools.mjs';
 import { getLearningSignals } from './lib/learning-signals.mjs';
+import { assessCapabilityEvidence } from './lib/capability-evidence.mjs';
 import { asNumber, clamp, round2 } from './lib/number-tools.mjs';
 import { projectPath, readJson, writeJson } from './lib/json-store.mjs';
 
@@ -33,6 +34,47 @@ try {
   assert.equal(includesAll('alpha beta gamma', ['alpha', 'delta']), false, 'includesAll should reject missing markers');
   assert.deepEqual(rankByScore([{ score: 1 }, { score: 3 }, { score: 2 }]).map(item => item.score), [3, 2, 1], 'rankByScore should sort descending');
 
+  const acceptedEvidence = assessCapabilityEvidence({
+    schemaVersion: 1,
+    evaluator: { independent: true, hiddenFromLearner: true },
+    holdout: { unseen: true, taskCount: 24, contaminationDetected: false },
+    baseline: { score: 0.5 },
+    candidate: { score: 0.7 },
+    replication: { count: 2, consistent: true },
+    unrelatedRegressionDetected: false,
+    provenance: {
+      baselineCommit: 'base-commit',
+      candidateCommit: 'candidate-commit',
+      taskSetCommitment: 'taskset-hash',
+      receiptHash: 'receipt-hash'
+    }
+  });
+  assert.equal(acceptedEvidence.accepted, true, 'complete independent holdout evidence should be accepted');
+  assert.equal(
+    assessCapabilityEvidence({}).status,
+    'not_measured',
+    'missing capability evidence must fail closed'
+  );
+  assert.equal(
+    assessCapabilityEvidence({
+      schemaVersion: 1,
+      evaluator: { independent: true, hiddenFromLearner: true },
+      holdout: { unseen: true, taskCount: 24, contaminationDetected: false },
+      baseline: { score: 0.7 },
+      candidate: { score: 0.6 },
+      replication: { count: 2, consistent: true },
+      unrelatedRegressionDetected: false,
+      provenance: {
+        baselineCommit: 'base-commit',
+        candidateCommit: 'candidate-commit',
+        taskSetCommitment: 'taskset-hash',
+        receiptHash: 'receipt-hash'
+      }
+    }).accepted,
+    false,
+    'regressing candidate evidence must be rejected'
+  );
+
   const signals = getLearningSignals({
     verified: {
       learningHistory: [{
@@ -43,7 +85,7 @@ try {
         afterScore: 12
       }]
     },
-    meta: { strategyHistory: [{ learningScore: 0.5 }] },
+    meta: { strategyHistory: [{ learningScore: 0.5, capabilityEvidenceAccepted: true }] },
     value: { experimentHistory: [{ id: 'portfolio-proof-page' }] }
   });
 
@@ -53,7 +95,7 @@ try {
   assert.equal(signals.codeWriteSucceeded, true, 'signals should identify successful write');
   assert.deepEqual(
     signals.skillSignals,
-    ['meta_learning_measurement', 'value_experiment_selection', 'quality_score_preserved'],
+    ['verified_capability_evidence', 'value_experiment_selection', 'quality_score_preserved'],
     'signals should detect all skill signals'
   );
 
@@ -63,7 +105,8 @@ try {
       'json-store',
       'number-tools',
       'history-tools',
-      'learning-signals'
+      'learning-signals',
+      'capability-evidence'
     ]
   }, null, 2));
 } finally {
