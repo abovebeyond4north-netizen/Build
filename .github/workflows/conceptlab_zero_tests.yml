@@ -1,4 +1,4 @@
-name: ConceptLab Zero P0-P5
+name: ConceptLab Zero P0-P6
 
 on:
   push:
@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   p0:
-    name: Python ${{ matrix.python-version }} sealed P0-P5
+    name: Python ${{ matrix.python-version }} sealed P0-P6
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
@@ -40,7 +40,7 @@ jobs:
       - name: Compile ConceptLab
         run: |
           cd conceptlab_zero
-          python -m compileall -q conceptlab.py p1.py p2.py p3.py p4.py p5.py tests scripts
+          python -m compileall -q conceptlab.py p1.py p2.py p3.py p4.py p5.py p6.py p6_learner.py tests scripts
 
       - name: Run unit tests
         run: |
@@ -77,11 +77,16 @@ jobs:
           cd conceptlab_zero
           python scripts/validate_p5.py
 
-      - name: Upload P0-P5 evidence bundle
+      - name: Run P6 active-curriculum campaign
+        run: |
+          cd conceptlab_zero
+          python scripts/validate_p6.py
+
+      - name: Upload P0-P6 evidence bundle
         if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v7
         with:
-          name: conceptlab-p0-p5-${{ github.sha }}
+          name: conceptlab-p0-p6-${{ github.sha }}
           path: |
             conceptlab_zero/.conceptlab_ci/manifest.commitment
             conceptlab_zero/.conceptlab_ci/sealed_manifest.revealed.json
@@ -107,4 +112,10 @@ jobs:
             conceptlab_zero/.conceptlab_ci/p5_campaign_result.json
             conceptlab_zero/.conceptlab_ci/p5_restart_receipt.json
             conceptlab_zero/.conceptlab_ci/raw_feature_store/**
+            conceptlab_zero/.conceptlab_ci/p6_manifest.commitment
+            conceptlab_zero/.conceptlab_ci/p6_manifest.revealed.json
+            conceptlab_zero/.conceptlab_ci/p6_evidence_ledger.jsonl
+            conceptlab_zero/.conceptlab_ci/p6_campaign_result.json
+            conceptlab_zero/.conceptlab_ci/p6_query_traces.json
+            conceptlab_zero/.conceptlab_ci/active_feature_store/**
           retention-days: 14
