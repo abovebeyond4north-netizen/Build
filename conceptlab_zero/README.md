@@ -1,4 +1,4 @@
-# ConceptLab Zero — P0/P1/P2/P3 Measurement Harness
+# ConceptLab Zero — P0/P1/P2/P3/P4 Measurement Harness
 
 ConceptLab Zero is the first executable measurement substrate for the Recursive-AI Concept Discovery Protocol.
 
@@ -107,6 +107,29 @@ train/holdout collisions, and fresh-process accuracy >= 0.95. This is bounded
 symbolic synthesis from supplied operators, not unrestricted program invention;
 CLG-1 remains locked.
 
+## P4 adaptive observation interfaces
+
+P4 keeps the P3 weighted-linear controller frozen and changes the observation
+problem. Each new domain contains 6 or 8 numeric slots with four or more
+distractors. The two controller inputs occur at different ordered positions in
+each layout.
+
+The learner receives 32 labeled support examples for the new observation space
+and searches only for an ordered projection into the frozen controller. It then
+faces 160 held-out examples on a wider numeric range. Controls include default
+first/last slots, the reversed learned projection, and a prior domain adapter
+when dimensionally valid.
+
+The learned controller's content digest must remain unchanged during adaptation.
+Adapters are persisted independently and a fresh Python process must reload both
+controller and adapter and recover the capability.
+
+P4 gates require support accuracy >= 0.95, D6 accuracy >= 0.95, gain over the
+strongest non-adapted control >= 0.20, zero support/holdout signal-pair overlap,
+fresh-process accuracy >= 0.95, exact adapter identification, and an unchanged
+controller digest. This removes the fixed pair-selection rule, but a generic
+numeric flattener and bounded ordered-slot adapter search are still supplied.
+
 ## Run
 
 ```bash
@@ -116,6 +139,7 @@ python scripts/validate.py
 python scripts/validate_p1.py
 python scripts/validate_p2.py
 python scripts/validate_p3.py
+python scripts/validate_p4.py
 ```
 
 The validation run creates `.conceptlab_ci/` containing:
@@ -134,11 +158,15 @@ The validation run creates `.conceptlab_ci/` containing:
 - `p3_campaign_result.json`
 - `p3_restart_receipt.json`
 - `symbolic_program_store/`
+- `p4_evidence_ledger.jsonl`
+- `p4_campaign_result.json`
+- `p4_restart_receipt.json`
+- `adapter_store/`
 
-GitHub Actions reruns the P0, P1, P2, and P3 campaigns on Python 3.11 and 3.12 and uploads the Python 3.12 evidence bundle.
+GitHub Actions reruns the P0, P1, P2, P3, and P4 campaigns on Python 3.11 and 3.12 and uploads the Python 3.12 evidence bundle.
 
 ## Claim boundary
 
 A passing P0 campaign means the learner transformed examples into a compact reusable rule that survived the specified representation changes and causal controls **within the supplied grammar and numeric-pair extractor**.
 
-P3 reduces the rule-vocabulary scaffold by constructing previously withheld predicates from lower-level operators, but the numeric-pair extractor and symbolic search language are still provided. The next highest-value stage is therefore learned/adaptive observation interfaces plus broader independently generated task families before any CLG-1 campaign can be justified.
+P3 reduces the rule-vocabulary scaffold and P4 learns domain-specific ordered observation adapters around a frozen controller. A generic numeric flattener, adapter search family, and symbolic construction language remain supplied. Broader independently generated task families and less hand-specified observation primitives are still required before a CLG-1 campaign can be justified.
