@@ -1,4 +1,4 @@
-# ConceptLab Zero — P0/P1/P2/P3/P4 Measurement Harness
+# ConceptLab Zero — P0/P1/P2/P3/P4/P5 Measurement Harness
 
 ConceptLab Zero is the first executable measurement substrate for the Recursive-AI Concept Discovery Protocol.
 
@@ -130,6 +130,30 @@ fresh-process accuracy >= 0.95, exact adapter identification, and an unchanged
 controller digest. This removes the fixed pair-selection rule, but a generic
 numeric flattener and bounded ordered-slot adapter search are still supplied.
 
+## P5 raw token and latent-slot discovery
+
+P5 removes another P4 scaffold: observations are now raw heterogeneous strings,
+and the actual controller inputs are not emitted as ordinary integers. Four
+independently seeded task families use opaque signed lexical encodings in bases
+2, 10, 16, and 36, different raw layouts, distractor token families, unrelated
+numeric metadata, and two different frozen P3 controllers.
+
+The learner receives only raw labeled support examples plus the frozen controller.
+It searches a bounded lexical-decoder grammar and ordered latent-token slots,
+then persists the selected feature capsule. The old P4 generic numeric flattener,
+wrong slot pairs, reversed slots, and the runner-up tokenizer hypothesis are
+evaluated as controls.
+
+A sealed P5 manifest commits family definitions and thresholds before results
+are produced. P5 gates require support accuracy >= 0.95, D7 held-out accuracy >=
+0.95, gain over the strongest control >= 0.20, zero support/holdout signal-pair
+collisions, exact decoder/slot recovery, fresh-process accuracy >= 0.95, and
+unchanged frozen-controller digests.
+
+P5 therefore demonstrates token-decoder and latent-slot discovery from raw text
+inside a bounded character-level decoder grammar. It does not establish
+unrestricted tokenization or representation invention.
+
 ## Run
 
 ```bash
@@ -140,6 +164,7 @@ python scripts/validate_p1.py
 python scripts/validate_p2.py
 python scripts/validate_p3.py
 python scripts/validate_p4.py
+python scripts/validate_p5.py
 ```
 
 The validation run creates `.conceptlab_ci/` containing:
@@ -162,11 +187,17 @@ The validation run creates `.conceptlab_ci/` containing:
 - `p4_campaign_result.json`
 - `p4_restart_receipt.json`
 - `adapter_store/`
+- `p5_manifest.commitment`
+- `p5_manifest.revealed.json`
+- `p5_evidence_ledger.jsonl`
+- `p5_campaign_result.json`
+- `p5_restart_receipt.json`
+- `raw_feature_store/`
 
-GitHub Actions reruns the P0, P1, P2, P3, and P4 campaigns on Python 3.11 and 3.12 and uploads the Python 3.12 evidence bundle.
+GitHub Actions reruns the P0, P1, P2, P3, P4, and P5 campaigns on Python 3.11 and 3.12 and uploads the Python 3.12 evidence bundle.
 
 ## Claim boundary
 
 A passing P0 campaign means the learner transformed examples into a compact reusable rule that survived the specified representation changes and causal controls **within the supplied grammar and numeric-pair extractor**.
 
-P3 reduces the rule-vocabulary scaffold and P4 learns domain-specific ordered observation adapters around a frozen controller. A generic numeric flattener, adapter search family, and symbolic construction language remain supplied. Broader independently generated task families and less hand-specified observation primitives are still required before a CLG-1 campaign can be justified.
+P3 reduces the rule-vocabulary scaffold, P4 learns ordered observation adapters, and P5 learns lexical decoders plus latent token slots directly from raw heterogeneous strings. The decoder/search language is still bounded and hand-specified. Broader families with learned character/substructure primitives, self-generated hypotheses, and protected cross-family evaluation are still required before a CLG-1 campaign can be justified.
