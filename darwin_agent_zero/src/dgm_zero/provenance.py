@@ -20,6 +20,7 @@ ARTIFACT_FILES = (
     "operator_bandit.json",
     "mined_cases.json",
     "health_report.json",
+    "reliability_gate.jsonl",
     "champion.py",
 )
 
