@@ -137,7 +137,7 @@ HIDDEN_TARGETS: tuple[tuple[str, PredicateProgram], ...] = (
         "sp_b816",
         PredicateProgram(
             a=1,
-            b=-1,
+            b=1,
             bias=0,
             absolute=True,
             predicate="ge",
