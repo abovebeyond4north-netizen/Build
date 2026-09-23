@@ -42,8 +42,10 @@ export function assessCapabilityEvidence(evidence) {
   if (evidence.unrelatedRegressionDetected !== false) {
     reasons.push('Unrelated-task non-regression is not established.');
   }
-  if (!nonEmptyString(provenance.baselineCommit)) reasons.push('Baseline commit provenance is missing.');
-  if (!nonEmptyString(provenance.candidateCommit)) reasons.push('Candidate commit provenance is missing.');
+  const baselineArtifact = provenance.baselineArtifact ?? provenance.baselineCommit;
+  const candidateArtifact = provenance.candidateArtifact ?? provenance.candidateCommit;
+  if (!nonEmptyString(baselineArtifact)) reasons.push('Baseline artifact provenance is missing.');
+  if (!nonEmptyString(candidateArtifact)) reasons.push('Candidate artifact provenance is missing.');
   if (!nonEmptyString(provenance.taskSetCommitment)) reasons.push('Task-set commitment is missing.');
   if (!nonEmptyString(provenance.receiptHash)) reasons.push('Evaluation receipt hash is missing.');
 
