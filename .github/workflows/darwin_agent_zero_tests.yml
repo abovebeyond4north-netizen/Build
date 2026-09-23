@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'darwin_agent_zero/**'
+      - 'verifier_authority/**'
+      - 'verifier_authority/**'
       - 'verified-coding-loop-dashboard/scripts/lib/capability-evidence.mjs'
       - 'verified-coding-loop-dashboard/scripts/verify-capability-evidence.mjs'
       - 'verified-coding-loop-dashboard/scripts/meta-learning-loop.mjs'
@@ -61,6 +63,13 @@ jobs:
         run: |
           cd darwin_agent_zero
           python -m compileall -q src tests scripts
+          cd ..
+          python -m compileall -q verifier_authority
+
+      - name: Run standalone verifier authority tests
+        run: |
+          cd verifier_authority
+          python -m unittest discover -s . -p 'test_*.py'
 
       - name: Run Darwin validation suite
         run: |
