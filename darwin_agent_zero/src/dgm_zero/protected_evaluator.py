@@ -273,6 +273,7 @@ class ProtectedEvaluator:
         env = {
             "PATH": os.environ.get("PATH", ""),
             "PYTHONHASHSEED": "0",
+            "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
             "PYTHONNOUSERSITE": "1",
             "PYTHONDONTWRITEBYTECODE": "1",
             "LANG": os.environ.get("LANG", "C.UTF-8"),
