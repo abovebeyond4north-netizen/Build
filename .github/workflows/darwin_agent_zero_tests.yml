@@ -7,6 +7,8 @@ on:
       - 'darwin_agent_zero/**'
       - 'verified-coding-loop-dashboard/scripts/lib/capability-evidence.mjs'
       - 'verified-coding-loop-dashboard/scripts/verify-capability-evidence.mjs'
+      - 'verified-coding-loop-dashboard/scripts/meta-learning-loop.mjs'
+      - 'verified-coding-loop-dashboard/scripts/meta-learning-loop.mjs'
       - 'verified-coding-loop-dashboard/package.json'
       - '.github/workflows/darwin_agent_zero_tests.yml'
   pull_request:
@@ -79,6 +81,13 @@ jobs:
         run: |
           node verified-coding-loop-dashboard/scripts/verify-capability-evidence.mjs \
             darwin_agent_zero/.dgm_dashboard_evidence/capability-evidence.json
+
+      - name: Prove meta-learning consumes sealed capability evidence
+        run: |
+          cd verified-coding-loop-dashboard
+          CAPABILITY_EVIDENCE_PATH="$GITHUB_WORKSPACE/darwin_agent_zero/.dgm_dashboard_evidence/capability-evidence.json" \
+            node scripts/meta-learning-loop.mjs
+          node -e "const fs=require('fs');const r=JSON.parse(fs.readFileSync('learning/meta-learning-report.json','utf8'));if(r.capabilityEvidenceAccepted!==true||r.capabilityStatus!=='independent_holdout_improvement')process.exit(1);"
 
       - name: Upload capability evidence receipt
         if: matrix.python-version == '3.12'
