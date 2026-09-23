@@ -23,7 +23,7 @@ objective/spec
     -> validate the strongest survivors
     -> select one finalist
     -> run protected paired replay + whole-change ablation against the incumbent
-    -> run a separate-process fresh hidden-suite evaluator for supported built-ins
+    -> request signed evidence from a separately versioned verifier authority
     -> evaluate that finalist ONCE on holdout
     -> require measurable gain over the installed skill
     -> content-address + version the verified skill
@@ -69,7 +69,11 @@ Candidate generation never receives validation or holdout cases. Training is use
 
 After finalist selection, an independent reliability gate replays the finalist and installed baseline over deterministic shuffled validation orders. Promotion is blocked if either score changes with order, if the proposed source is identical to the baseline, or if the worst paired improvement is below the declared minimum gain. The baseline therefore acts as a whole-change ablation/control before sealed holdout evidence is opened. Every gate decision is written to a hash-chained `reliability_gate.jsonl` ledger.
 
-For supported built-in capability families, a second verifier runs in a separate Python process and creates a fresh 32-case hidden suite from a one-shot random seed that is never supplied to candidate generation. The verifier first runs containment probes against import, filesystem, dunder/reflection, and non-terminating candidates; it then scores the incumbent and finalist, seals the evaluator source digest, suite digest, seed, scores, and verdict into `protected_evaluator.jsonl`, and refuses to redraw fresh evidence for the same finalist/evaluator version. The protected evaluator and promotion authority are outside the self-patch allowlist.
+For supported built-in capability families, Darwin delegates this step to the standalone `verifier_authority/authority.py` program rather than importing its evaluator. The authority owns its own sandbox, private random seed, hidden generators, metamorphic relations, and signing key. It creates 32 hidden examples plus 8 metamorphic pairs, runs containment probes against import, filesystem, dunder/reflection, dynamic-import, and non-terminating candidates, and returns only a signed public receipt. The private seed never enters Darwin's workspace.
+
+The controller verifies the authority's RSA/SHA-256 signature with OpenSSL, pins the public-key fingerprint on first use (or requires the explicit `DGM_VERIFIER_PUBLIC_KEY_SHA256` pin when configured), and immediately requests a second-process replay of the exact private suite. Promotion fails if the replay does not reproduce the original suite digest and scores. Changing acceptance thresholds cannot redraw a new hidden suite for the same finalist and authority version.
+
+The authority's private key and seed ledger live outside the learner workspace by default under `~/.dgm-verifier-authority/`. The self-patch allowlist cannot edit either the Darwin verification client or the top-level authority package. This protects against the bounded learner/self-patcher used here; it is not a claim of protection against an attacker who already controls the host OS account.
 
 Promoted skill manifests record the exact predecessor digest they replace plus the protected-evaluator evidence record when available. `SkillLibrary.rollback_current()` follows that verified dependency edge and validates the predecessor artifact hash before changing the installed manifest; it never guesses a rollback target.
 
@@ -148,7 +152,8 @@ Expected artifacts include:
 - `health_report.json` — run health invariants;
 - `provenance.json` — source/artifact fingerprints;
 - `reliability_gate.jsonl` — tamper-evident paired replay/ablation evidence;
-- `protected_evaluator.jsonl` — one-shot fresh hidden-suite and containment evidence;
+- `protected_evaluator.jsonl` — hash-chained signed authority receipts and replay evidence;
+- `verifier_authority_trust.json` — pinned verifier public-key identity and version metadata;
 - `capability_certifications.jsonl` — sealed holdout certification history;
 - `checkpoints/` — last-known-good recovery state.
 
@@ -161,7 +166,7 @@ source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
 python -m pip install -e .
 ```
 
-No API key is required for the current local synthesizer.
+No API key is required for the current local synthesizer. Protected built-in evaluation requires an available `openssl` executable for authority signing and signature verification.
 
 ## Verify
 
