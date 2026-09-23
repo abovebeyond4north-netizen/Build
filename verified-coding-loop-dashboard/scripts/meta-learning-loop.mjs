@@ -1,6 +1,7 @@
 import { projectPath, readJson, writeJson } from './lib/json-store.mjs';
 import { asNumber, clamp, round2 } from './lib/number-tools.mjs';
 import { prependHistory, uniqueCount } from './lib/history-tools.mjs';
+import { assessCapabilityEvidence } from './lib/capability-evidence.mjs';
 
 const root = process.cwd();
 
@@ -10,6 +11,7 @@ const paths = {
   value: projectPath(root, 'src/data/revenueLearningState.json'),
   proposal: projectPath(root, 'proposals/latest-verified-proposal.json'),
   valueReport: projectPath(root, 'revenue/revenue-learning-report.json'),
+  capabilityEvidence: projectPath(root, 'learning/capability-evidence.json'),
   report: projectPath(root, 'learning/meta-learning-report.json')
 };
 
@@ -99,18 +101,27 @@ const verified = readJson(paths.verified, { verifiedRuns: 0, learningHistory: []
 const value = readJson(paths.value, { loopRuns: 0, experimentHistory: [] });
 const proposal = readJson(paths.proposal, {});
 const valueReport = readJson(paths.valueReport, {});
+const capabilityEvidence = readJson(paths.capabilityEvidence, {});
+const capabilityAssessment = assessCapabilityEvidence(capabilityEvidence);
 
 const dimensions = computeDimensions({ verified, value, proposal, valueReport });
-const learningScore = scoreLearning(dimensions);
+const processActivityScore = scoreLearning(dimensions);
 const selectedStrategies = selectStrategies(dimensions);
 const now = new Date().toISOString();
-const decision = learningScore >= asNumber(meta.bestLearningScore, 0)
-  ? 'learning_state_improved_or_equal'
-  : 'learning_state_observed_lower_score';
+const previousProcessActivityScore = asNumber(meta.bestLearningScore, 0);
+const processDecision = processActivityScore >= previousProcessActivityScore
+  ? 'process_activity_improved_or_equal'
+  : 'process_activity_observed_lower_score';
+const decision = capabilityAssessment.accepted
+  ? 'capability_improvement_evidence_present'
+  : processDecision;
 
 const runRecord = {
   time: now,
-  learningScore,
+  learningScore: processActivityScore,
+  processActivityScore,
+  capabilityEvidenceAccepted: capabilityAssessment.accepted,
+  capabilityStatus: capabilityAssessment.status,
   ...dimensions,
   selectedStrategyIds: selectedStrategies.map(strategy => strategy.id),
   decision
@@ -119,7 +130,7 @@ const runRecord = {
 const nextMeta = {
   ...meta,
   metaRuns: asNumber(meta.metaRuns, 0) + 1,
-  bestLearningScore: Math.max(asNumber(meta.bestLearningScore, 0), learningScore),
+  bestLearningScore: Math.max(asNumber(meta.bestLearningScore, 0), processActivityScore),
   lastRunAt: now,
   lastDecision: decision,
   strategyHistory: prependHistory(runRecord, meta.strategyHistory, 50)
@@ -128,10 +139,14 @@ const nextMeta = {
 const report = {
   schemaVersion: 2,
   generatedAt: now,
-  purpose: 'Measure process activity and declared safeguards; not demonstrated capability improvement.',
-  metricKind: 'process_activity_proxy',
-  limitations: ['History length and cadence measure activity', 'Reversibility is assumed', 'Safety consistency checks a declaration', 'No independent capability or outcome evaluation'],
-  learningScore,
+  purpose: 'Separate process activity from independently evaluated capability improvement.',
+  metricKind: 'process_activity_plus_external_capability_evidence',
+  limitations: ['Process activity is not capability', 'Reversibility is assumed', 'Safety consistency checks a declaration', 'Capability improvement is accepted only from a separate sealed-evaluation evidence report'],
+  learningScore: processActivityScore,
+  processActivityScore,
+  capabilityEvidenceAccepted: capabilityAssessment.accepted,
+  capabilityStatus: capabilityAssessment.status,
+  capabilityAssessment,
   dimensions,
   selectedStrategies,
   hardBoundaries: [
@@ -148,7 +163,9 @@ writeJson(paths.report, report);
 
 console.log(JSON.stringify({
   ok: true,
-  learningScore,
+  processActivityScore,
+  capabilityEvidenceAccepted: capabilityAssessment.accepted,
+  capabilityStatus: capabilityAssessment.status,
   metaRuns: nextMeta.metaRuns,
   strategies: selectedStrategies.map(strategy => strategy.id)
 }, null, 2));
