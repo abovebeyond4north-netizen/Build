@@ -1,4 +1,4 @@
-# ConceptLab Zero — P0/P1 Measurement Harness
+# ConceptLab Zero — P0/P1/P2 Measurement Harness
 
 ConceptLab Zero is the first executable measurement substrate for the Recursive-AI Concept Discovery Protocol.
 
@@ -64,6 +64,29 @@ ablation fraction is:
 P1 gates are fixed at counterfactual accuracy >= 0.80 and ablation fraction >=
 0.50. Passing P1 still leaves CLG-1 locked.
 
+## P2 composition, revision, and restart persistence
+
+P2 adds three gates without changing P0 or P1:
+
+- **D4 composition:** two primitives are learned independently, frozen into
+  capsules, and then combined by learning a Boolean composition operator from
+  separate composition examples. The D4 holdout uses new numeric ranges and new
+  encodings. The full composition must beat either primitive alone and every
+  wrong composition operator.
+- **Contradiction-driven revision:** an intentionally ambiguous concept first
+  selects `distance_ge:4`. Fresh evidence containing direct contradictions at
+  distances 4 and 5 must trigger revision to `distance_ge:6`. An unrelated
+  stored concept must retain both its digest and held-out accuracy.
+- **Restart persistence:** only content-addressed concept/composition capsules
+  are persisted. A new Python process reloads the store and must recover the
+  primitive, revised, and composite capabilities on fresh evaluation suites.
+  Raw discovery episodes are not stored.
+
+P2 gates require D4 accuracy >= 0.90, D4 gain over the strongest control >=
+0.15, revised-concept holdout >= 0.95, unaffected-concept retention >= 0.95,
+all fresh-process scores >= 0.90, zero composition train/holdout collisions,
+and zero persisted raw-episode artifacts. P2 still does not unlock CLG-1.
+
 ## Run
 
 ```bash
@@ -71,6 +94,7 @@ cd conceptlab_zero
 python -m unittest discover -s tests
 python scripts/validate.py
 python scripts/validate_p1.py
+python scripts/validate_p2.py
 ```
 
 The validation run creates `.conceptlab_ci/` containing:
@@ -81,8 +105,12 @@ The validation run creates `.conceptlab_ci/` containing:
 - `campaign_result.json`
 - `p1_evidence_ledger.jsonl`
 - `p1_campaign_result.json`
+- `p2_evidence_ledger.jsonl`
+- `p2_campaign_result.json`
+- `p2_restart_receipt.json`
+- `concept_store/` (content-addressed capsules only)
 
-GitHub Actions reruns the P0 and P1 campaigns on Python 3.11 and 3.12 and uploads the Python 3.12 evidence bundle.
+GitHub Actions reruns the P0, P1, and P2 campaigns on Python 3.11 and 3.12 and uploads the Python 3.12 evidence bundle.
 
 ## Claim boundary
 
