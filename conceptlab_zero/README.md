@@ -136,13 +136,20 @@ P5 removes another P4 scaffold: observations are now raw heterogeneous strings,
 and the actual controller inputs are not emitted as ordinary integers. Four
 independently seeded task families use opaque signed lexical encodings in bases
 2, 10, 16, and 36, different raw layouts, distractor token families, unrelated
-numeric metadata, and two different frozen P3 controllers.
+numeric metadata, while a single frozen P3 controller is held constant across
+all four families so representation learning is the only experimental variable.
 
 The learner receives only raw labeled support examples plus the frozen controller.
 It searches a bounded lexical-decoder grammar and ordered latent-token slots,
 then persists the selected feature capsule. The old P4 generic numeric flattener,
 wrong slot pairs, reversed slots, and the runner-up tokenizer hypothesis are
 evaluated as controls.
+
+P5v1 mixed two controller semantics; its first run showed that a partially
+ablated feature could remain above 0.80 simply because one input of a weighted
+threshold controller was predictive. P5v1 was therefore invalidated as a
+representation-isolation experiment. P5v2 holds the controller constant while
+keeping the original acceptance thresholds unchanged.
 
 A sealed P5 manifest commits family definitions and thresholds before results
 are produced. P5 gates require support accuracy >= 0.95, D7 held-out accuracy >=
