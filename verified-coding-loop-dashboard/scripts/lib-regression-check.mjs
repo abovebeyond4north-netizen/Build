@@ -43,8 +43,8 @@ try {
     replication: { count: 2, consistent: true },
     unrelatedRegressionDetected: false,
     provenance: {
-      baselineCommit: 'base-commit',
-      candidateCommit: 'candidate-commit',
+      baselineArtifact: 'sha256:base-artifact',
+      candidateArtifact: 'sha256:candidate-artifact',
       taskSetCommitment: 'taskset-hash',
       receiptHash: 'receipt-hash'
     }

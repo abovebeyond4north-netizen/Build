@@ -11,7 +11,7 @@ const paths = {
   value: projectPath(root, 'src/data/revenueLearningState.json'),
   proposal: projectPath(root, 'proposals/latest-verified-proposal.json'),
   valueReport: projectPath(root, 'revenue/revenue-learning-report.json'),
-  capabilityEvidence: projectPath(root, 'learning/capability-evidence.json'),
+  capabilityEvidence: process.env.CAPABILITY_EVIDENCE_PATH || projectPath(root, 'learning/capability-evidence.json'),
   report: projectPath(root, 'learning/meta-learning-report.json')
 };
 
