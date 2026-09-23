@@ -6,7 +6,6 @@ on:
     paths:
       - 'darwin_agent_zero/**'
       - 'verifier_authority/**'
-      - 'verifier_authority/**'
       - 'verified-coding-loop-dashboard/scripts/lib/capability-evidence.mjs'
       - 'verified-coding-loop-dashboard/scripts/verify-capability-evidence.mjs'
       - 'verified-coding-loop-dashboard/scripts/meta-learning-loop.mjs'
@@ -17,6 +16,7 @@ on:
     branches: [main]
     paths:
       - 'darwin_agent_zero/**'
+      - 'verifier_authority/**'
       - 'verified-coding-loop-dashboard/scripts/lib/capability-evidence.mjs'
       - 'verified-coding-loop-dashboard/scripts/verify-capability-evidence.mjs'
       - 'verified-coding-loop-dashboard/package.json'
