@@ -79,8 +79,11 @@ class P4CampaignResult:
 
 
 DOMAIN_SPECS: tuple[tuple[str, int, tuple[int, int]], ...] = (
-    ("novel_nested_6", 6, (4, 1)),
-    ("novel_text_8", 8, (6, 2)),
+    # Keep the hidden signal pair disjoint from fixed first-two / last-two
+    # controls so those controls remain genuinely non-adapted. The reversed
+    # learned adapter still provides a strong two-signal causal control.
+    ("novel_nested_6", 6, (3, 2)),
+    ("novel_text_8", 8, (5, 3)),
 )
 
 
