@@ -1,4 +1,4 @@
-# ConceptLab Zero — P0/P1/P2 Measurement Harness
+# ConceptLab Zero — P0/P1/P2/P3 Measurement Harness
 
 ConceptLab Zero is the first executable measurement substrate for the Recursive-AI Concept Discovery Protocol.
 
@@ -87,6 +87,26 @@ P2 gates require D4 accuracy >= 0.90, D4 gain over the strongest control >=
 all fresh-process scores >= 0.90, zero composition train/holdout collisions,
 and zero persisted raw-episode artifacts. P2 still does not unlock CLG-1.
 
+## P3 withheld-predicate symbolic synthesis
+
+P3 removes one important P0 scaffold: the four target predicates are not supplied
+as named rules. Instead the learner receives a bounded program-construction
+language containing integer linear expressions, optional absolute value, modular
+equality, equality, and threshold comparison. It enumerates candidate programs,
+scores them on discovery episodes, and uses a minimum-description-length tie
+break.
+
+The targets include modulo-3, weighted-linear, absolute-sum, and modulo-5
+relations that are absent from the P0 rule list. P3 compares the synthesized
+program against the original P0 learner on the same held-out D5 suites. Programs
+are content-addressed and reloaded by a fresh Python process.
+
+P3 gates require discovery accuracy >= 0.98, D5 accuracy >= 0.95, improvement
+over the P0 control >= 0.20 for every target, compression >= 4x, zero structural
+train/holdout collisions, and fresh-process accuracy >= 0.95. This is bounded
+symbolic synthesis from supplied operators, not unrestricted program invention;
+CLG-1 remains locked.
+
 ## Run
 
 ```bash
@@ -95,6 +115,7 @@ python -m unittest discover -s tests
 python scripts/validate.py
 python scripts/validate_p1.py
 python scripts/validate_p2.py
+python scripts/validate_p3.py
 ```
 
 The validation run creates `.conceptlab_ci/` containing:
@@ -109,11 +130,15 @@ The validation run creates `.conceptlab_ci/` containing:
 - `p2_campaign_result.json`
 - `p2_restart_receipt.json`
 - `concept_store/` (content-addressed capsules only)
+- `p3_evidence_ledger.jsonl`
+- `p3_campaign_result.json`
+- `p3_restart_receipt.json`
+- `symbolic_program_store/`
 
-GitHub Actions reruns the P0, P1, and P2 campaigns on Python 3.11 and 3.12 and uploads the Python 3.12 evidence bundle.
+GitHub Actions reruns the P0, P1, P2, and P3 campaigns on Python 3.11 and 3.12 and uploads the Python 3.12 evidence bundle.
 
 ## Claim boundary
 
 A passing P0 campaign means the learner transformed examples into a compact reusable rule that survived the specified representation changes and causal controls **within the supplied grammar and numeric-pair extractor**.
 
-It does not establish learned representation invention because the extraction mechanism and rule vocabulary are provided. The next stages should remove progressively more of that scaffolding: learned adapters, withheld rule families, contradiction-driven revision, composition, restart persistence, and eventually the preregistered multi-family CLG-1 campaign.
+P3 reduces the rule-vocabulary scaffold by constructing previously withheld predicates from lower-level operators, but the numeric-pair extractor and symbolic search language are still provided. The next highest-value stage is therefore learned/adaptive observation interfaces plus broader independently generated task families before any CLG-1 campaign can be justified.
