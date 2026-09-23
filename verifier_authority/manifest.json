@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "authority_version": "1.0.0",
+  "protocol_version": 2,
+  "hidden_case_count": 32,
+  "metamorphic_pair_count": 8,
+  "supported_capabilities": [
+    "clamp_value",
+    "normalize_text",
+    "python_error_diagnosis",
+    "sequence_span"
+  ]
+}
