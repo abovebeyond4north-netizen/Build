@@ -16,7 +16,7 @@ from p3 import HIDDEN_TARGETS, PredicateProgram, ProgramStore
 from p4 import flatten_numeric_values, verify_p4
 
 
-P5_PROTOCOL_VERSION = 1
+P5_PROTOCOL_VERSION = 2
 SUPPORT_ACCURACY_GATE = 0.95
 D7_ACCURACY_GATE = 0.95
 CONTROL_GAIN_GATE = 0.20
@@ -72,7 +72,7 @@ class RawFamilySpec:
 FAMILY_SPECS: tuple[RawFamilySpec, ...] = (
     RawFamilySpec(
         "rf_audit_hex",
-        "sp_7a20",
+        "sp_d402",
         "opaque_q16",
         6,
         (3, 1),
@@ -90,7 +90,7 @@ FAMILY_SPECS: tuple[RawFamilySpec, ...] = (
     ),
     RawFamilySpec(
         "rf_route_b36",
-        "sp_7a20",
+        "sp_d402",
         "opaque_s36",
         8,
         (5, 3),
