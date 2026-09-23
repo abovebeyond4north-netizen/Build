@@ -217,12 +217,17 @@ def extract_numeric_pair(observation: Any) -> tuple[int, int]:
     return values[0], values[1]
 
 
+def normalized_pair(left: int, right: int) -> tuple[int, int]:
+    return (left, right) if left <= right else (right, left)
+
+
 def generate_episodes(
     principle: Principle,
     domains: tuple[str, ...],
     *,
     seed: int,
     count: int,
+    exclude_pairs: frozenset[tuple[int, int]] = frozenset(),
 ) -> tuple[Episode, ...]:
     if count < 2:
         raise ValueError("count must be at least two")
@@ -230,7 +235,14 @@ def generate_episodes(
         raise ValueError("domains must be non-empty")
 
     rng = random.Random(seed)
-    pairs = [(left, right) for left in range(-12, 13) for right in range(-12, 13)]
+    # Equality has comparatively few positive pairs, so use a broad finite
+    # universe that can support disjoint balanced train/D0/D1/D2/D3 suites.
+    pairs = [
+        (left, right)
+        for left in range(-64, 65)
+        for right in range(-64, 65)
+        if normalized_pair(left, right) not in exclude_pairs
+    ]
     rng.shuffle(pairs)
     positive = [pair for pair in pairs if principle.apply(*pair)]
     negative = [pair for pair in pairs if not principle.apply(*pair)]
@@ -256,6 +268,25 @@ def generate_episodes(
 
 def episode_digest(episode: Episode) -> str:
     return sha256_text(canonical_json(asdict(episode)))
+
+
+def structural_episode_digest(episode: Episode) -> str:
+    left, right = extract_numeric_pair(episode.observation)
+    return sha256_text(
+        canonical_json(
+            {
+                "pair": normalized_pair(left, right),
+                "label": episode.label,
+            }
+        )
+    )
+
+
+def episode_pair_keys(episodes: Iterable[Episode]) -> frozenset[tuple[int, int]]:
+    return frozenset(
+        normalized_pair(*extract_numeric_pair(episode.observation))
+        for episode in episodes
+    )
 
 
 def suite_digest(episodes: Iterable[Episode]) -> str:
@@ -388,9 +419,12 @@ def leakage_collisions(
     training: tuple[Episode, ...],
     evaluation_suites: tuple[tuple[Episode, ...], ...],
 ) -> int:
-    train_hashes = {episode_digest(episode) for episode in training}
+    # Compare normalized structure rather than rendered surfaces. The same
+    # underlying pair in a different JSON/string encoding still counts as
+    # leakage for this experiment.
+    train_hashes = {structural_episode_digest(episode) for episode in training}
     evaluation_hashes = {
-        episode_digest(episode)
+        structural_episode_digest(episode)
         for suite in evaluation_suites
         for episode in suite
     }
@@ -489,29 +523,41 @@ def evaluate_principle(
         seed=seed,
         count=manifest.train_cases,
     )
+    used_pairs = set(episode_pair_keys(training))
+
     d0 = generate_episodes(
         hidden,
         manifest.d0_domains,
         seed=seed + 10_000,
         count=manifest.eval_cases,
+        exclude_pairs=frozenset(used_pairs),
     )
+    used_pairs.update(episode_pair_keys(d0))
+
     d1 = generate_episodes(
         hidden,
         manifest.d1_domains,
         seed=seed + 20_000,
         count=manifest.eval_cases,
+        exclude_pairs=frozenset(used_pairs),
     )
+    used_pairs.update(episode_pair_keys(d1))
+
     d2 = generate_episodes(
         hidden,
         manifest.d2_domains,
         seed=seed + 30_000,
         count=manifest.eval_cases,
+        exclude_pairs=frozenset(used_pairs),
     )
+    used_pairs.update(episode_pair_keys(d2))
+
     d3 = generate_episodes(
         hidden,
         manifest.d3_domains,
         seed=seed + 40_000,
         count=manifest.eval_cases,
+        exclude_pairs=frozenset(used_pairs),
     )
 
     capsule, train_accuracy = RuleInducer().fit(training)
