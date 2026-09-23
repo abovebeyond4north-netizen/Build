@@ -1,4 +1,4 @@
-name: ConceptLab Zero P0-P3
+name: ConceptLab Zero P0-P4
 
 on:
   push:
@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   p0:
-    name: Python ${{ matrix.python-version }} sealed P0-P3
+    name: Python ${{ matrix.python-version }} sealed P0-P4
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
@@ -40,7 +40,7 @@ jobs:
       - name: Compile ConceptLab
         run: |
           cd conceptlab_zero
-          python -m compileall -q conceptlab.py p1.py p2.py p3.py tests scripts
+          python -m compileall -q conceptlab.py p1.py p2.py p3.py p4.py tests scripts
 
       - name: Run unit tests
         run: |
@@ -67,11 +67,16 @@ jobs:
           cd conceptlab_zero
           python scripts/validate_p3.py
 
-      - name: Upload P0-P3 evidence bundle
+      - name: Run P4 adaptive-interface campaign
+        run: |
+          cd conceptlab_zero
+          python scripts/validate_p4.py
+
+      - name: Upload P0-P4 evidence bundle
         if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v7
         with:
-          name: conceptlab-p0-p3-${{ github.sha }}
+          name: conceptlab-p0-p4-${{ github.sha }}
           path: |
             conceptlab_zero/.conceptlab_ci/manifest.commitment
             conceptlab_zero/.conceptlab_ci/sealed_manifest.revealed.json
@@ -87,4 +92,8 @@ jobs:
             conceptlab_zero/.conceptlab_ci/p3_campaign_result.json
             conceptlab_zero/.conceptlab_ci/p3_restart_receipt.json
             conceptlab_zero/.conceptlab_ci/symbolic_program_store/**
+            conceptlab_zero/.conceptlab_ci/p4_evidence_ledger.jsonl
+            conceptlab_zero/.conceptlab_ci/p4_campaign_result.json
+            conceptlab_zero/.conceptlab_ci/p4_restart_receipt.json
+            conceptlab_zero/.conceptlab_ci/adapter_store/**
           retention-days: 14
