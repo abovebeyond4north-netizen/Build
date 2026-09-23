@@ -20,6 +20,9 @@ SNAPSHOT_FILES = (
     "mined_cases.json",
     "health_report.json",
     "provenance.json",
+    "reliability_gate.jsonl",
+    "protected_evaluator.jsonl",
+    "capability_certifications.jsonl",
     "champion.py",
 )
 SNAPSHOT_FILE_SET = frozenset(SNAPSHOT_FILES)

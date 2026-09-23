@@ -18,6 +18,7 @@ from .capability_model import (
 from .capability_sandbox import SkillSandbox
 from .capability_synthesis import TemplateSynthesizer
 from .memory import KnowledgeBank
+from .protected_evaluator import ProtectedEvaluator
 from .reliability_gate import IndependentReliabilityGate
 from .skill_library import SkillLibrary, holdout_digest, write_report
 
@@ -86,6 +87,7 @@ class CapabilityAcquirer:
         self.memory = KnowledgeBank(workspace)
         self.planner = CapabilityPlanner()
         self.reliability = IndependentReliabilityGate(workspace)
+        self.protected_evaluator = ProtectedEvaluator(workspace)
 
     def acquire(
         self,
@@ -366,6 +368,37 @@ class CapabilityAcquirer:
                 tasks=tasks,
             )
 
+        protected = self.protected_evaluator.evaluate(
+            capability=spec.name,
+            entrypoint=spec.entrypoint,
+            baseline_source=baseline_source,
+            finalist_source=finalist.source,
+            required_score=spec.thresholds.holdout,
+            minimum_gain=spec.thresholds.min_gain,
+        )
+        if protected is not None and not protected.passed:
+            return self._finish(
+                spec,
+                holdout_digest_value=certification_digest,
+                status="protected_evaluator_failed",
+                promoted=False,
+                baseline=baseline,
+                baseline_score=baseline_score,
+                finalist=finalist,
+                final_score=None,
+                train_score=train_score.correctness,
+                validation_score=validation_score.correctness,
+                holdout_score=None,
+                generated=len(generated),
+                trained=len(evaluated_train),
+                validated=len(validation_evidence),
+                holdout_evaluations=0,
+                tasks=tasks,
+            )
+        promotion_evidence_hash = (
+            protected.record_hash if protected is not None else None
+        )
+
         # The holdout boundary opens only after the finalist is immutable and
         # the paired replay/ablation gate has passed.
         # The installed baseline is a fixed control, not another search candidate.
@@ -431,6 +464,7 @@ class CapabilityAcquirer:
             validated=len(validation_evidence),
             holdout_evaluations=1,
             tasks=tasks,
+            promotion_evidence_hash=promotion_evidence_hash,
         )
 
     def _finish(
@@ -452,6 +486,7 @@ class CapabilityAcquirer:
         validated: int,
         holdout_evaluations: int,
         tasks: tuple[AcquisitionTask, ...],
+        promotion_evidence_hash: str | None = None,
     ) -> AcquisitionReport:
         report_dir = self.workspace / "capability_reports"
         report_dir.mkdir(parents=True, exist_ok=True)
@@ -487,6 +522,7 @@ class CapabilityAcquirer:
                 spec,
                 finalist,
                 report,
+                evidence_record_hash=promotion_evidence_hash,
             )
             report = AcquisitionReport(
                 **{

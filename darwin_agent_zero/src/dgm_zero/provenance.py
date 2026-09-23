@@ -21,6 +21,8 @@ ARTIFACT_FILES = (
     "mined_cases.json",
     "health_report.json",
     "reliability_gate.jsonl",
+    "protected_evaluator.jsonl",
+    "capability_certifications.jsonl",
     "champion.py",
 )
 

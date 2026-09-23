@@ -132,7 +132,13 @@ class SkillLibrary:
         spec: CapabilitySpec,
         candidate: SkillCandidate,
         report: AcquisitionReport,
+        *,
+        evidence_record_hash: str | None = None,
     ) -> Path:
+        if evidence_record_hash is not None and not is_sha256(evidence_record_hash):
+            raise ValueError("evidence_record_hash must be a lowercase SHA-256 digest")
+        current = self.current(spec.name)
+        parent_digest = current[1]["digest"] if current is not None else None
         root = self._capability_root(spec.name)
         versions = root / "versions"
         versions.mkdir(parents=True, exist_ok=True)
@@ -148,6 +154,8 @@ class SkillLibrary:
             "relative_path": str(version_path.relative_to(root)),
             "final_score": report.final_score,
             "holdout_digest": report.holdout_digest,
+            "parent_digest": parent_digest,
+            "evidence_record_hash": evidence_record_hash,
             "promoted_at": report.created_at,
         }
         atomic_write_text(
@@ -164,6 +172,78 @@ class SkillLibrary:
         history.append(json.dumps(manifest, sort_keys=True))
         atomic_write_text(history_path, "\n".join(history) + "\n")
         return version_path
+
+    def rollback_current(self, capability: str) -> dict[str, Any]:
+        """Restore the exact verified predecessor of the installed skill.
+
+        Rollback follows the parent digest recorded at promotion time. It fails
+        closed for legacy/unlinked manifests instead of guessing which historical
+        version should be restored.
+        """
+        current = self.current(capability)
+        if current is None:
+            raise ValueError(f"no installed skill for {capability}")
+        _, current_manifest = current
+        current_digest = current_manifest.get("digest")
+        parent_digest = current_manifest.get("parent_digest")
+        if not is_sha256(current_digest):
+            raise ValueError("current manifest has an invalid digest")
+        if not is_sha256(parent_digest):
+            raise ValueError("current skill has no verified predecessor")
+
+        root = self._capability_root(capability)
+        history_path = root / "history.jsonl"
+        if not history_path.exists():
+            raise ValueError("capability history is missing")
+
+        predecessor: dict[str, Any] | None = None
+        for line_number, line in enumerate(
+            reversed(history_path.read_text(encoding="utf-8").splitlines()),
+            start=1,
+        ):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"invalid capability history near reverse line {line_number}"
+                ) from exc
+            if not isinstance(row, dict):
+                raise ValueError("capability history must contain objects")
+            if row.get("digest") == parent_digest:
+                predecessor = row
+                break
+        if predecessor is None:
+            raise ValueError("verified predecessor is missing from capability history")
+
+        relative_path = predecessor.get("relative_path")
+        if not isinstance(relative_path, str) or not relative_path:
+            raise ValueError("verified predecessor has no valid artifact path")
+        path = (root / relative_path).resolve()
+        resolved_root = root.resolve()
+        if path != resolved_root and resolved_root not in path.parents:
+            raise ValueError("verified predecessor path escapes capability root")
+        if not path.is_file():
+            raise ValueError("verified predecessor artifact is missing")
+        source = path.read_text(encoding="utf-8")
+        if SkillCandidate(source, "rollback").digest != parent_digest:
+            raise ValueError("verified predecessor artifact digest mismatch")
+
+        rollback_manifest = {
+            **predecessor,
+            "rolled_back_from": current_digest,
+            "rollback_at": time.time(),
+            "rollback_reason": "verified_parent_dependency",
+        }
+        atomic_write_text(
+            root / "current.json",
+            json.dumps(rollback_manifest, indent=2, sort_keys=True),
+        )
+        history = history_path.read_text(encoding="utf-8").splitlines()
+        history.append(json.dumps(rollback_manifest, sort_keys=True))
+        atomic_write_text(history_path, "\n".join(history) + "\n")
+        return rollback_manifest
 
     def _certifications(self) -> list[dict[str, Any]]:
         if not self.certification_path.exists():

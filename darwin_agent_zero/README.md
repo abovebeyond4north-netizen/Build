@@ -23,6 +23,7 @@ objective/spec
     -> validate the strongest survivors
     -> select one finalist
     -> run protected paired replay + whole-change ablation against the incumbent
+    -> run a separate-process fresh hidden-suite evaluator for supported built-ins
     -> evaluate that finalist ONCE on holdout
     -> require measurable gain over the installed skill
     -> content-address + version the verified skill
@@ -67,6 +68,10 @@ Example specifications are under `examples/capabilities/`.
 Candidate generation never receives validation or holdout cases. Training is used for search, validation is used for finalist selection, and holdout is evaluated once for certification.
 
 After finalist selection, an independent reliability gate replays the finalist and installed baseline over deterministic shuffled validation orders. Promotion is blocked if either score changes with order, if the proposed source is identical to the baseline, or if the worst paired improvement is below the declared minimum gain. The baseline therefore acts as a whole-change ablation/control before sealed holdout evidence is opened. Every gate decision is written to a hash-chained `reliability_gate.jsonl` ledger.
+
+For supported built-in capability families, a second verifier runs in a separate Python process and creates a fresh 32-case hidden suite from a one-shot random seed that is never supplied to candidate generation. The verifier first runs containment probes against import, filesystem, dunder/reflection, and non-terminating candidates; it then scores the incumbent and finalist, seals the evaluator source digest, suite digest, seed, scores, and verdict into `protected_evaluator.jsonl`, and refuses to redraw fresh evidence for the same finalist/evaluator version. The protected evaluator and promotion authority are outside the self-patch allowlist.
+
+Promoted skill manifests record the exact predecessor digest they replace plus the protected-evaluator evidence record when available. `SkillLibrary.rollback_current()` follows that verified dependency edge and validates the predecessor artifact hash before changing the installed manifest; it never guesses a rollback target.
 
 Each capability holdout suite receives a cryptographic digest. Once that suite has been consumed, Darwin Agent Zero will not expose it to another adaptive acquisition attempt. A failed certification therefore requires fresh holdout evidence rather than allowing the system to repeatedly tune against the same hidden test.
 
@@ -143,6 +148,8 @@ Expected artifacts include:
 - `health_report.json` — run health invariants;
 - `provenance.json` — source/artifact fingerprints;
 - `reliability_gate.jsonl` — tamper-evident paired replay/ablation evidence;
+- `protected_evaluator.jsonl` — one-shot fresh hidden-suite and containment evidence;
+- `capability_certifications.jsonl` — sealed holdout certification history;
 - `checkpoints/` — last-known-good recovery state.
 
 ## Install
