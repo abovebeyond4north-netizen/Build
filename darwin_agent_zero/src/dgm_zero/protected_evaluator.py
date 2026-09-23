@@ -195,6 +195,14 @@ class ProtectedEvaluator:
             protocol_version=PROTECTED_EVALUATOR_PROTOCOL_VERSION,
         )
         if cached is not None:
+            if (
+                abs(cached.required_score - float(required_score)) > 1e-12
+                or abs(cached.minimum_gain - float(minimum_gain)) > 1e-12
+            ):
+                raise ValueError(
+                    "protected evaluator evidence already consumed under different "
+                    "acceptance thresholds"
+                )
             return cached
 
         seed = self._fresh_seed()
