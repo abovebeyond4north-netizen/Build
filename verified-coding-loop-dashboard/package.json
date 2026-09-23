@@ -15,6 +15,7 @@
     "propose:improvement": "node scripts/propose-improvement.mjs",
     "value:learn": "node scripts/revenue-learning-loop.mjs",
     "meta:learn": "node scripts/meta-learning-loop.mjs",
+    "capability:verify": "node scripts/verify-capability-evidence.mjs",
     "time:value": "node scripts/time-value-loop.mjs",
     "compute:budget": "node scripts/compute-budget-loop.mjs",
     "process:focus": "node scripts/process-focus-loop.mjs",
