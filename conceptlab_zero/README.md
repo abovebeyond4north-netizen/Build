@@ -1,4 +1,4 @@
-# ConceptLab Zero — P0 Measurement Harness
+# ConceptLab Zero — P0/P1 Measurement Harness
 
 ConceptLab Zero is the first executable measurement substrate for the Recursive-AI Concept Discovery Protocol.
 
@@ -41,12 +41,36 @@ Current P0 gates require:
 - exact hidden-principle recovery;
 - zero exact train/evaluation collisions.
 
+## P1 causal utility
+
+P1 is a separate evidence layer bound to the verified P0 manifest. It does not
+retroactively change the P0 thresholds.
+
+For every recovered principle it creates 64 evaluator-owned interventions from a
+numeric range outside the P0 discovery distribution. Half of the interventions
+change the hidden principle's outcome and half preserve it. The capsule must
+predict both the post-intervention outcome and whether the intervention changes
+the outcome.
+
+P1 also performs an explicit whole-capsule ablation. The learned capsule is
+compared with the stronger of an irrelevant learned principle and a
+complexity-matched sham on a fresh balanced D3-style suite. The attributable
+ablation fraction is:
+
+```text
+(capsule_score - ablated_score) / (capsule_score - 0.5)
+```
+
+P1 gates are fixed at counterfactual accuracy >= 0.80 and ablation fraction >=
+0.50. Passing P1 still leaves CLG-1 locked.
+
 ## Run
 
 ```bash
 cd conceptlab_zero
 python -m unittest discover -s tests
 python scripts/validate.py
+python scripts/validate_p1.py
 ```
 
 The validation run creates `.conceptlab_ci/` containing:
@@ -55,8 +79,10 @@ The validation run creates `.conceptlab_ci/` containing:
 - `sealed_manifest.revealed.json`
 - `evidence_ledger.jsonl`
 - `campaign_result.json`
+- `p1_evidence_ledger.jsonl`
+- `p1_campaign_result.json`
 
-GitHub Actions reruns the campaign on Python 3.11 and 3.12 and uploads the Python 3.12 evidence bundle.
+GitHub Actions reruns the P0 and P1 campaigns on Python 3.11 and 3.12 and uploads the Python 3.12 evidence bundle.
 
 ## Claim boundary
 
