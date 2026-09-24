@@ -73,7 +73,11 @@ For supported built-in capability families, Darwin delegates this step to the st
 
 The controller verifies the authority's RSA/SHA-256 signature with OpenSSL, pins the public-key fingerprint on first use (or requires the explicit `DGM_VERIFIER_PUBLIC_KEY_SHA256` pin when configured), and immediately requests a second-process replay of the exact private suite. Promotion fails if the replay does not reproduce the original suite digest and scores. Changing acceptance thresholds cannot redraw a new hidden suite for the same finalist and authority version.
 
-The authority's private key and seed ledger live outside the learner workspace by default under `~/.dgm-verifier-authority/`. The self-patch allowlist cannot edit either the Darwin verification client or the top-level authority package. This protects against the bounded learner/self-patcher used here; it is not a claim of protection against an attacker who already controls the host OS account.
+Protected evaluation now defaults to the hardened `verifier_authority/Dockerfile` runtime. Darwin launches it with no network, a read-only root filesystem, all Linux capabilities dropped, `no-new-privileges`, PID/CPU/memory/file-descriptor limits, and only a bounded tmpfs plus a Docker-managed private state volume writable. The image is required to run as a non-root UID. Before hidden evaluation, a live isolation probe confirms non-root execution, zero effective capabilities, a read-only authority filesystem, no Docker socket or host-root mount, blocked outbound networking, and a writable private state volume.
+
+The authority's private key and seed ledger therefore live in that Docker-managed state volume rather than the learner workspace. Darwin pins both the signing-key fingerprint and the Docker image content ID in `verifier_authority_trust.json`; replacing the image under the same tag fails closed. If Docker or the hardened image is unavailable, protected built-in evaluation stops rather than silently falling back to a host process. Host-process execution remains available only when `DGM_VERIFIER_AUTHORITY_MODE=process` is explicitly selected for development/unit testing.
+
+For additional daemon isolation on Linux, Rootless Docker can be used, and `DGM_VERIFIER_REQUIRE_ROOTLESS=1` makes it mandatory. The self-patch allowlist cannot edit either the Darwin verification client or the top-level authority package. This materially strengthens isolation against the bounded learner/self-patcher, but it is still not a claim of protection against an attacker who controls the Docker daemon or host OS account.
 
 Promoted skill manifests record the exact predecessor digest they replace plus the protected-evaluator evidence record when available. `SkillLibrary.rollback_current()` follows that verified dependency edge and validates the predecessor artifact hash before changing the installed manifest; it never guesses a rollback target.
 
@@ -166,7 +170,7 @@ source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
 python -m pip install -e .
 ```
 
-No API key is required for the current local synthesizer. Protected built-in evaluation requires an available `openssl` executable for authority signing and signature verification.
+No API key is required for the current local synthesizer. Protected built-in evaluation defaults to Docker plus an available host `openssl` executable for signature verification. Build the verifier image with `docker build -t dgm-verifier-authority:local verifier_authority` from the repository root. Rootless Docker is recommended where available.
 
 ## Verify
 

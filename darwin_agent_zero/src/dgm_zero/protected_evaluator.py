@@ -180,6 +180,10 @@ class ProtectedEvaluator:
         authority_path: Path | None = None,
         authority_state: Path | None = None,
         trusted_public_key_sha256: str | None = None,
+        authority_mode: str | None = None,
+        authority_image: str | None = None,
+        authority_volume: str | None = None,
+        docker_bin: str | None = None,
     ) -> None:
         if (
             not math.isfinite(timeout_seconds)
@@ -202,6 +206,40 @@ class ProtectedEvaluator:
             if authority_state is not None
             else default_authority_state()
         )
+        self.authority_mode = (
+            authority_mode
+            or os.environ.get("DGM_VERIFIER_AUTHORITY_MODE")
+            or "container"
+        ).strip().lower()
+        if self.authority_mode not in {"container", "process"}:
+            raise ValueError(
+                "authority_mode must be 'container' or 'process'"
+            )
+        self.authority_image = (
+            authority_image
+            or os.environ.get("DGM_VERIFIER_AUTHORITY_IMAGE")
+            or "dgm-verifier-authority:local"
+        )
+        if not isinstance(self.authority_image, str) or not self.authority_image.strip():
+            raise ValueError("authority_image must be non-empty")
+        self.authority_volume = (
+            authority_volume
+            or os.environ.get("DGM_VERIFIER_AUTHORITY_VOLUME")
+            or default_authority_volume(self.workspace)
+        )
+        if not isinstance(self.authority_volume, str) or not self.authority_volume.strip():
+            raise ValueError("authority_volume must be non-empty")
+        configured_docker = (
+            docker_bin
+            or os.environ.get("DGM_DOCKER_BIN")
+            or "docker"
+        )
+        self.docker_bin = (
+            shutil.which(configured_docker)
+            if self.authority_mode == "container"
+            else None
+        )
+        self.runtime_metadata: dict[str, Any] | None = None
         configured_pin = (
             trusted_public_key_sha256
             or os.environ.get(
@@ -597,6 +635,20 @@ class ProtectedEvaluator:
                 raise ValueError(
                     "verifier authority identity changed"
                 )
+            if trust.get("runtime_mode") not in (None, self.authority_mode):
+                raise ValueError(
+                    "verifier authority runtime mode changed"
+                )
+            if (
+                self.runtime_metadata is not None
+                and trust.get("runtime_image_id") not in (
+                    None,
+                    self.runtime_metadata.get("image_id"),
+                )
+            ):
+                raise ValueError(
+                    "verifier authority container image changed"
+                )
             first_seen = trust.get(
                 "first_seen"
             )
@@ -630,6 +682,27 @@ class ProtectedEvaluator:
                 if self.configured_pin
                 is not None
                 else "trust_on_first_use"
+            ),
+            "runtime_mode": self.authority_mode,
+            "runtime_image": (
+                self.authority_image
+                if self.authority_mode == "container"
+                else None
+            ),
+            "runtime_image_id": (
+                self.runtime_metadata.get("image_id")
+                if self.runtime_metadata is not None
+                else None
+            ),
+            "runtime_user": (
+                self.runtime_metadata.get("user")
+                if self.runtime_metadata is not None
+                else None
+            ),
+            "runtime_rootless": (
+                self.runtime_metadata.get("rootless")
+                if self.runtime_metadata is not None
+                else None
             ),
         }
         atomic_write_text(
@@ -862,6 +935,21 @@ class ProtectedEvaluator:
         command: str,
         request: dict[str, Any] | None,
     ) -> dict[str, Any]:
+        if self.authority_mode == "container":
+            return self._run_container_authority(command, request)
+        return self._run_process_authority(command, request)
+
+    def _run_process_authority(
+        self,
+        command: str,
+        request: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        self.runtime_metadata = {
+            "mode": "process",
+            "image_id": None,
+            "user": None,
+            "rootless": None,
+        }
         if (
             not self.authority_path.exists()
             or not self.authority_path.is_file()
@@ -934,31 +1022,275 @@ class ProtectedEvaluator:
             raise ValueError(
                 "verifier authority process timed out"
             ) from exc
-        detail = (
-            completed.stdout
-            or completed.stderr
-            or ""
-        ).strip()
+        return parse_authority_response(
+            completed,
+            "verifier authority process",
+        )
+
+
+
+    def _run_container_authority(
+        self,
+        command: str,
+        request: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if self.docker_bin is None:
+            raise ValueError(
+                "Docker is required for protected evaluation; "
+                "process fallback is disabled unless explicitly selected"
+            )
+        metadata = self._container_runtime_metadata()
+        self.runtime_metadata = metadata
+        payload = (
+            ""
+            if request is None
+            else json.dumps(
+                request,
+                sort_keys=True,
+                allow_nan=False,
+            )
+        )
+        docker = require_text(self.docker_bin, "docker executable")
+        run_command = self._container_run_command(command)
         try:
-            response = json.loads(detail)
+            completed = subprocess.run(
+                run_command,
+                input=payload,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(
+                "containerized verifier authority timed out"
+            ) from exc
+        return parse_authority_response(
+            completed,
+            "containerized verifier authority",
+        )
+
+    def _container_run_command(self, command: str) -> list[str]:
+        if not isinstance(command, str) or not command:
+            raise ValueError("authority command must be non-empty")
+        docker = require_text(self.docker_bin, "docker executable")
+        return [
+            docker,
+            "run",
+            "--rm",
+            "--interactive",
+            "--pull",
+            "never",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges:true",
+            "--pids-limit",
+            "64",
+            "--memory",
+            "256m",
+            "--memory-swap",
+            "256m",
+            "--cpus",
+            "1.0",
+            "--shm-size",
+            "16m",
+            "--ulimit",
+            "nofile=64:64",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,nodev,size=64m",
+            "--mount",
+            (
+                "type=volume,source="
+                f"{self.authority_volume},target=/state"
+            ),
+            "--env",
+            "DGM_VERIFIER_AUTHORITY_STATE=/state",
+            "--env",
+            "DGM_OPENSSL_BIN=/usr/bin/openssl",
+            "--env",
+            "PYTHONHASHSEED=0",
+            "--env",
+            "PYTHONNOUSERSITE=1",
+            "--env",
+            "PYTHONDONTWRITEBYTECODE=1",
+            self.authority_image,
+            command,
+        ]
+
+    def _container_runtime_metadata(self) -> dict[str, Any]:
+        docker = require_text(self.docker_bin, "docker executable")
+        try:
+            completed = subprocess.run(
+                [
+                    docker,
+                    "image",
+                    "inspect",
+                    self.authority_image,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=min(self.timeout_seconds, 10.0),
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(
+                "Docker image inspection timed out"
+            ) from exc
+        if completed.returncode != 0:
+            raise ValueError(
+                "hardened verifier authority image is unavailable; "
+                "build verifier_authority/Dockerfile before protected evaluation"
+            )
+        try:
+            images = json.loads(completed.stdout)
         except json.JSONDecodeError as exc:
             raise ValueError(
-                "verifier authority returned invalid JSON"
+                "Docker returned invalid image metadata"
             ) from exc
-        if not isinstance(response, dict):
+        if not isinstance(images, list) or len(images) != 1:
+            raise ValueError("Docker image inspection returned an invalid result")
+        image = images[0]
+        if not isinstance(image, dict):
+            raise ValueError("Docker image metadata must be an object")
+        image_id = image.get("Id")
+        if not isinstance(image_id, str) or not image_id.startswith("sha256:"):
+            raise ValueError("verifier authority image has no content digest")
+        config = image.get("Config")
+        if not isinstance(config, dict):
+            raise ValueError("verifier authority image config is missing")
+        user = config.get("User")
+        if not isinstance(user, str) or user.strip() in {"", "0", "root", "0:0"}:
             raise ValueError(
-                "verifier authority response "
-                "must be an object"
+                "verifier authority image must run as a non-root user"
             )
+        labels = config.get("Labels")
+        if not isinstance(labels, dict):
+            raise ValueError("verifier authority image labels are missing")
+        if labels.get("ai.recursive.verifier.authority") != "true":
+            raise ValueError("image is not labeled as a verifier authority")
+        if labels.get("ai.recursive.verifier.runtime") != "isolated-container-v1":
+            raise ValueError("verifier authority image runtime label mismatch")
+
+        info = subprocess.run(
+            [
+                docker,
+                "info",
+                "--format",
+                "{{json .SecurityOptions}}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=min(self.timeout_seconds, 10.0),
+            check=False,
+        )
+        if info.returncode != 0:
+            raise ValueError("unable to inspect Docker security options")
+        try:
+            security_options = json.loads(info.stdout.strip())
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "Docker returned invalid security options"
+            ) from exc
+        if not isinstance(security_options, list):
+            raise ValueError("Docker security options must be a list")
+        normalized = tuple(str(item) for item in security_options)
+        if not any("seccomp" in item for item in normalized):
+            raise ValueError(
+                "Docker seccomp protection is required for verifier isolation"
+            )
+        rootless = any("rootless" in item for item in normalized)
+        if os.environ.get("DGM_VERIFIER_REQUIRE_ROOTLESS") == "1" and not rootless:
+            raise ValueError(
+                "rootless Docker is required by DGM_VERIFIER_REQUIRE_ROOTLESS"
+            )
+
+        try:
+            probe_run = subprocess.run(
+                self._container_run_command("isolation"),
+                input="",
+                capture_output=True,
+                text=True,
+                timeout=min(self.timeout_seconds, 10.0),
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(
+                "verifier authority isolation probe timed out"
+            ) from exc
+        isolation = parse_authority_response(
+            probe_run,
+            "verifier authority isolation probe",
+        )
+        if isolation.get("passed") is not True:
+            raise ValueError(
+                "verifier authority isolation probe failed"
+            )
+        checks = isolation.get("checks")
+        required_checks = {
+            "non_root_user",
+            "zero_effective_capabilities",
+            "root_filesystem_read_only",
+            "private_state_writable",
+            "docker_socket_absent",
+            "host_root_not_mounted",
+            "outbound_network_blocked",
+        }
         if (
-            completed.returncode != 0
-            or response.get("error")
+            not isinstance(checks, dict)
+            or set(checks) != required_checks
+            or not all(checks.get(name) is True for name in required_checks)
         ):
             raise ValueError(
-                "verifier authority failed: "
-                f"{response.get('error') or detail[:1000]}"
+                "verifier authority isolation probe returned incomplete evidence"
             )
-        return response
+        return {
+            "mode": "container",
+            "image": self.authority_image,
+            "image_id": image_id,
+            "user": user,
+            "rootless": rootless,
+            "security_options": list(normalized),
+            "volume": self.authority_volume,
+            "isolation_probe": isolation,
+        }
+
+
+def parse_authority_response(
+    completed: subprocess.CompletedProcess[str],
+    label: str,
+) -> dict[str, Any]:
+    detail = (
+        completed.stdout
+        or completed.stderr
+        or ""
+    ).strip()
+    try:
+        response = json.loads(detail)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"{label} returned invalid JSON"
+        ) from exc
+    if not isinstance(response, dict):
+        raise ValueError(
+            f"{label} response must be an object"
+        )
+    if completed.returncode != 0 or response.get("error"):
+        raise ValueError(
+            f"{label} failed: "
+            f"{response.get('error') or detail[:1000]}"
+        )
+    return response
+
+
+def default_authority_volume(workspace: Path) -> str:
+    digest = hashlib.sha256(
+        str(workspace.resolve()).encode("utf-8")
+    ).hexdigest()[:24]
+    return f"dgm-verifier-authority-{digest}"
 
 
 def default_authority_path() -> Path:

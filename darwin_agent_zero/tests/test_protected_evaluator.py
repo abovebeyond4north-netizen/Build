@@ -40,6 +40,7 @@ class ProtectedEvaluatorTests(unittest.TestCase):
         return ProtectedEvaluator(
             root / "workspace",
             authority_state=root / "authority-state",
+            authority_mode="process",
         )
 
     def test_signed_external_evaluation_passes_and_is_replayed(self):
@@ -203,6 +204,7 @@ class ProtectedEvaluatorTests(unittest.TestCase):
                 root / "workspace",
                 authority_state=root / "authority-state",
                 trusted_public_key_sha256="0" * 64,
+                authority_mode="process",
             )
             with self.assertRaisesRegex(
                 ValueError,
