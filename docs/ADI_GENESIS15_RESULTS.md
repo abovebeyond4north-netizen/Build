@@ -28,8 +28,19 @@ Disjoint replication seeds: 24000–24019.
 
 The executable architecture contract was added after the first scientific result
 without changing the frozen experiment or gates. The unchanged confirmatory
-experiment is rerun after that addition as an independent architecture-enforced
-reproduction.
+experiment was then rerun as an independent architecture-enforced reproduction.
+
+Architecture-enforced reproduction:
+- GitHub Actions run: `36073140451`
+- Python 3.11 contract/unit job: PASS
+- Python 3.12 contract/unit job: PASS
+- confirmatory job: PASS
+- result artifact ID: `10839112389`
+- archive SHA-256: `b4d9754fbadb6f7b3b63cc0a8476b1e41175b9d02a06dfedf2ee528e8e8c8742`
+
+After GitHub log timestamps were stripped, the complete decoded scientific result
+object from the architecture-enforced reproduction was exactly identical to the
+first confirmatory run.
 
 ## Confirmatory result
 
