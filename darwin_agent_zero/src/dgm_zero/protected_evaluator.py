@@ -1206,6 +1206,46 @@ class ProtectedEvaluator:
             raise ValueError(
                 "rootless Docker is required by DGM_VERIFIER_REQUIRE_ROOTLESS"
             )
+
+        try:
+            probe_run = subprocess.run(
+                self._container_run_command("isolation"),
+                input="",
+                capture_output=True,
+                text=True,
+                timeout=min(self.timeout_seconds, 10.0),
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(
+                "verifier authority isolation probe timed out"
+            ) from exc
+        isolation = parse_authority_response(
+            probe_run,
+            "verifier authority isolation probe",
+        )
+        if isolation.get("passed") is not True:
+            raise ValueError(
+                "verifier authority isolation probe failed"
+            )
+        checks = isolation.get("checks")
+        required_checks = {
+            "non_root_user",
+            "zero_effective_capabilities",
+            "root_filesystem_read_only",
+            "private_state_writable",
+            "docker_socket_absent",
+            "host_root_not_mounted",
+            "outbound_network_blocked",
+        }
+        if (
+            not isinstance(checks, dict)
+            or set(checks) != required_checks
+            or not all(checks.get(name) is True for name in required_checks)
+        ):
+            raise ValueError(
+                "verifier authority isolation probe returned incomplete evidence"
+            )
         return {
             "mode": "container",
             "image": self.authority_image,
@@ -1214,6 +1254,7 @@ class ProtectedEvaluator:
             "rootless": rootless,
             "security_options": list(normalized),
             "volume": self.authority_volume,
+            "isolation_probe": isolation,
         }
 
 
