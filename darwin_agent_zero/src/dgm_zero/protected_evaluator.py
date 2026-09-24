@@ -1078,6 +1078,7 @@ class ProtectedEvaluator:
             docker,
             "run",
             "--rm",
+            "--interactive",
             "--pull",
             "never",
             "--network",
