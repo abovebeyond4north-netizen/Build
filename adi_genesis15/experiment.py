@@ -58,6 +58,8 @@ class SeedMetrics:
     adapted_candidate_rmse: float
     unadapted_candidate_rmse: float
     adapted_raw_rmse: float
+    always_adapt_no_shift_rmse: float
+    base_no_shift_rmse: float
 
     @property
     def multistep_improvement_vs_raw(self) -> float:
@@ -74,6 +76,13 @@ class SeedMetrics:
     @property
     def adaptation_improvement_vs_raw(self) -> float:
         return 1.0 - self.adapted_candidate_rmse / self.adapted_raw_rmse
+
+    @property
+    def always_adapt_no_shift_regression(self) -> float:
+        return (
+            self.always_adapt_no_shift_rmse / self.base_no_shift_rmse
+            - 1.0
+        )
 
 
 def action_vector(index: int) -> np.ndarray:
@@ -742,6 +751,107 @@ def evaluate_detection(
     return detection_rate, false_positive_rate, mean_delay
 
 
+def collect_after_detection(
+    rng: np.random.Generator,
+    base: BaseDynamics,
+    *,
+    adaptation_steps: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """Run the frozen detector, then collect ordinary partial transitions.
+
+    The transition that causes the alarm is not reused as an adaptation target.
+    Its post-transition observation becomes the initial observation for the
+    adaptation sequence; all adaptation actions happen after the gate fires.
+    """
+
+    true_state = rng.normal(scale=0.8, size=LATENT_DIM)
+    mean = np.zeros(LATENT_DIM, dtype=float)
+    covariance = np.eye(LATENT_DIM, dtype=float)
+
+    mask = random_mask(rng)
+    observation = partial_observation(rng, true_state, mask)
+    mean, covariance = kalman_measurement_update(
+        mean,
+        covariance,
+        observation,
+        mask,
+    )
+
+    scores: list[float] = []
+    triggered = False
+    actions: list[np.ndarray] = []
+    observations: list[np.ndarray] = []
+    masks: list[np.ndarray] = []
+
+    max_steps = SHIFT_MONITOR_STEPS + adaptation_steps + 20
+
+    for step in range(max_steps):
+        action = action_vector(int(rng.integers(0, ACTION_COUNT)))
+        hidden_dynamics = (
+            SHIFTED_A if step >= SHIFT_CHANGE_STEP else TRUE_A
+        )
+        next_state = (
+            hidden_dynamics @ true_state
+            + TRUE_B @ action
+            + rng.normal(scale=PROCESS_NOISE, size=LATENT_DIM)
+        )
+
+        predicted_mean, predicted_covariance = kalman_predict(
+            mean,
+            covariance,
+            action,
+            base,
+        )
+        next_mask = random_mask(rng)
+        next_observation = partial_observation(
+            rng,
+            next_state,
+            next_mask,
+        )
+        scores.append(
+            innovation_score(
+                predicted_mean,
+                predicted_covariance,
+                next_observation,
+                next_mask,
+            )
+        )
+        mean, covariance = kalman_measurement_update(
+            predicted_mean,
+            predicted_covariance,
+            next_observation,
+            next_mask,
+        )
+
+        if (
+            not triggered
+            and len(scores) >= DETECTION_WINDOW
+            and float(np.mean(scores[-DETECTION_WINDOW:]))
+            > DETECTION_THRESHOLD
+        ):
+            # A pre-shift trigger is a false alarm and invalidates adaptation.
+            if step < SHIFT_CHANGE_STEP:
+                return None
+            triggered = True
+            observations = [next_observation.copy()]
+            masks = [next_mask.copy()]
+        elif triggered and len(actions) < adaptation_steps:
+            actions.append(action.copy())
+            observations.append(next_observation.copy())
+            masks.append(next_mask.copy())
+
+        true_state = next_state
+
+        if triggered and len(actions) >= adaptation_steps:
+            return (
+                np.stack(actions),
+                np.stack(observations),
+                np.stack(masks),
+            )
+
+    return None
+
+
 def generate_partial_sequence(
     rng: np.random.Generator,
     *,
@@ -977,26 +1087,31 @@ def evaluate_shift_adaptation(
     adaptation_steps: int = PRIMARY_ADAPTATION_STEPS,
     test_steps: int = 120,
 ) -> tuple[float, float, float]:
-    _, actions, observations, masks = generate_partial_sequence(
+    collected = collect_after_detection(
         rng,
-        steps=adaptation_steps,
-        dynamics=SHIFTED_A,
+        base,
+        adaptation_steps=adaptation_steps,
     )
 
-    adapted = fit_smoothed_residual(
-        observations,
-        masks,
-        actions,
-        base,
-    )
-    adapted_raw = fit_raw_residual(
-        raw,
-        raw_adaptation_samples(
+    if collected is None:
+        adapted = base
+        adapted_raw = raw
+    else:
+        actions, observations, masks = collected
+        adapted = fit_smoothed_residual(
             observations,
             masks,
             actions,
-        ),
-    )
+            base,
+        )
+        adapted_raw = fit_raw_residual(
+            raw,
+            raw_adaptation_samples(
+                observations,
+                masks,
+                actions,
+            ),
+        )
 
     true_state = rng.normal(scale=0.8, size=LATENT_DIM)
 
