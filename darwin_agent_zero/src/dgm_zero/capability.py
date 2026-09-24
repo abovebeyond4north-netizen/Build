@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -20,6 +21,7 @@ from .capability_synthesis import TemplateSynthesizer
 from .memory import KnowledgeBank
 from .protected_evaluator import ProtectedEvaluator
 from .reliability_gate import IndependentReliabilityGate
+from .remote_verifier import GitHubRemoteVerifier
 from .skill_library import SkillLibrary, holdout_digest, write_report
 
 
@@ -78,6 +80,8 @@ class CapabilityAcquirer:
         *,
         generator: CandidateGenerator | None = None,
         sandbox: SkillSandbox | None = None,
+        remote_verifier: GitHubRemoteVerifier | None = None,
+        remote_verifier_mode: str | None = None,
     ) -> None:
         self.workspace = workspace
         self.workspace.mkdir(parents=True, exist_ok=True)
@@ -88,6 +92,19 @@ class CapabilityAcquirer:
         self.planner = CapabilityPlanner()
         self.reliability = IndependentReliabilityGate(workspace)
         self.protected_evaluator = ProtectedEvaluator(workspace)
+        mode = (
+            remote_verifier_mode
+            or os.environ.get("DGM_REMOTE_VERIFIER_MODE")
+            or "off"
+        ).strip().lower()
+        if mode not in {"off", "required"}:
+            raise ValueError(
+                "remote_verifier_mode must be 'off' or 'required'"
+            )
+        self.remote_verifier_mode = mode
+        self.remote_verifier = remote_verifier
+        if self.remote_verifier_mode == "required" and self.remote_verifier is None:
+            self.remote_verifier = GitHubRemoteVerifier(workspace)
 
     def acquire(
         self,
@@ -398,6 +415,75 @@ class CapabilityAcquirer:
         promotion_evidence_hash = (
             protected.record_hash if protected is not None else None
         )
+
+        if self.remote_verifier_mode == "required":
+            try:
+                remote = self.remote_verifier.evaluate(
+                    capability=spec.name,
+                    entrypoint=spec.entrypoint,
+                    baseline_source=baseline_source,
+                    finalist_source=finalist.source,
+                    required_score=spec.thresholds.holdout,
+                    minimum_gain=spec.thresholds.min_gain,
+                )
+            except (ValueError, TimeoutError):
+                return self._finish(
+                    spec,
+                    holdout_digest_value=certification_digest,
+                    status="remote_evaluator_unavailable",
+                    promoted=False,
+                    baseline=baseline,
+                    baseline_score=baseline_score,
+                    finalist=finalist,
+                    final_score=None,
+                    train_score=train_score.correctness,
+                    validation_score=validation_score.correctness,
+                    holdout_score=None,
+                    generated=len(generated),
+                    trained=len(evaluated_train),
+                    validated=len(validation_evidence),
+                    holdout_evaluations=0,
+                    tasks=tasks,
+                )
+            if remote is None:
+                return self._finish(
+                    spec,
+                    holdout_digest_value=certification_digest,
+                    status="remote_evaluator_unsupported",
+                    promoted=False,
+                    baseline=baseline,
+                    baseline_score=baseline_score,
+                    finalist=finalist,
+                    final_score=None,
+                    train_score=train_score.correctness,
+                    validation_score=validation_score.correctness,
+                    holdout_score=None,
+                    generated=len(generated),
+                    trained=len(evaluated_train),
+                    validated=len(validation_evidence),
+                    holdout_evaluations=0,
+                    tasks=tasks,
+                )
+            if not remote.passed:
+                return self._finish(
+                    spec,
+                    holdout_digest_value=certification_digest,
+                    status="remote_evaluator_failed",
+                    promoted=False,
+                    baseline=baseline,
+                    baseline_score=baseline_score,
+                    finalist=finalist,
+                    final_score=None,
+                    train_score=train_score.correctness,
+                    validation_score=validation_score.correctness,
+                    holdout_score=None,
+                    generated=len(generated),
+                    trained=len(evaluated_train),
+                    validated=len(validation_evidence),
+                    holdout_evaluations=0,
+                    tasks=tasks,
+                )
+            promotion_evidence_hash = remote.record_hash
 
         # The holdout boundary opens only after the finalist is immutable and
         # the paired replay/ablation gate has passed.

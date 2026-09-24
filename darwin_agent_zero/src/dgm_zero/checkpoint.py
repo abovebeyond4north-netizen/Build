@@ -22,6 +22,7 @@ SNAPSHOT_FILES = (
     "provenance.json",
     "reliability_gate.jsonl",
     "protected_evaluator.jsonl",
+    "remote_evaluator.jsonl",
     "verifier_authority_trust.json",
     "capability_certifications.jsonl",
     "champion.py",

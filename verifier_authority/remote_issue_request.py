@@ -13,7 +13,7 @@ from typing import Any
 import authority
 
 
-REMOTE_PROTOCOL_VERSION = 1
+REMOTE_PROTOCOL_VERSION = 2
 TITLE_PREFIX = "[DGM-VERIFY] "
 NONCE_HEX_LENGTH = 64
 
@@ -43,7 +43,9 @@ def require_nonce(value: object) -> str:
     return value
 
 
-def require_issue_event(event: object) -> tuple[int, dict[str, Any]]:
+def require_issue_event(
+    event: object,
+) -> tuple[int, str, dict[str, Any]]:
     if not isinstance(event, dict):
         raise ValueError("GitHub event must be a JSON object")
     if event.get("action") != "opened":
@@ -68,7 +70,7 @@ def require_issue_event(event: object) -> tuple[int, dict[str, Any]]:
         ) from exc
     if not isinstance(request, dict):
         raise ValueError("verification request must be a JSON object")
-    return number, request
+    return number, title, request
 
 
 def request_context(event: dict[str, Any]) -> dict[str, Any]:
@@ -88,6 +90,93 @@ def request_context(event: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def evaluation_key(request: dict[str, Any]) -> str:
+    material = dict(request)
+    material.pop("request_nonce", None)
+    payload = {
+        "remote_protocol_version": REMOTE_PROTOCOL_VERSION,
+        "request": material,
+    }
+    return sha256_bytes(canonical_json(payload))
+
+
+def expected_issue_title(request: dict[str, Any]) -> str:
+    return TITLE_PREFIX + evaluation_key(request)
+
+
+def build_preflight(event: dict[str, Any]) -> dict[str, Any]:
+    issue_number, title, request = require_issue_event(event)
+    nonce = require_nonce(request.get("request_nonce"))
+    authority.validate_request(request)
+    key = evaluation_key(request)
+    expected = TITLE_PREFIX + key
+    if title != expected:
+        raise ValueError(
+            "verification issue title does not match deterministic evaluation key"
+        )
+    return {
+        "schema_version": 1,
+        "remote_protocol_version": REMOTE_PROTOCOL_VERSION,
+        "issue_number": issue_number,
+        "evaluation_key": key,
+        "expected_title": expected,
+        "request_nonce": nonce,
+        "request_digest": sha256_bytes(canonical_json(request)),
+    }
+
+
+def flatten_issue_pages(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise ValueError("issue listing must be a JSON list")
+    if value and all(isinstance(item, list) for item in value):
+        items = [
+            issue
+            for page in value
+            for issue in page
+            if isinstance(issue, dict)
+        ]
+    else:
+        items = [item for item in value if isinstance(item, dict)]
+    return items
+
+
+def verify_first_issue_claim(
+    preflight: dict[str, Any],
+    issue_pages: object,
+) -> dict[str, Any]:
+    expected_title = preflight.get("expected_title")
+    current = preflight.get("issue_number")
+    if not isinstance(expected_title, str) or not expected_title:
+        raise ValueError("preflight expected_title is invalid")
+    if isinstance(current, bool) or not isinstance(current, int) or current <= 0:
+        raise ValueError("preflight issue_number is invalid")
+
+    matches: list[int] = []
+    for issue in flatten_issue_pages(issue_pages):
+        if "pull_request" in issue:
+            continue
+        if issue.get("title") != expected_title:
+            continue
+        number = issue.get("number")
+        if isinstance(number, bool) or not isinstance(number, int) or number <= 0:
+            continue
+        matches.append(number)
+
+    if not matches:
+        raise ValueError("current verification issue is missing from issue history")
+    first = min(matches)
+    if first != current:
+        raise ValueError(
+            f"hidden evidence already claimed by earlier issue {first}"
+        )
+    return {
+        "claimed": True,
+        "first_issue_number": first,
+        "matching_issue_numbers": sorted(matches),
+        "evaluation_key": preflight.get("evaluation_key"),
+    }
+
+
 def evaluate_remote(
     *,
     issue_number: int,
@@ -95,6 +184,7 @@ def evaluate_remote(
     context: dict[str, Any],
 ) -> dict[str, Any]:
     nonce = require_nonce(request.get("request_nonce"))
+    key = evaluation_key(request)
     (
         capability,
         entrypoint,
@@ -206,6 +296,7 @@ def evaluate_remote(
         "authority_version": authority.AUTHORITY_VERSION,
         "authority_digest": authority.authority_digest(),
         "manifest_digest": authority.manifest_digest(),
+        "evaluation_key": key,
         "request_digest": request_digest,
         "request_nonce": nonce,
         "issue_number": issue_number,
@@ -263,9 +354,10 @@ def write_outputs(
     status = "PASS" if receipt.get("passed") is True else "FAIL"
     comment_body = "\n".join(
         [
-            "<!-- dgm-remote-verifier-result:v1 -->",
+            "<!-- dgm-remote-verifier-result:v2 -->",
             f"Remote verifier result: **{status}**",
             f"Receipt SHA-256: {receipt_digest}",
+            f"Evaluation key: {receipt['evaluation_key']}",
             f"Request nonce: {receipt['request_nonce']}",
             f"Workflow run: {receipt['context'].get('run_id', '')}",
             "",
@@ -286,42 +378,78 @@ def write_outputs(
     return receipt_path, comment_path
 
 
+def load_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def command_preflight(event_path: Path, output_path: Path) -> int:
+    event = load_json(event_path)
+    result = build_preflight(event)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    sys.stdout.write(json.dumps(result, sort_keys=True))
+    return 0
+
+
+def command_claim(preflight_path: Path, issues_path: Path) -> int:
+    result = verify_first_issue_claim(
+        load_json(preflight_path),
+        load_json(issues_path),
+    )
+    sys.stdout.write(json.dumps(result, sort_keys=True))
+    return 0
+
+
+def command_evaluate(event_path: Path, output_dir: Path) -> int:
+    event = load_json(event_path)
+    issue_number, title, request = require_issue_event(event)
+    expected = expected_issue_title(request)
+    if title != expected:
+        raise ValueError(
+            "verification issue title does not match deterministic evaluation key"
+        )
+    receipt = evaluate_remote(
+        issue_number=issue_number,
+        request=request,
+        context=request_context(event),
+    )
+    receipt_path, comment_path = write_outputs(receipt, output_dir)
+    sys.stdout.write(
+        json.dumps(
+            {
+                "issue_number": issue_number,
+                "receipt_path": str(receipt_path),
+                "comment_path": str(comment_path),
+                "passed": bool(receipt["passed"]),
+                "receipt_sha256": sha256_bytes(receipt_path.read_bytes()),
+                "evaluation_key": receipt["evaluation_key"],
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) != 2:
-        raise SystemExit(
-            "usage: remote_issue_request.py EVENT_JSON OUTPUT_DIR"
-        )
-    event_path = Path(args[0])
-    output_dir = Path(args[1])
     try:
-        event = json.loads(event_path.read_text(encoding="utf-8"))
-        issue_number, request = require_issue_event(event)
-        receipt = evaluate_remote(
-            issue_number=issue_number,
-            request=request,
-            context=request_context(event),
+        if len(args) == 3 and args[0] == "preflight":
+            return command_preflight(Path(args[1]), Path(args[2]))
+        if len(args) == 3 and args[0] == "claim":
+            return command_claim(Path(args[1]), Path(args[2]))
+        if len(args) == 3 and args[0] == "evaluate":
+            return command_evaluate(Path(args[1]), Path(args[2]))
+        raise SystemExit(
+            "usage: remote_issue_request.py "
+            "preflight EVENT_JSON OUTPUT_JSON | "
+            "claim PREFLIGHT_JSON ISSUES_JSON | "
+            "evaluate EVENT_JSON OUTPUT_DIR"
         )
-        receipt_path, comment_path = write_outputs(receipt, output_dir)
-        sys.stdout.write(
-            json.dumps(
-                {
-                    "issue_number": issue_number,
-                    "receipt_path": str(receipt_path),
-                    "comment_path": str(comment_path),
-                    "passed": bool(receipt["passed"]),
-                    "receipt_sha256": sha256_bytes(
-                        receipt_path.read_bytes()
-                    ),
-                },
-                sort_keys=True,
-            )
-        )
-        return 0
     except Exception as exc:
-        sys.stderr.write(
-            f"{type(exc).__name__}: {exc}\n"
-        )
+        sys.stderr.write(f"{type(exc).__name__}: {exc}\n")
         return 2
 
 
