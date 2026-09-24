@@ -10,10 +10,6 @@ permissions:
   attestations: write
   issues: write
 
-concurrency:
-  group: remote-verifier-authority-v2
-  cancel-in-progress: false
-
 jobs:
   verify:
     if: >-
