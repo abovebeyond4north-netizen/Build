@@ -70,6 +70,7 @@ class ContainerizedVerifierAuthorityTests(unittest.TestCase):
             self.assertNotIn("/var/run/docker.sock", joined)
             self.assertNotIn("type=bind", joined)
             self.assertNotIn("--privileged", command)
+            self.assertIn("--interactive", command)
 
     def test_real_container_evaluation_proves_isolation_and_keeps_key_outside_workspace(self):
         with tempfile.TemporaryDirectory() as tmp:
