@@ -1,0 +1,62 @@
+name: ADI Genesis-16
+
+on:
+  push:
+    branches: ["adi/genesis16-nonlinear-uncertainty"]
+    paths:
+      - "adi_genesis16/**"
+      - "tests/test_adi_genesis16.py"
+      - "docs/ADI_GENESIS16_PREREGISTRATION.md"
+      - ".github/workflows/adi-genesis16.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "adi_genesis16/**"
+      - "tests/test_adi_genesis16.py"
+      - "docs/ADI_GENESIS16_PREREGISTRATION.md"
+      - "docs/ADI_GENESIS16_RESULTS.md"
+      - ".github/workflows/adi-genesis16.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Compile Genesis-16
+        run: python -m py_compile adi_genesis16/*.py tests/test_adi_genesis16.py
+      - name: Run architecture and causal-ablation tests
+        run: python -m unittest tests.test_adi_genesis16 -v
+
+  confirmatory:
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Run frozen confirmatory and disjoint replication blocks
+        run: python -m adi_genesis16.confirmatory --output genesis16_confirmatory.json
+      - name: Preserve immutable result ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis16-confirmatory-ledger
+          path: genesis16_confirmatory.json
+          if-no-files-found: error
