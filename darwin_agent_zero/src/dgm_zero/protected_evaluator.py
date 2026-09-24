@@ -239,11 +239,6 @@ class ProtectedEvaluator:
             if self.authority_mode == "container"
             else None
         )
-        if self.authority_mode == "container" and self.docker_bin is None:
-            raise ValueError(
-                "Docker is required for protected evaluation; "
-                "process fallback is disabled unless explicitly selected"
-            )
         self.runtime_metadata: dict[str, Any] | None = None
         configured_pin = (
             trusted_public_key_sha256
@@ -1039,6 +1034,11 @@ class ProtectedEvaluator:
         command: str,
         request: dict[str, Any] | None,
     ) -> dict[str, Any]:
+        if self.docker_bin is None:
+            raise ValueError(
+                "Docker is required for protected evaluation; "
+                "process fallback is disabled unless explicitly selected"
+            )
         metadata = self._container_runtime_metadata()
         self.runtime_metadata = metadata
         payload = (
