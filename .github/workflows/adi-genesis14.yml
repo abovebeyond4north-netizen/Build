@@ -60,7 +60,7 @@ jobs:
         run: python -m adi_genesis14.confirmatory --output genesis14_confirmatory.json
       - name: Preserve immutable result artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: genesis14-confirmatory-ledger
           path: genesis14_confirmatory.json
