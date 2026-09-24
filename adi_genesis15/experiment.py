@@ -58,8 +58,6 @@ class SeedMetrics:
     adapted_candidate_rmse: float
     unadapted_candidate_rmse: float
     adapted_raw_rmse: float
-    always_adapt_no_shift_rmse: float
-    base_no_shift_rmse: float
 
     @property
     def multistep_improvement_vs_raw(self) -> float:
@@ -76,14 +74,6 @@ class SeedMetrics:
     @property
     def adaptation_improvement_vs_raw(self) -> float:
         return 1.0 - self.adapted_candidate_rmse / self.adapted_raw_rmse
-
-    @property
-    def always_adapt_no_shift_regression(self) -> float:
-        return (
-            self.always_adapt_no_shift_rmse / self.base_no_shift_rmse
-            - 1.0
-        )
-
 
 def action_vector(index: int) -> np.ndarray:
     if index < 0 or index >= ACTION_COUNT:
