@@ -24,6 +24,7 @@ objective/spec
     -> select one finalist
     -> run protected paired replay + whole-change ablation against the incumbent
     -> request signed evidence from a separately versioned verifier authority
+    -> optionally require GitHub-hosted attested remote verification
     -> evaluate that finalist ONCE on holdout
     -> require measurable gain over the installed skill
     -> content-address + version the verified skill
@@ -89,6 +90,19 @@ The request is evaluated on a GitHub-hosted runner from the default branch. The 
 Before publishing a result, the workflow verifies the genuine receipt with `gh attestation verify` while requiring this repository, the exact remote-verifier workflow path, `refs/heads/main`, and a non-self-hosted runner. It then deliberately modifies a copy of the receipt and requires attestation verification of that forged copy to fail. Only after both checks succeed is the attested receipt returned to the request issue.
 
 The remote receipt never contains the random hidden-suite seed or hidden examples. This path therefore separates evaluation execution and attestation identity from the learner's Docker daemon and host account. Its remaining trust assumptions are GitHub's hosted runner/OIDC/attestation infrastructure and the integrity of the verifier workflow on the default branch.
+
+
+Remote hidden evidence is one-shot per deterministic evaluation key. The key binds remote protocol version, baseline/finalist source, capability, entrypoint, and acceptance thresholds while intentionally excluding the random request nonce. The issue title must equal `[DGM-VERIFY] <evaluation-key>`, and only the earliest GitHub issue with that exact title is allowed to generate hidden evidence. A later duplicate is rejected before any hidden suite is constructed and is redirected to the original attested receipt. A deliberate verifier-semantic change that should permit fresh evidence therefore requires an explicit remote protocol-version bump.
+
+Darwin can make this remote authority a mandatory promotion gate by setting:
+
+```bash
+export DGM_REMOTE_VERIFIER_MODE=required
+```
+
+When required, a supported built-in finalist must pass the local replay/ablation gate, the hardened local verifier authority, and then the GitHub-hosted attested verifier before Darwin is permitted to open its sealed holdout. Remote failure, unavailable attestation, or unsupported remote verification leaves the sealed holdout untouched and blocks promotion. Accepted remote receipts are hash-chained in `remote_evaluator.jsonl` and become the promotion evidence anchor.
+
+The remote client uses the GitHub CLI and either its existing authenticated session or `DGM_REMOTE_VERIFIER_TOKEN`/`GH_TOKEN`/`GITHUB_TOKEN`. `DGM_REMOTE_VERIFIER_SIGNER_DIGEST` can additionally pin the exact remote workflow commit accepted by `gh attestation verify`. **Privacy note:** the current issue-based transport places baseline/finalist source code in the GitHub issue body. Use it only for source that is appropriate for that repository's visibility.
 
 Promoted skill manifests record the exact predecessor digest they replace plus the protected-evaluator evidence record when available. `SkillLibrary.rollback_current()` follows that verified dependency edge and validates the predecessor artifact hash before changing the installed manifest; it never guesses a rollback target.
 
@@ -168,6 +182,7 @@ Expected artifacts include:
 - `provenance.json` — source/artifact fingerprints;
 - `reliability_gate.jsonl` — tamper-evident paired replay/ablation evidence;
 - `protected_evaluator.jsonl` — hash-chained signed authority receipts and replay evidence;
+- `remote_evaluator.jsonl` — hash-chained GitHub-hosted attested verifier decisions;
 - `verifier_authority_trust.json` — pinned verifier public-key identity and version metadata;
 - `capability_certifications.jsonl` — sealed holdout certification history;
 - `checkpoints/` — last-known-good recovery state.
