@@ -1051,7 +1051,30 @@ class ProtectedEvaluator:
             )
         )
         docker = require_text(self.docker_bin, "docker executable")
-        run_command = [
+        run_command = self._container_run_command(command)
+        try:
+            completed = subprocess.run(
+                run_command,
+                input=payload,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(
+                "containerized verifier authority timed out"
+            ) from exc
+        return parse_authority_response(
+            completed,
+            "containerized verifier authority",
+        )
+
+    def _container_run_command(self, command: str) -> list[str]:
+        if not isinstance(command, str) or not command:
+            raise ValueError("authority command must be non-empty")
+        docker = require_text(self.docker_bin, "docker executable")
+        return [
             docker,
             "run",
             "--rm",
@@ -1096,23 +1119,6 @@ class ProtectedEvaluator:
             self.authority_image,
             command,
         ]
-        try:
-            completed = subprocess.run(
-                run_command,
-                input=payload,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_seconds,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise ValueError(
-                "containerized verifier authority timed out"
-            ) from exc
-        return parse_authority_response(
-            completed,
-            "containerized verifier authority",
-        )
 
     def _container_runtime_metadata(self) -> dict[str, Any]:
         docker = require_text(self.docker_bin, "docker executable")
