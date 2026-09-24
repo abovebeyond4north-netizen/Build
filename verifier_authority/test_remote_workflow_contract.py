@@ -17,7 +17,6 @@ class RemoteVerifierWorkflowContractTests(unittest.TestCase):
             "attestations: write",
             "persist-credentials: false",
             "github.event.issue.user.login == github.repository_owner",
-            "group: remote-verifier-authority-v2",
             "preflight",
             "Read complete issue history",
             "--paginate",
@@ -39,6 +38,7 @@ class RemoteVerifierWorkflowContractTests(unittest.TestCase):
             "permissions: write-all",
             "persist-credentials: true",
             "group: remote-verifier-issue-",
+            "group: remote-verifier-authority-v2",
         )
         for item in forbidden:
             self.assertNotIn(item, workflow)
