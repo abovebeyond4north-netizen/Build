@@ -79,6 +79,17 @@ The authority's private key and seed ledger therefore live in that Docker-manage
 
 For additional daemon isolation on Linux, Rootless Docker can be used, and `DGM_VERIFIER_REQUIRE_ROOTLESS=1` makes it mandatory. The self-patch allowlist cannot edit either the Darwin verification client or the top-level authority package. This materially strengthens isolation against the bounded learner/self-patcher, but it is still not a claim of protection against an attacker who controls the Docker daemon or host OS account.
 
+
+### GitHub-hosted remote verification authority
+
+The repository also contains `.github/workflows/remote_verifier_authority.yml`, an external verification path intended to remove the learner host from the verifier's runtime trust boundary. A verification request is opened as an issue whose title begins with `[DGM-VERIFY]` and whose body is exactly one JSON request. Only requests opened by the repository owner are executed.
+
+The request is evaluated on a GitHub-hosted runner from the default branch. The workflow generates fresh hidden and metamorphic cases, performs the same containment and deterministic-replay checks, writes a receipt that binds the request nonce and candidate digests, and then uses GitHub artifact attestations to establish provenance for that exact receipt.
+
+Before publishing a result, the workflow verifies the genuine receipt with `gh attestation verify` while requiring this repository, the exact remote-verifier workflow path, `refs/heads/main`, and a non-self-hosted runner. It then deliberately modifies a copy of the receipt and requires attestation verification of that forged copy to fail. Only after both checks succeed is the attested receipt returned to the request issue.
+
+The remote receipt never contains the random hidden-suite seed or hidden examples. This path therefore separates evaluation execution and attestation identity from the learner's Docker daemon and host account. Its remaining trust assumptions are GitHub's hosted runner/OIDC/attestation infrastructure and the integrity of the verifier workflow on the default branch.
+
 Promoted skill manifests record the exact predecessor digest they replace plus the protected-evaluator evidence record when available. `SkillLibrary.rollback_current()` follows that verified dependency edge and validates the predecessor artifact hash before changing the installed manifest; it never guesses a rollback target.
 
 Each capability holdout suite receives a cryptographic digest. Once that suite has been consumed, Darwin Agent Zero will not expose it to another adaptive acquisition attempt. A failed certification therefore requires fresh holdout evidence rather than allowing the system to repeatedly tune against the same hidden test.
