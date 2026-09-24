@@ -80,7 +80,7 @@ class SeedMetrics:
     coverage_90: float
     interval_width_90: float
     gaussian_nll: float
-    single_model_nll: float
+    no_epistemic_nll: float
     abrupt_detection_rate: float
     gradual_detection_rate: float
     false_positive_rate: float
@@ -98,9 +98,9 @@ class SeedMetrics:
         return 1.0 - self.planning_candidate_regret / self.planning_linear_regret
 
     @property
-    def nll_gain_vs_single(self) -> float:
+    def nll_gain_vs_no_epistemic(self) -> float:
         """Absolute proper-scoring-rule gain; positive means ensemble is better."""
-        return self.single_model_nll - self.gaussian_nll
+        return self.no_epistemic_nll - self.gaussian_nll
 
     @property
     def compute_ratio(self) -> float:
@@ -316,13 +316,13 @@ def ensemble_predict(
     return mean, covariance
 
 
-def single_predict(
+def no_epistemic_predict(
     model: EnsembleDynamics,
     state: np.ndarray,
     action: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    features = nonlinear_features(state, action)
-    return features @ model.weights[0], model.Q[0]
+    """Ablation: identical ensemble predictive mean, no epistemic covariance."""
+    return ensemble_mean_predict(model, state, action), model.Q.mean(axis=0)
 
 
 def linear_predict(
@@ -360,7 +360,7 @@ def belief_predict_ensemble(
     predictor = (
         (lambda s, a: ensemble_predict(model, s, a))
         if include_epistemic
-        else (lambda s, a: single_predict(model, s, a))
+        else (lambda s, a: no_epistemic_predict(model, s, a))
     )
     next_mean, model_covariance = predictor(mean, action)
     J = _jacobian(predictor, mean, action)
@@ -614,13 +614,13 @@ def evaluate_calibration(
     true_state = rng.normal(scale=0.7, size=LATENT_DIM)
     mean = np.zeros(LATENT_DIM, dtype=float)
     covariance = np.eye(LATENT_DIM, dtype=float)
-    single_mean = mean.copy()
-    single_covariance = covariance.copy()
+    ablated_mean = mean.copy()
+    ablated_covariance = covariance.copy()
 
     covered: list[bool] = []
     widths: list[float] = []
     nll: list[float] = []
-    single_nll: list[float] = []
+    ablated_nll: list[float] = []
 
     for _ in range(steps):
         mask = random_mask(rng)
@@ -628,8 +628,8 @@ def evaluate_calibration(
         mean, covariance = kalman_measurement_update(
             mean, covariance, observation, mask
         )
-        single_mean, single_covariance = kalman_measurement_update(
-            single_mean, single_covariance, observation, mask
+        ablated_mean, ablated_covariance = kalman_measurement_update(
+            ablated_mean, ablated_covariance, observation, mask
         )
 
         action = action_vector(int(rng.integers(0, ACTION_COUNT)))
@@ -640,10 +640,10 @@ def evaluate_calibration(
             ensemble,
             include_epistemic=True,
         )
-        single_predicted_mean, single_predicted_covariance = (
+        ablated_predicted_mean, ablated_predicted_covariance = (
             belief_predict_ensemble(
-                single_mean,
-                single_covariance,
+                ablated_mean,
+                ablated_covariance,
                 action,
                 ensemble,
                 include_epistemic=False,
@@ -667,17 +667,17 @@ def evaluate_calibration(
         nll.append(
             _gaussian_nll(next_state - predicted_mean, predicted_covariance)
         )
-        single_nll.append(
+        ablated_nll.append(
             _gaussian_nll(
-                next_state - single_predicted_mean,
-                single_predicted_covariance,
+                next_state - ablated_predicted_mean,
+                ablated_predicted_covariance,
             )
         )
 
         mean, covariance = predicted_mean, predicted_covariance
-        single_mean, single_covariance = (
-            single_predicted_mean,
-            single_predicted_covariance,
+        ablated_mean, ablated_covariance = (
+            ablated_predicted_mean,
+            ablated_predicted_covariance,
         )
         true_state = next_state
 
@@ -685,7 +685,7 @@ def evaluate_calibration(
         float(np.mean(covered)),
         float(np.mean(widths)),
         float(np.mean(nll)),
-        float(np.mean(single_nll)),
+        float(np.mean(ablated_nll)),
     )
 
 
@@ -854,7 +854,7 @@ def evaluate_seed(seed: int) -> SeedMetrics:
         planning_linear_time,
     ) = evaluate_planning(rng, ensemble, linear)
 
-    coverage, width, nll, single_nll = evaluate_calibration(
+    coverage, width, nll, ablated_nll = evaluate_calibration(
         rng, ensemble
     )
 
@@ -875,7 +875,7 @@ def evaluate_seed(seed: int) -> SeedMetrics:
         coverage_90=coverage,
         interval_width_90=width,
         gaussian_nll=nll,
-        single_model_nll=single_nll,
+        no_epistemic_nll=ablated_nll,
         abrupt_detection_rate=abrupt_rate,
         gradual_detection_rate=gradual_rate,
         false_positive_rate=false_positive,
@@ -913,9 +913,9 @@ def summarize(rows: Iterable[SeedMetrics]) -> dict[str, float]:
         "coverage_90": mean("coverage_90"),
         "interval_width_90": mean("interval_width_90"),
         "gaussian_nll": mean("gaussian_nll"),
-        "single_model_nll": mean("single_model_nll"),
-        "nll_gain_vs_single": float(
-            np.mean([row.nll_gain_vs_single for row in values])
+        "no_epistemic_nll": mean("no_epistemic_nll"),
+        "nll_gain_vs_no_epistemic": float(
+            np.mean([row.nll_gain_vs_no_epistemic for row in values])
         ),
         "abrupt_detection_rate": mean("abrupt_detection_rate"),
         "gradual_detection_rate": mean("gradual_detection_rate"),
