@@ -112,6 +112,7 @@ class FakeRemoteVerifier(GitHubRemoteVerifier):
         self.created = 0
         self.attestation_commands = []
         self.duplicate = duplicate
+        self.last_request = None
         super().__init__(
             workspace,
             gh_bin="/usr/bin/false",
@@ -123,6 +124,9 @@ class FakeRemoteVerifier(GitHubRemoteVerifier):
     def _run_gh(self, args):
         if args[:3] == ["api", "--method", "POST"]:
             self.created += 1
+            issue_path = Path(args[args.index("--input") + 1])
+            payload = json.loads(issue_path.read_text(encoding="utf-8"))
+            self.last_request = json.loads(payload["body"])
             return subprocess.CompletedProcess(args, 0, '{"number": 41}', "")
         if args and args[0] == "attestation":
             self.attestation_commands.append(tuple(args))
@@ -135,7 +139,7 @@ class FakeRemoteVerifier(GitHubRemoteVerifier):
         raise AssertionError(f"unexpected gh command: {args}")
 
     def _fetch_comments(self, issue_number):
-        request = make_request()
+        request = dict(self.last_request or make_request())
         if self.duplicate and issue_number == 41:
             return [
                 {
