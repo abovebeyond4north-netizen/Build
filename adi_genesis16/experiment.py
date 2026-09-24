@@ -56,14 +56,11 @@ class TransitionBatch:
 
 
 @dataclass(frozen=True)
-class DynamicsMember:
+class EnsembleDynamics:
+    # weights: [ensemble, feature, output]
+    # Q: [ensemble, output, output]
     weights: np.ndarray
     Q: np.ndarray
-
-
-@dataclass(frozen=True)
-class EnsembleDynamics:
-    members: tuple[DynamicsMember, ...]
 
 
 @dataclass(frozen=True)
@@ -100,10 +97,9 @@ class SeedMetrics:
         return 1.0 - self.planning_candidate_regret / self.planning_linear_regret
 
     @property
-    def nll_improvement_vs_single(self) -> float:
-        if self.single_model_nll <= 0:
-            return 0.0
-        return 1.0 - self.gaussian_nll / self.single_model_nll
+    def nll_gain_vs_single(self) -> float:
+        """Absolute proper-scoring-rule gain; positive means ensemble is better."""
+        return self.single_model_nll - self.gaussian_nll
 
     @property
     def compute_ratio(self) -> float:
@@ -253,7 +249,8 @@ def fit_ensemble(
         [nonlinear_features(s, a) for s, a in zip(state, action)]
     )
 
-    members: list[DynamicsMember] = []
+    member_weights: list[np.ndarray] = []
+    member_covariances: list[np.ndarray] = []
     n = len(target)
     for _ in range(ensemble_size):
         indices = rng.integers(0, n, size=n)
@@ -264,8 +261,12 @@ def fit_ensemble(
         )
         residual = target - design @ weights
         Q = np.cov(residual.T) + np.eye(LATENT_DIM) * 1e-6
-        members.append(DynamicsMember(weights=weights, Q=Q))
-    return EnsembleDynamics(members=tuple(members))
+        member_weights.append(weights)
+        member_covariances.append(Q)
+    return EnsembleDynamics(
+        weights=np.stack(member_weights, axis=0),
+        Q=np.stack(member_covariances, axis=0),
+    )
 
 
 def fit_linear(
@@ -286,32 +287,20 @@ def fit_linear(
     return LinearDynamics(weights=weights, Q=Q)
 
 
-def member_predict(
-    member: DynamicsMember,
-    state: np.ndarray,
-    action: np.ndarray,
-) -> np.ndarray:
-    return nonlinear_features(state, action) @ member.weights
-
-
 def ensemble_predict(
     model: EnsembleDynamics,
     state: np.ndarray,
     action: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    predictions = np.stack(
-        [member_predict(member, state, action) for member in model.members]
-    )
+    features = nonlinear_features(state, action)
+    predictions = np.einsum("f,efd->ed", features, model.weights)
     mean = predictions.mean(axis=0)
     epistemic = (
         np.cov(predictions.T)
-        if len(model.members) > 1
+        if model.weights.shape[0] > 1
         else np.zeros((LATENT_DIM, LATENT_DIM), dtype=float)
     )
-    aleatoric = np.mean(
-        np.stack([member.Q for member in model.members]),
-        axis=0,
-    )
+    aleatoric = model.Q.mean(axis=0)
     covariance = epistemic + aleatoric + np.eye(LATENT_DIM) * 1e-7
     return mean, covariance
 
@@ -321,8 +310,8 @@ def single_predict(
     state: np.ndarray,
     action: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    member = model.members[0]
-    return member_predict(member, state, action), member.Q
+    features = nonlinear_features(state, action)
+    return features @ model.weights[0], model.Q[0]
 
 
 def linear_predict(
@@ -914,8 +903,8 @@ def summarize(rows: Iterable[SeedMetrics]) -> dict[str, float]:
         "interval_width_90": mean("interval_width_90"),
         "gaussian_nll": mean("gaussian_nll"),
         "single_model_nll": mean("single_model_nll"),
-        "nll_improvement_vs_single": float(
-            np.mean([row.nll_improvement_vs_single for row in values])
+        "nll_gain_vs_single": float(
+            np.mean([row.nll_gain_vs_single for row in values])
         ),
         "abrupt_detection_rate": mean("abrupt_detection_rate"),
         "gradual_detection_rate": mean("gradual_detection_rate"),
