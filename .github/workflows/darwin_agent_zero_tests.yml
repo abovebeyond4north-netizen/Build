@@ -33,7 +33,10 @@ jobs:
   test:
     name: Python ${{ matrix.python-version }} validation
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      DGM_VERIFIER_AUTHORITY_MODE: container
+      DGM_VERIFIER_AUTHORITY_IMAGE: dgm-verifier-authority:ci
     strategy:
       fail-fast: false
       matrix:
@@ -71,6 +74,26 @@ jobs:
           cd verifier_authority
           python -m unittest discover -s . -p 'test_*.py'
 
+      - name: Build hardened verifier authority image
+        run: |
+          docker build --tag "$DGM_VERIFIER_AUTHORITY_IMAGE" verifier_authority
+          docker image inspect "$DGM_VERIFIER_AUTHORITY_IMAGE" > /tmp/verifier-image.json
+          python - <<'PY'
+          import json
+          data = json.load(open("/tmp/verifier-image.json", encoding="utf-8"))[0]
+          config = data["Config"]
+          labels = config.get("Labels") or {}
+          user = str(config.get("User") or "")
+          if not str(data.get("Id", "")).startswith("sha256:"):
+              raise SystemExit("verifier image has no content digest")
+          if user in {"", "0", "root", "0:0"}:
+              raise SystemExit("verifier image is configured as root")
+          if labels.get("ai.recursive.verifier.authority") != "true":
+              raise SystemExit("verifier authority label is missing")
+          if labels.get("ai.recursive.verifier.runtime") != "isolated-container-v1":
+              raise SystemExit("verifier runtime label is invalid")
+          PY
+
       - name: Run Darwin validation suite
         run: |
           cd darwin_agent_zero
@@ -106,6 +129,8 @@ jobs:
           path: |
             darwin_agent_zero/.dgm_dashboard_evidence/capability-evidence.json
             darwin_agent_zero/.dgm_dashboard_evidence/reliability_gate.jsonl
+            darwin_agent_zero/.dgm_dashboard_evidence/protected_evaluator.jsonl
+            darwin_agent_zero/.dgm_dashboard_evidence/verifier_authority_trust.json
             darwin_agent_zero/.dgm_dashboard_evidence/capability_certifications.jsonl
             darwin_agent_zero/.dgm_dashboard_evidence/capability_acquisition_report.json
           retention-days: 14
