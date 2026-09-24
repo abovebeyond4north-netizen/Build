@@ -61,6 +61,7 @@ class EnsembleDynamics:
     # Q: [ensemble, output, output]
     weights: np.ndarray
     Q: np.ndarray
+    mean_weights: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -263,9 +264,11 @@ def fit_ensemble(
         Q = np.cov(residual.T) + np.eye(LATENT_DIM) * 1e-6
         member_weights.append(weights)
         member_covariances.append(Q)
+    stacked_weights = np.stack(member_weights, axis=0)
     return EnsembleDynamics(
-        weights=np.stack(member_weights, axis=0),
+        weights=stacked_weights,
         Q=np.stack(member_covariances, axis=0),
+        mean_weights=stacked_weights.mean(axis=0),
     )
 
 
@@ -285,6 +288,14 @@ def fit_linear(
     residual = target - design @ weights
     Q = np.cov(residual.T) + np.eye(LATENT_DIM) * 1e-6
     return LinearDynamics(weights=weights, Q=Q)
+
+
+def ensemble_mean_predict(
+    model: EnsembleDynamics,
+    state: np.ndarray,
+    action: np.ndarray,
+) -> np.ndarray:
+    return nonlinear_features(state, action) @ model.mean_weights
 
 
 def ensemble_predict(
@@ -450,7 +461,7 @@ def evaluate_multistep(
                 + rng.normal(scale=PROCESS_NOISE, size=LATENT_DIM)
             )
             start = time.process_time()
-            candidate = ensemble_predict(ensemble, candidate, action)[0]
+            candidate = ensemble_mean_predict(ensemble, candidate, action)
             candidate_time += time.process_time() - start
             start = time.process_time()
             baseline = linear_predict(linear, baseline, action)[0]
@@ -520,11 +531,11 @@ def evaluate_planning(
             candidate = e_mean.copy()
             start = time.process_time()
             for action_index in sequence:
-                candidate = ensemble_predict(
+                candidate = ensemble_mean_predict(
                     ensemble,
                     candidate,
                     action_vector(action_index),
-                )[0]
+                )
             candidate_time += time.process_time() - start
             candidate_costs.append(
                 (float(np.sum((candidate - target) ** 2)), sequence)
