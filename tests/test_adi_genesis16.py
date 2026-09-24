@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 import numpy as np
 
+from adi_genesis16.confirmatory import gates
 from adi_genesis16.contract import (
     ArchitectureViolation,
     assert_genesis16_architecture,
@@ -138,6 +139,33 @@ class MechanismAblationTests(unittest.TestCase):
         )
         linear = TRUE_A @ state + TRUE_B @ action
         self.assertGreater(float(np.linalg.norm(nonlinear - linear)), 0.01)
+
+
+class PromotionGateTests(unittest.TestCase):
+    def test_bad_result_fails_closed(self):
+        bad = {
+            "n_seeds": 20.0,
+            "multistep_candidate_rmse": 1.0,
+            "multistep_linear_rmse": 1.0,
+            "multistep_improvement_vs_linear": 0.0,
+            "planning_candidate_regret": 1.0,
+            "planning_linear_regret": 1.0,
+            "planning_improvement_vs_linear": 0.0,
+            "coverage_90": 0.50,
+            "interval_width_90": 1.0,
+            "gaussian_nll": 1.0,
+            "no_epistemic_nll": 1.0,
+            "nll_gain_vs_no_epistemic": 0.0,
+            "abrupt_detection_rate": 0.0,
+            "gradual_detection_rate": 0.0,
+            "false_positive_rate": 1.0,
+            "abrupt_detection_delay": 75.0,
+            "gradual_detection_delay": 75.0,
+            "candidate_compute_seconds": 100.0,
+            "linear_compute_seconds": 1.0,
+            "compute_ratio": 100.0,
+        }
+        self.assertFalse(all(gates(bad).values()))
 
 
 if __name__ == "__main__":
