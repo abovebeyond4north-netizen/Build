@@ -95,10 +95,6 @@ def evaluation_key(request: dict[str, Any]) -> str:
     material.pop("request_nonce", None)
     payload = {
         "remote_protocol_version": REMOTE_PROTOCOL_VERSION,
-        "authority_protocol_version": authority.PROTOCOL_VERSION,
-        "authority_version": authority.AUTHORITY_VERSION,
-        "authority_digest": authority.authority_digest(),
-        "manifest_digest": authority.manifest_digest(),
         "request": material,
     }
     return sha256_bytes(canonical_json(payload))
