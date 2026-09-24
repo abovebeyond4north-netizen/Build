@@ -12,6 +12,7 @@ on:
       - 'verified-coding-loop-dashboard/scripts/meta-learning-loop.mjs'
       - 'verified-coding-loop-dashboard/package.json'
       - '.github/workflows/darwin_agent_zero_tests.yml'
+      - '.github/workflows/remote_verifier_authority.yml'
   pull_request:
     branches: [main]
     paths:
@@ -21,6 +22,7 @@ on:
       - 'verified-coding-loop-dashboard/scripts/verify-capability-evidence.mjs'
       - 'verified-coding-loop-dashboard/package.json'
       - '.github/workflows/darwin_agent_zero_tests.yml'
+      - '.github/workflows/remote_verifier_authority.yml'
 
 permissions:
   contents: read
