@@ -9,6 +9,7 @@ class ProtectedVerifierPatchBoundaryTests(unittest.TestCase):
             "src/dgm_zero/protected_evaluator.py",
             "src/dgm_zero/protected_evaluator_worker.py",
             "src/dgm_zero/reliability_gate.py",
+            "src/dgm_zero/remote_verifier.py",
             "src/dgm_zero/capability.py",
             "src/dgm_zero/skill_library.py",
             "src/dgm_zero/checkpoint.py",
