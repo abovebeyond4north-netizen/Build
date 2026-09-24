@@ -1552,6 +1552,120 @@ def replay_request(
     }
 
 
+def runtime_isolation_probe() -> dict[str, Any]:
+    import socket
+
+    checks: dict[str, bool] = {}
+    details: dict[str, Any] = {}
+
+    checks["non_root_user"] = (
+        hasattr(os, "geteuid")
+        and os.geteuid() != 0
+    )
+    details["euid"] = (
+        os.geteuid()
+        if hasattr(os, "geteuid")
+        else None
+    )
+
+    cap_eff = None
+    try:
+        for line in Path("/proc/self/status").read_text(
+            encoding="utf-8"
+        ).splitlines():
+            if line.startswith("CapEff:"):
+                cap_eff = int(
+                    line.split(":", 1)[1].strip(),
+                    16,
+                )
+                break
+    except (OSError, ValueError):
+        cap_eff = None
+    checks["zero_effective_capabilities"] = (
+        cap_eff == 0
+    )
+    details["cap_eff"] = cap_eff
+
+    root_probe = Path(
+        "/opt/verifier/.runtime-write-probe"
+    )
+    try:
+        root_probe.write_text(
+            "should-not-write",
+            encoding="utf-8",
+        )
+    except OSError:
+        checks["root_filesystem_read_only"] = True
+    else:
+        checks["root_filesystem_read_only"] = False
+        try:
+            root_probe.unlink()
+        except OSError:
+            pass
+
+    root = state_root()
+    state_probe = root / (
+        f".state-write-probe-{os.getpid()}"
+    )
+    try:
+        state_probe.write_text(
+            "ok",
+            encoding="utf-8",
+        )
+        checks["private_state_writable"] = (
+            state_probe.read_text(
+                encoding="utf-8"
+            )
+            == "ok"
+        )
+    except OSError:
+        checks["private_state_writable"] = False
+    finally:
+        try:
+            state_probe.unlink()
+        except OSError:
+            pass
+
+    checks["docker_socket_absent"] = not Path(
+        "/var/run/docker.sock"
+    ).exists()
+    checks["host_root_not_mounted"] = not Path(
+        "/host"
+    ).exists()
+
+    network_blocked = False
+    sock = socket.socket(
+        socket.AF_INET,
+        socket.SOCK_STREAM,
+    )
+    try:
+        sock.settimeout(0.25)
+        result = sock.connect_ex(
+            ("1.1.1.1", 443)
+        )
+        network_blocked = result != 0
+        details["network_connect_errno"] = result
+    except OSError as exc:
+        network_blocked = True
+        details["network_error"] = (
+            f"{type(exc).__name__}: {exc}"
+        )
+    finally:
+        sock.close()
+    checks["outbound_network_blocked"] = (
+        network_blocked
+    )
+
+    return {
+        "schema_version": 1,
+        "runtime": "isolated-container-v1",
+        "checks": checks,
+        "details": details,
+        "passed": bool(checks)
+        and all(checks.values()),
+    }
+
+
 def emit(
     value: dict[str, Any],
     code: int = 0,
@@ -1583,6 +1697,10 @@ def main(
         if command == "describe":
             return emit(
                 authority_identity()
+            )
+        if command == "isolation":
+            return emit(
+                runtime_isolation_probe()
             )
 
         request = json.loads(
