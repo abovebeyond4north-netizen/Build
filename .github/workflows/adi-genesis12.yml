@@ -1,0 +1,38 @@
+name: ADI Genesis-12
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "adi_genesis12/**"
+      - "tests/test_adi_genesis12.py"
+      - "docs/ADI_GENESIS12_PREREGISTRATION.md"
+      - ".github/workflows/adi-genesis12.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "adi_genesis12/**"
+      - "tests/test_adi_genesis12.py"
+      - "docs/ADI_GENESIS12_PREREGISTRATION.md"
+      - ".github/workflows/adi-genesis12.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile Genesis-12
+        run: python -m py_compile adi_genesis12/*.py tests/test_adi_genesis12.py
+      - name: Run Genesis-12 tests
+        run: python -m unittest tests.test_adi_genesis12 -v
