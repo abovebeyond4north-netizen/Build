@@ -47,6 +47,21 @@ jobs:
         with:
           subject-path: remote-verification/receipt.json
 
+      - name: Verify provenance and reject forged receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify             remote-verification/receipt.json             -R "$GITHUB_REPOSITORY"             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/remote_verifier_authority.yml"             --source-ref refs/heads/main             --deny-self-hosted-runners
+
+          cp remote-verification/receipt.json remote-verification/tampered-receipt.json
+          printf '\n ' >> remote-verification/tampered-receipt.json
+
+          if gh attestation verify             remote-verification/tampered-receipt.json             -R "$GITHUB_REPOSITORY"             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/remote_verifier_authority.yml"             --source-ref refs/heads/main             --deny-self-hosted-runners
+          then
+            echo "tampered receipt unexpectedly verified" >&2
+            exit 1
+          fi
+
       - name: Upload attested receipt
         uses: actions/upload-artifact@v7
         with:
