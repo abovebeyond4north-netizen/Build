@@ -1,5 +1,8 @@
 """x402-paid FastAPI entry point; requires real operator configuration."""
 import os
+import base64
+import json
+import logging
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException
@@ -228,6 +231,32 @@ def landing():
   <p>Agent endpoint: <code>GET /chain/status</code></p>
 </body>
 </html>"""
+
+
+@app.middleware("http")
+async def payment_diagnostics(request, call_next):
+    """Log only safe x402 outcome metadata; never log payment signatures."""
+    had_payment = bool(
+        request.headers.get("payment-signature") or request.headers.get("x-payment")
+    )
+    response = await call_next(request)
+    if had_payment:
+        reason = None
+        if response.status_code == 402:
+            encoded = response.headers.get("payment-required")
+            if encoded:
+                try:
+                    payload = json.loads(base64.b64decode(encoded).decode("utf-8"))
+                    reason = payload.get("error")
+                except Exception:
+                    reason = "unreadable_payment_required"
+        logging.getLogger("prime_agent.payment").warning(
+            "x402 paid_retry path=%s status=%s reason=%s",
+            request.url.path,
+            response.status_code,
+            reason,
+        )
+    return response
 
 
 @lru_cache(maxsize=1)
