@@ -452,6 +452,68 @@ def ai_catalog(request: Request):
     return product_catalog(str(request.base_url).rstrip("/"))
 
 
+@app.get("/.well-known/x402")
+def x402_service_manifest(request: Request):
+    base_url = str(request.base_url).rstrip("/")
+    probe_token = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+    return {
+        "spec": "agent402-service-manifest/1",
+        "version": 1,
+        "name": SERVICE_NAME,
+        "summary": (
+            "x402-paid Base intelligence for canonical chain status, ERC-20 metadata, "
+            "and evidence-bearing token context with DEX liquidity/activity."
+        ),
+        "homepage": base_url,
+        "repository": "https://github.com/abovebeyond4north-netizen/Build",
+        "resources": [
+            base_url + "/chain/status",
+            base_url + f"/token/metadata/{probe_token}",
+            base_url + f"/token/context/{probe_token}",
+        ],
+        "resourceTemplates": [
+            base_url + "/chain/status",
+            base_url + "/token/metadata/{address}",
+            base_url + "/token/context/{address}",
+        ],
+        "payment": {
+            "x402": {
+                "version": 2,
+                "currency": "USDC",
+                "network": NETWORK,
+                "payTo": pay_to,
+                "priceRange": "$0.001-$0.009",
+                "nonCustodial": (
+                    "Payments settle buyer wallet to seller wallet through the configured "
+                    "x402 facilitator; Prime-Agent does not custody buyer funds."
+                ),
+            }
+        },
+        "capabilities": {
+            "products": 3,
+            "chainStatus": True,
+            "tokenMetadata": True,
+            "tokenContext": {
+                "contract": True,
+                "metadata": True,
+                "liquidity": True,
+                "activity": True,
+                "holders": False,
+            },
+        },
+        "mcp": {
+            "remoteConnector": base_url + "/mcp/",
+            "registryName": MCP_SERVER_NAME,
+        },
+        "machineReadable": {
+            "catalog": base_url + "/catalog",
+            "openapi": base_url + "/openapi.json",
+            "llmsTxt": base_url + "/llms.txt",
+            "mcpRegistryMetadata": base_url + "/server.json",
+        },
+    }
+
+
 @app.get("/server.json")
 def mcp_server_json():
     return {
