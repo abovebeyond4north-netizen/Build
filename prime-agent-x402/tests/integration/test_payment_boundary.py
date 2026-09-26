@@ -176,8 +176,11 @@ class PaymentBoundaryTests(unittest.TestCase):
         fake.chain_status.side_effect = lambda: (SupportedHandler.events.append('handler'), data)[1]
         with patch.object(self.server_module, 'intelligence', return_value=fake), TestClient(self.app) as client:
             signature = self.payment_header(client)
-            response = client.get('/chain/status', headers={'PAYMENT-SIGNATURE': signature})
+            with self.assertLogs('delivery_journal', level='INFO') as logs:
+                response = client.get('/chain/status', headers={'PAYMENT-SIGNATURE': signature})
         self.assertEqual(response.status_code, 200)
+        self.assertIn('x402 settlement_delivered', '\n'.join(logs.output))
+        self.assertIn('0x' + '4' * 64, '\n'.join(logs.output))
         self.assertEqual(response.json(), data)
         self.assertIn('PAYMENT-RESPONSE', response.headers)
         self.assertEqual(SupportedHandler.events, ['verify', 'handler', 'settle'])
