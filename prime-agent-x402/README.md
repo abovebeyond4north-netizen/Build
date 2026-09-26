@@ -22,6 +22,20 @@ Run `python3 verify_transfers.py --claims claims.jsonl --audit-rpc-url https://Y
 
 Run `python3 audit_sales.py --journal "$PRIME_DELIVERY_JOURNAL" --audit-rpc-url "$PRIME_AUDIT_RPC_URL" --pay-to "$PRIME_PAY_TO"` to correlate journaled responses with onchain transfers. Configure `PRIME_AUDIT_RPC_URL` separately from the serving RPC and direct it to Base mainnet. The offered route prices have one source in `pricing.py`: the joiner derives exact USDC atomic amounts from the price table and checks receipt success, block depth and hash, ERC-20 sender/payee/amount, duplicate request and transaction references, and the response digest format. Its result is named `chain_correlated_response_events`, **not sales or settled revenue**. Journal content, facilitator-reported payer, and route attribution remain seller-side evidence; this tool does not attest to client receipt, verify a payment signature, or establish profit. Running it with a live provider and real journal is still outstanding.
 
+
+## Bazaar discoverability
+
+Every paid x402 v2 route declares the official Bazaar discovery extension. The 402 challenge includes a stable service name, shared search tags, route-specific descriptions, callable input metadata, and output examples/schemas. Dynamic token routes declare the `:address` path parameter so facilitators can consolidate concrete token URLs under a single route template.
+
+This makes the service **discovery-ready**, not automatically indexed. Catalog inclusion is facilitator-controlled and must be observed after a real paid request echoes the Bazaar extension through settlement. For a live deployment, verify all of the following before claiming discoverability:
+
+1. An unsigned public request returns a v2 `PAYMENT-REQUIRED` header whose decoded payload contains `extensions.bazaar`, an absolute public `resource.url`, `serviceName: "Prime-Agent x402 Intelligence"`, and the expected tags.
+2. A real buyer echoes the Bazaar extension in its `PAYMENT-SIGNATURE` payload and settlement succeeds through the configured facilitator.
+3. If the facilitator returns `EXTENSION-RESPONSES`, decode it and confirm `bazaar.status` is `success` or `processing`; treat `rejected` as a failed discovery registration.
+4. Query the facilitator's discovery API, preferably `GET /discovery/resources?payTo=<payee>`, and confirm the public route appears. Allow for asynchronous indexing. Payment settlement by itself does not prove catalog inclusion.
+
+The integration suite asserts that dynamic-route 402 responses contain Bazaar metadata and that mock paid retries echo the extension back to the facilitator boundary.
+
 References: [x402 FastAPI integration](https://github.com/x402-foundation/x402/blob/main/docs/extensions/bazaar.mdx), [x402 v2 specification](https://github.com/x402-foundation/x402/blob/main/specs/x402-specification-v2.md), [SDK changes](https://github.com/x402-foundation/x402/blob/main/python/x402/CHANGELOG.md).
 
 Block-hash addressing: [EIP-1898](https://eips.ethereum.org/EIPS/eip-1898).
