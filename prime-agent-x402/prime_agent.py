@@ -2,6 +2,7 @@
 from __future__ import annotations
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import time
@@ -16,6 +17,7 @@ ADDRESS = re.compile(r'^0x[0-9a-fA-F]{40}$')
 HASH = re.compile(r'^0x[0-9a-fA-F]{64}$')
 SELECTORS = {'decimals': '0x313ce567', 'symbol': '0x95d89b41', 'name': '0x06fdde03'}
 MAX_RPC_BYTES = 512_000
+MAX_EXTERNAL_BYTES = 512_000
 
 
 def canonical(obj: Any) -> str:
@@ -45,6 +47,44 @@ def decode_abi_string(raw: str) -> str:
     if length > 4096 or offset + 32 + length > len(data):
         raise ValueError('invalid ABI length')
     return data[offset + 32:offset + 32 + length].decode('utf-8', errors='replace')
+
+
+class DexScreenerClient:
+    """Bounded, read-only client for DEX Screener's public Base token-pairs API."""
+
+    def __init__(self, base_url: str = "https://api.dexscreener.com"):
+        if base_url != "https://api.dexscreener.com":
+            if not base_url.startswith(("https://", "http://127.0.0.1:", "http://localhost:")):
+                raise ValueError("DEX Screener URL must use HTTPS or local loopback HTTP")
+        self.base_url = base_url.rstrip("/")
+
+    def token_pairs(self, address: str) -> list[dict]:
+        address = valid_address(address)
+        url = f"{self.base_url}/token-pairs/v1/base/{address}"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "Prime-Agent-x402/1.0",
+            },
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                if resp.status != 200:
+                    raise RuntimeError("DEX Screener HTTP failure")
+                raw = resp.read(MAX_EXTERNAL_BYTES + 1)
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise RuntimeError("DEX Screener request failed") from exc
+        if len(raw) > MAX_EXTERNAL_BYTES:
+            raise RuntimeError("DEX Screener response exceeds byte limit")
+        try:
+            data = json.loads(raw)
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise RuntimeError("DEX Screener returned invalid JSON") from exc
+        if not isinstance(data, list):
+            raise RuntimeError("DEX Screener returned invalid token-pairs payload")
+        return data[:30]
 
 
 class BaseRPC:
@@ -146,6 +186,16 @@ class EvidenceStore:
                                   (entity, predicate, snapshot['block_hash'], int(time.time()))).fetchone()
         return json.loads(row[0]) if row else None
 
+    def get_latest(self, entity: str, predicate: str) -> dict | None:
+        """Return a still-fresh offchain observation regardless of chain snapshot."""
+        with self.lock:
+            row = self.db.execute(
+                "SELECT body FROM evidence WHERE entity=? AND predicate=? AND expires_at>? "
+                "ORDER BY expires_at DESC LIMIT 1",
+                (entity, predicate, int(time.time())),
+            ).fetchone()
+        return json.loads(row[0]) if row else None
+
     def put(self, observation: Observation) -> dict:
         record = observation.record()
         with self.lock, self.db:
@@ -156,8 +206,13 @@ class EvidenceStore:
 
 
 class Intelligence:
-    def __init__(self, rpc: BaseRPC, store: EvidenceStore):
-        self.rpc, self.store = rpc, store
+    def __init__(
+        self,
+        rpc: BaseRPC,
+        store: EvidenceStore,
+        dex: DexScreenerClient | None = None,
+    ):
+        self.rpc, self.store, self.dex = rpc, store, dex
 
     def _read(self, entity: str, predicate: str, snapshot: dict, fn, ttl=300) -> dict:
         cached = self.store.get(entity, predicate, snapshot)
@@ -204,10 +259,126 @@ class Intelligence:
         return {'network': NETWORK, 'token': address, 'snapshot': snap, 'is_contract': True,
                 'fields': fields, 'evidence_ids': evidence_ids, 'missing': missing}
 
+    @staticmethod
+    def _nonnegative_number(value: Any) -> float:
+        if isinstance(value, bool):
+            raise ValueError("boolean is not numeric")
+        number = float(value)
+        if not math.isfinite(number) or number < 0:
+            raise ValueError("expected finite nonnegative number")
+        return number
+
+    def _dex_summary(self, address: str, snapshot: dict) -> dict:
+        if self.dex is None:
+            raise RuntimeError("DEX enrichment unavailable")
+        entity = f"{NETWORK}:token:{address}"
+        cached = self.store.get_latest(entity, "dex_market")
+        if cached:
+            return cached
+
+        pairs = self.dex.token_pairs(address)
+        clean = []
+        for pair in pairs:
+            if not isinstance(pair, dict) or pair.get("chainId") != "base":
+                continue
+            base = pair.get("baseToken") if isinstance(pair.get("baseToken"), dict) else {}
+            quote = pair.get("quoteToken") if isinstance(pair.get("quoteToken"), dict) else {}
+            addresses = {
+                str(base.get("address", "")).lower(),
+                str(quote.get("address", "")).lower(),
+            }
+            if address not in addresses:
+                continue
+            liquidity = pair.get("liquidity") if isinstance(pair.get("liquidity"), dict) else {}
+            volume = pair.get("volume") if isinstance(pair.get("volume"), dict) else {}
+            txns = pair.get("txns") if isinstance(pair.get("txns"), dict) else {}
+            h24 = txns.get("h24") if isinstance(txns.get("h24"), dict) else {}
+            try:
+                liquidity_usd = self._nonnegative_number(liquidity.get("usd", 0))
+                volume_h24 = self._nonnegative_number(volume.get("h24", 0))
+                buys_h24 = int(self._nonnegative_number(h24.get("buys", 0)))
+                sells_h24 = int(self._nonnegative_number(h24.get("sells", 0)))
+            except (TypeError, ValueError, OverflowError):
+                continue
+            clean.append(
+                {
+                    "dex": str(pair.get("dexId", ""))[:64],
+                    "pair_address": str(pair.get("pairAddress", ""))[:128],
+                    "url": str(pair.get("url", ""))[:512],
+                    "liquidity_usd": round(liquidity_usd, 2),
+                    "volume_h24_usd": round(volume_h24, 2),
+                    "buys_h24": buys_h24,
+                    "sells_h24": sells_h24,
+                    "price_usd": (
+                        str(pair["priceUsd"])[:64]
+                        if pair.get("priceUsd") is not None
+                        else None
+                    ),
+                }
+            )
+
+        clean.sort(key=lambda item: item["liquidity_usd"], reverse=True)
+        summary = {
+            "pair_count": len(clean),
+            "aggregate_liquidity_usd": round(
+                sum(item["liquidity_usd"] for item in clean), 2
+            ),
+            "aggregate_volume_h24_usd": round(
+                sum(item["volume_h24_usd"] for item in clean), 2
+            ),
+            "buys_h24": sum(item["buys_h24"] for item in clean),
+            "sells_h24": sum(item["sells_h24"] for item in clean),
+            "top_pair": clean[0] if clean else None,
+            "sample_limited_to": 30,
+            "source_note": (
+                "DEX Screener-reported pool data; aggregates can overlap economically "
+                "and are not independently verified onchain by Prime-Agent."
+            ),
+        }
+        return self.store.put(
+            Observation(
+                entity,
+                "dex_market",
+                summary,
+                "https://api.dexscreener.com/token-pairs/v1/base/{tokenAddress}",
+                snapshot,
+                int(time.time()) + 60,
+            )
+        )
+
     def token_context(self, address: str) -> dict:
+        address = valid_address(address)
         result = self.metadata(address)
-        result['coverage'] = {'contract': result['is_contract'], 'metadata': not result['missing'],
-                              'holders': False, 'liquidity': False, 'activity': False}
+        result["coverage"] = {
+            "contract": result["is_contract"],
+            "metadata": not result["missing"],
+            "holders": False,
+            "liquidity": False,
+            "activity": False,
+        }
+        result["holders"] = {
+            "available": False,
+            "reason": "No zero-key holder indexer has passed the production reliability gate.",
+        }
+        if not result["is_contract"]:
+            return result
+
+        try:
+            market_record = self._dex_summary(address, result["snapshot"])
+            market = market_record["value"]
+            result["dex_market"] = market
+            result["evidence_ids"].append(market_record["evidence_id"])
+            result["coverage"]["liquidity"] = market["pair_count"] > 0
+            result["coverage"]["activity"] = (
+                market["aggregate_volume_h24_usd"] > 0
+                or market["buys_h24"] > 0
+                or market["sells_h24"] > 0
+            )
+        except RuntimeError:
+            result["dex_market"] = {
+                "available": False,
+                "reason": "DEX market source unavailable; no coverage claimed.",
+            }
         return result
 
     def token_verdict(self, address: str) -> dict:
