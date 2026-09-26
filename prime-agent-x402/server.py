@@ -23,6 +23,7 @@ from prime_agent import BaseRPC, DexScreenerClient, EvidenceStore, Intelligence,
 
 
 SERVICE_NAME = "Prime-Agent x402 Intelligence"
+SERVICE_VERSION = "0.3.0"
 PUBLIC_BASE_URL = os.environ.get(
     "PRIME_PUBLIC_URL",
     "https://prime-agent-x402-intelligence.onrender.com",
@@ -291,7 +292,7 @@ def product_catalog(base_url: str) -> dict:
         })
     return {
         "service": SERVICE_NAME,
-        "version": "0.2.0",
+        "version": SERVICE_VERSION,
         "base_url": base_url,
         "network": NETWORK,
         "payment_protocol": "x402-v2",
@@ -313,7 +314,7 @@ mcp_server = MCPServer(
         "The MCP tools do not bypass payment; purchase the returned x402 HTTP URL."
     ),
     website_url=PUBLIC_BASE_URL,
-    version="0.2.0",
+    version=SERVICE_VERSION,
 )
 
 
@@ -385,7 +386,7 @@ async def app_lifespan(_app):
 
 app = FastAPI(
     title=SERVICE_NAME,
-    version="0.2.0",
+    version=SERVICE_VERSION,
     description="x402-paid Base intelligence with free machine-readable discovery.",
     docs_url=None,
     redoc_url=None,
@@ -458,7 +459,7 @@ def mcp_server_json():
         "name": MCP_SERVER_NAME,
         "title": SERVICE_NAME,
         "description": "Discover and quote x402-paid Base intelligence products.",
-        "version": "0.2.0",
+        "version": SERVICE_VERSION,
         "websiteUrl": PUBLIC_BASE_URL,
         "repository": {
             "url": "https://github.com/abovebeyond4north-netizen/Build",
