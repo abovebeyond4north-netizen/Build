@@ -37,3 +37,6 @@ jobs:
           PRIME_FACILITATOR_URL: "http://127.0.0.1:9911"
           PRIME_BASE_RPC_URL: "http://127.0.0.1:9912"
           PRIME_EVIDENCE_DB: "/tmp/prime-agent-x402-ci.sqlite"
+      - name: Test unsigned payment challenge
+        run: python -m unittest discover -s tests/integration -v
+        working-directory: prime-agent-x402
