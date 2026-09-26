@@ -1,8 +1,10 @@
 """Payment boundary through the real x402 middleware and a local facilitator."""
 import base64
+import hashlib
 import json
 import os
 import threading
+import tempfile
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import MagicMock, patch
@@ -62,6 +64,8 @@ class SupportedHandler(BaseHTTPRequestHandler):
 class PaymentBoundaryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.log_dir = tempfile.TemporaryDirectory()
+        cls.log_path = os.path.join(cls.log_dir.name, 'paid-responses.jsonl')
         cls.facilitator = ThreadingHTTPServer(('127.0.0.1', 0), SupportedHandler)
         cls.thread = threading.Thread(target=cls.facilitator.serve_forever, daemon=True)
         cls.thread.start()
@@ -69,6 +73,7 @@ class PaymentBoundaryTests(unittest.TestCase):
         os.environ['PRIME_FACILITATOR_URL'] = f'http://127.0.0.1:{cls.facilitator.server_port}'
         os.environ['PRIME_BASE_RPC_URL'] = 'http://127.0.0.1:1'
         os.environ['PRIME_EVIDENCE_DB'] = ':memory:'
+        os.environ['PRIME_DELIVERY_JOURNAL'] = cls.log_path
         import server
         cls.app = server.app
         cls.server_module = server
@@ -77,12 +82,15 @@ class PaymentBoundaryTests(unittest.TestCase):
         SupportedHandler.verify_valid = False
         SupportedHandler.settle_success = False
         SupportedHandler.events.clear()
+        if os.path.exists(self.log_path):
+            os.unlink(self.log_path)
 
     @classmethod
     def tearDownClass(cls):
         cls.facilitator.shutdown()
         cls.facilitator.server_close()
         cls.thread.join(timeout=2)
+        cls.log_dir.cleanup()
 
     def test_unsigned_request_is_402_without_rpc(self):
         with TestClient(self.app) as client:
@@ -151,6 +159,14 @@ class PaymentBoundaryTests(unittest.TestCase):
         self.assertEqual(response.json(), data)
         self.assertIn('PAYMENT-RESPONSE', response.headers)
         self.assertEqual(SupportedHandler.events, ['verify', 'handler', 'settle'])
+        with open(self.log_path, encoding='utf-8') as stream:
+            journal = [json.loads(line) for line in stream]
+        self.assertEqual(len(journal), 1)
+        self.assertEqual(journal[0]['transaction'], '0x' + '4' * 64)
+        self.assertEqual(journal[0]['route'], 'GET /chain/status')
+        self.assertEqual(journal[0]['status'], 200)
+        self.assertEqual(journal[0]['body_sha256'], hashlib.sha256(response.content).hexdigest())
+        self.assertNotIn('signature', json.dumps(journal))
 
     def test_mock_settlement_failure_withholds_content(self):
         SupportedHandler.verify_valid = True
@@ -164,3 +180,4 @@ class PaymentBoundaryTests(unittest.TestCase):
         self.assertNotIn('private-paid-content', response.text)
         self.assertEqual(SupportedHandler.events, ['verify', 'settle'])
         fake.chain_status.assert_called_once()
+        self.assertFalse(os.path.exists(self.log_path))
