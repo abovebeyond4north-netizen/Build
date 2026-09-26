@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
@@ -220,6 +221,39 @@ ROUTE_DETAILS = {
         ),
     },
 }
+
+
+def x402_openapi(price: str) -> dict:
+    return {
+        "x-payment-info": {
+            "price": {
+                "mode": "fixed",
+                "currency": "USD",
+                "amount": price.removeprefix("$"),
+            },
+            "protocols": [{"x402": {}}],
+        }
+    }
+
+
+def paid_responses(schema: dict, example: dict) -> dict:
+    return {
+        200: {
+            "description": "Successful paid response.",
+            "content": {
+                "application/json": {
+                    "schema": schema,
+                    "example": example,
+                }
+            },
+        },
+        402: {
+            "description": (
+                "x402 payment required. Read the PAYMENT-REQUIRED response header "
+                "for the authoritative v2 payment challenge."
+            )
+        },
+    }
 
 
 def required(name):
@@ -436,23 +470,23 @@ def landing():
 </html>"""
 
 
-@app.get("/catalog")
+@app.get("/catalog", summary="Prime-Agent Product Catalog", openapi_extra={"security": []})
 def catalog(request: Request):
     """Free product catalog; contains no paid chain intelligence."""
     return product_catalog(str(request.base_url).rstrip("/"))
 
 
-@app.get("/capabilities.json")
+@app.get("/capabilities.json", summary="Prime-Agent Capabilities", openapi_extra={"security": []})
 def capabilities(request: Request):
     return product_catalog(str(request.base_url).rstrip("/"))
 
 
-@app.get("/.well-known/ai-catalog.json")
+@app.get("/.well-known/ai-catalog.json", summary="AI Service Catalog", openapi_extra={"security": []})
 def ai_catalog(request: Request):
     return product_catalog(str(request.base_url).rstrip("/"))
 
 
-@app.get("/.well-known/x402")
+@app.get("/.well-known/x402", summary="x402 Discovery Manifest", openapi_extra={"security": []})
 def x402_service_manifest(request: Request):
     base_url = str(request.base_url).rstrip("/")
     probe_token = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
@@ -514,7 +548,7 @@ def x402_service_manifest(request: Request):
     }
 
 
-@app.get("/server.json")
+@app.get("/server.json", summary="MCP Registry Metadata", openapi_extra={"security": []})
 def mcp_server_json():
     return {
         "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
@@ -537,7 +571,7 @@ def mcp_server_json():
     }
 
 
-@app.get("/llms.txt", response_class=PlainTextResponse)
+@app.get("/llms.txt", response_class=PlainTextResponse, summary="Agent Usage Guide", openapi_extra={"security": []})
 def llms_txt():
     return f"""# {SERVICE_NAME}
 
@@ -604,7 +638,7 @@ def execute(method, *args):
         raise HTTPException(503, str(exc)) from exc
 
 
-@app.get("/health/rpc")
+@app.get("/health/rpc", summary="Base RPC Readiness", openapi_extra={"security": []})
 def rpc_health():
     try:
         rpc = intelligence().rpc
@@ -621,7 +655,7 @@ def rpc_health():
         raise HTTPException(503, "Base RPC health check failed") from exc
 
 
-@app.get("/health/enrichment")
+@app.get("/health/enrichment", summary="DEX Enrichment Readiness", openapi_extra={"security": []})
 def enrichment_health():
     try:
         pairs = DexScreenerClient(dex_url).token_pairs(
@@ -644,16 +678,71 @@ def enrichment_health():
         raise HTTPException(503, "DEX enrichment health check failed") from exc
 
 
-@app.get("/chain/status")
+@app.get(
+    "/chain/status",
+    summary="Base Chain Status with Canonical Block Provenance",
+    description=ROUTE_DETAILS["GET /chain/status"]["description"],
+    tags=["x402", "Base", "Chain Data"],
+    responses=paid_responses(CHAIN_STATUS_SCHEMA, CHAIN_STATUS_EXAMPLE),
+    openapi_extra=x402_openapi(PRICES["GET /chain/status"]),
+)
 def chain_status():
     return execute(intelligence().chain_status)
 
 
-@app.get("/token/metadata/{address}")
+@app.get(
+    "/token/metadata/{address}",
+    summary="Base ERC-20 Token Metadata with Provenance",
+    description=(
+        "Resolve a Base ERC-20 contract to name, symbol and decimals using "
+        "block-hash-pinned reads, with evidence IDs and explicit missing fields."
+    ),
+    tags=["x402", "Base", "ERC-20", "Token Metadata"],
+    responses=paid_responses(TOKEN_METADATA_SCHEMA, TOKEN_METADATA_EXAMPLE),
+    openapi_extra=x402_openapi(PRICES["GET /token/metadata/:address"]),
+)
 def metadata(address: str):
     return execute(intelligence().metadata, address)
 
 
-@app.get("/token/context/{address}")
+@app.get(
+    "/token/context/{address}",
+    summary="Base Token Liquidity and 24h Trading Activity Context",
+    description=(
+        "Combine canonical Base ERC-20 metadata with DEX liquidity, reported "
+        "24-hour volume, buy/sell activity, evidence IDs, and explicit holder "
+        "coverage gaps. Market observations are third-party reported and are "
+        "not presented as a risk verdict."
+    ),
+    tags=["x402", "Base", "Token Context", "Liquidity", "Trading Activity"],
+    responses=paid_responses(TOKEN_CONTEXT_SCHEMA, TOKEN_CONTEXT_EXAMPLE),
+    openapi_extra=x402_openapi(PRICES["GET /token/context/:address"]),
+)
 def context(address: str):
     return execute(intelligence().token_context, address)
+
+
+
+def prime_agent_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    schema["info"]["x-guidance"] = (
+        "Use GET /chain/status for canonical Base block provenance; "
+        "GET /token/metadata/{address} for block-pinned ERC-20 metadata; "
+        "GET /token/context/{address} for metadata plus DEX liquidity and "
+        "24-hour trading activity. These three operations are x402-paid in "
+        "Base USDC. Inspect x-payment-info before calling and treat the runtime "
+        "PAYMENT-REQUIRED challenge as authoritative. Free discovery is available "
+        "at /catalog, /.well-known/x402, /llms.txt, and /mcp/."
+    )
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = prime_agent_openapi
