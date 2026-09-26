@@ -3,10 +3,13 @@ import os
 import base64
 import json
 import logging
+from contextlib import asynccontextmanager
 from functools import lru_cache
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse
+from mcp.server import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 from x402.extensions.bazaar import OutputConfig, declare_discovery_extension
 from x402.http import FacilitatorConfig, HTTPFacilitatorClient, PaymentOption
 from x402.http.middleware.fastapi import PaymentMiddlewareASGI
@@ -20,7 +23,11 @@ from prime_agent import BaseRPC, EvidenceStore, Intelligence, NETWORK, valid_add
 
 
 SERVICE_NAME = "Prime-Agent x402 Intelligence"
-SERVICE_TAGS = ["base", "chain-data", "token-metadata", "agent-intelligence", "x402"]
+PUBLIC_BASE_URL = os.environ.get(
+    "PRIME_PUBLIC_URL",
+    "https://prime-agent-x402-intelligence.onrender.com",
+).rstrip("/")
+MCP_SERVER_NAME = "io.github.abovebeyond4north-netizen/prime-agent-x402-intelligence"
 
 TOKEN_ADDRESS_SCHEMA = {
     "properties": {
@@ -116,6 +123,7 @@ TOKEN_CONTEXT_SCHEMA = {
 ROUTE_DETAILS = {
     "GET /chain/status": {
         "description": "Canonical-at-read-time Base mainnet block status with block hash provenance.",
+        "tags": ["base", "block-status", "canonical-data", "provenance", "rpc"],
         "extensions": declare_discovery_extension(
             output=OutputConfig(
                 example=CHAIN_STATUS_EXAMPLE,
@@ -124,7 +132,8 @@ ROUTE_DETAILS = {
         ),
     },
     "GET /token/metadata/:address": {
-        "description": "Base token contract metadata pinned to one canonical-at-read-time block hash.",
+        "description": "Base ERC-20 contract metadata pinned to one canonical-at-read-time block hash.",
+        "tags": ["base", "erc20", "token-metadata", "contract", "provenance"],
         "extensions": declare_discovery_extension(
             path_params_schema=TOKEN_ADDRESS_SCHEMA,
             output=OutputConfig(
@@ -135,6 +144,7 @@ ROUTE_DETAILS = {
     },
     "GET /token/context/:address": {
         "description": "Composed Base token context with evidence IDs and explicit coverage gaps.",
+        "tags": ["base", "token-context", "evidence", "coverage", "agent-intelligence"],
         "extensions": declare_discovery_extension(
             path_params_schema=TOKEN_ADDRESS_SCHEMA,
             output=OutputConfig(
@@ -180,18 +190,137 @@ routes = {
         mime_type="application/json",
         description=ROUTE_DETAILS[path]["description"],
         service_name=SERVICE_NAME,
-        tags=SERVICE_TAGS,
+        tags=ROUTE_DETAILS[path]["tags"],
         extensions=ROUTE_DETAILS[path]["extensions"],
     )
     for path, price in PRICES.items()
 }
 
+
+def product_catalog(base_url: str) -> dict:
+    base_url = base_url.rstrip("/")
+    products = []
+    for route, price in PRICES.items():
+        method, template = route.split(" ", 1)
+        http_template = template.replace(":address", "{address}")
+        products.append({
+            "id": route.lower().replace(" ", ":").replace("/", ".").replace(":", "-"),
+            "method": method,
+            "route_template": template,
+            "purchase_url_template": base_url + http_template,
+            "price_usd": price.removeprefix("$"),
+            "currency": "USDC",
+            "network": NETWORK,
+            "scheme": "exact",
+            "description": ROUTE_DETAILS[route]["description"],
+            "tags": ROUTE_DETAILS[route]["tags"],
+            "paid": True,
+        })
+    return {
+        "service": SERVICE_NAME,
+        "version": "0.2.0",
+        "base_url": base_url,
+        "network": NETWORK,
+        "payment_protocol": "x402-v2",
+        "products": products,
+        "mcp": {
+            "transport": "streamable-http",
+            "url": base_url + "/mcp/",
+            "purpose": "Free product discovery and quoting; paid intelligence remains on x402 HTTP routes.",
+        },
+    }
+
+
+mcp_server = MCPServer(
+    name=MCP_SERVER_NAME,
+    title=SERVICE_NAME,
+    description="Discover and quote x402-paid Base intelligence products.",
+    instructions=(
+        "Use these tools to discover Prime-Agent products and prices. "
+        "The MCP tools do not bypass payment; purchase the returned x402 HTTP URL."
+    ),
+    website_url=PUBLIC_BASE_URL,
+    version="0.2.0",
+)
+
+
+@mcp_server.tool()
+def list_products() -> dict:
+    """List Prime-Agent x402 products, prices, capabilities, and purchase URL templates."""
+    return product_catalog(PUBLIC_BASE_URL)
+
+
+@mcp_server.tool()
+def quote_token_product(product: str, address: str | None = None) -> dict:
+    """Quote one product and return the exact x402 purchase URL without spending funds."""
+    aliases = {
+        "chain_status": "GET /chain/status",
+        "token_metadata": "GET /token/metadata/:address",
+        "token_context": "GET /token/context/:address",
+    }
+    route = aliases.get(product)
+    if route is None:
+        raise ValueError("product must be chain_status, token_metadata, or token_context")
+    if ":address" in route:
+        if address is None:
+            raise ValueError("address is required for token products")
+        address = valid_address(address)
+    _, template = route.split(" ", 1)
+    url = PUBLIC_BASE_URL + template.replace(":address", address or "")
+    return {
+        "product": product,
+        "url": url,
+        "price_usd": PRICES[route].removeprefix("$"),
+        "currency": "USDC",
+        "network": NETWORK,
+        "scheme": "exact",
+        "description": ROUTE_DETAILS[route]["description"],
+        "tags": ROUTE_DETAILS[route]["tags"],
+        "spends_funds": False,
+        "next_step": "Issue an x402-capable GET to the quoted URL and authorize only under the buyer's own budget policy.",
+    }
+
+
+mcp_http_app = mcp_server.streamable_http_app(
+    streamable_http_path="/",
+    json_response=True,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[
+            "prime-agent-x402-intelligence.onrender.com",
+            "prime-agent-x402-intelligence.onrender.com:*",
+            "testserver",
+            "testserver:*",
+            "localhost:*",
+            "127.0.0.1:*",
+        ],
+        allowed_origins=[
+            "https://prime-agent-x402-intelligence.onrender.com",
+            "http://testserver",
+            "http://localhost:*",
+            "http://127.0.0.1:*",
+        ],
+    ),
+)
+
+
+@asynccontextmanager
+async def app_lifespan(_app):
+    async with mcp_server.session_manager.run():
+        yield
+
+
 app = FastAPI(
     title=SERVICE_NAME,
+    version="0.2.0",
+    description="x402-paid Base intelligence with free machine-readable discovery.",
     docs_url=None,
     redoc_url=None,
-    openapi_url=None,
+    openapi_url="/openapi.json",
+    lifespan=app_lifespan,
 )
+app.mount("/mcp", mcp_http_app)
+
 app.add_middleware(
     PaymentMiddlewareASGI,
     routes=routes,
@@ -231,6 +360,68 @@ def landing():
   <p>Agent endpoint: <code>GET /chain/status</code></p>
 </body>
 </html>"""
+
+
+@app.get("/catalog")
+def catalog(request: Request):
+    """Free product catalog; contains no paid chain intelligence."""
+    return product_catalog(str(request.base_url).rstrip("/"))
+
+
+@app.get("/capabilities.json")
+def capabilities(request: Request):
+    return product_catalog(str(request.base_url).rstrip("/"))
+
+
+@app.get("/.well-known/ai-catalog.json")
+def ai_catalog(request: Request):
+    return product_catalog(str(request.base_url).rstrip("/"))
+
+
+@app.get("/server.json")
+def mcp_server_json():
+    return {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": MCP_SERVER_NAME,
+        "title": SERVICE_NAME,
+        "description": "Discover and quote x402-paid Base intelligence products.",
+        "version": "0.2.0",
+        "websiteUrl": PUBLIC_BASE_URL,
+        "repository": {
+            "url": "https://github.com/abovebeyond4north-netizen/Build",
+            "source": "github",
+            "subfolder": "prime-agent-x402",
+        },
+        "remotes": [
+            {
+                "type": "streamable-http",
+                "url": PUBLIC_BASE_URL + "/mcp/",
+            }
+        ],
+    }
+
+
+@app.get("/llms.txt", response_class=PlainTextResponse)
+def llms_txt():
+    return f"""# {SERVICE_NAME}
+
+Machine-payable Base intelligence using x402 v2 exact USDC payments.
+
+Free discovery:
+- Catalog: {PUBLIC_BASE_URL}/catalog
+- OpenAPI: {PUBLIC_BASE_URL}/openapi.json
+- MCP: {PUBLIC_BASE_URL}/mcp/
+- MCP Registry metadata: {PUBLIC_BASE_URL}/server.json
+- AI catalog: {PUBLIC_BASE_URL}/.well-known/ai-catalog.json
+
+Paid products:
+- GET /chain/status — $0.001 USDC — canonical Base block status with provenance
+- GET /token/metadata/{{address}} — $0.003 USDC — Base ERC-20 metadata pinned to one block hash
+- GET /token/context/{{address}} — $0.009 USDC — composed evidence-bearing token context
+
+The MCP tools are discovery/quotation tools only and do not bypass x402 payment.
+Never send a private key to this service.
+"""
 
 
 @app.middleware("http")
