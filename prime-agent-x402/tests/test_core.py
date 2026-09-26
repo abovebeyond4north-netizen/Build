@@ -62,6 +62,6 @@ class CoreTests(unittest.TestCase):
     def test_receipt_dedup(self):
         receipts=[{'status':'settled','network':NETWORK,'transaction':'0x1','amount_usd':'0.02','payer':TOKEN}]*2
         out=reconcile(receipts,[{'amount_usd':'0.001'}])
-        self.assertEqual(out['contribution_usd'],'0.019')
-        self.assertEqual(out['settled_receipts'],1)
+        self.assertEqual(out['reported_contribution_usd'],'0.019')
+        self.assertEqual(out['reported_settled_receipts'],1)
         self.assertEqual(len(out['duplicate_transactions']),1)
