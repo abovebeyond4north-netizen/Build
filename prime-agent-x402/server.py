@@ -3,7 +3,7 @@ import os
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException
-from x402.extensions.bazaar import (\n    OutputConfig,\n    bazaar_resource_server_extension,\n    declare_discovery_extension,\n)
+from x402.extensions.bazaar import OutputConfig, declare_discovery_extension
 from x402.http import FacilitatorConfig, HTTPFacilitatorClient, PaymentOption
 from x402.http.middleware.fastapi import PaymentMiddlewareASGI
 from x402.http.types import RouteConfig
@@ -15,147 +15,190 @@ from pricing import PRICES
 from prime_agent import BaseRPC, EvidenceStore, Intelligence, NETWORK, valid_address
 
 
-SERVICE_NAME = 'Prime-Agent x402 Intelligence'
-SERVICE_TAGS = ['base', 'chain-data', 'token-metadata', 'agent-intelligence', 'x402']
+SERVICE_NAME = "Prime-Agent x402 Intelligence"
+SERVICE_TAGS = ["base", "chain-data", "token-metadata", "agent-intelligence", "x402"]
+
 TOKEN_ADDRESS_SCHEMA = {
-    'properties': {
-        'address': {
-            'type': 'string',
-            'description': 'EVM token contract address on Base mainnet.',
-            'pattern': '^0x[0-9a-fA-F]{40}$',
+    "properties": {
+        "address": {
+            "type": "string",
+            "description": "EVM token contract address on Base mainnet.",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
         },
     },
-    'required': ['address'],
+    "required": ["address"],
 }
+
 SNAPSHOT_SCHEMA = {
-    'type': 'object',
-    'properties': {
-        'network': {'type': 'string'},
-        'block_number': {'type': 'integer'},
-        'block_hash': {'type': 'string'},
-        'observed_at': {'type': 'integer'},
+    "type": "object",
+    "properties": {
+        "network": {"type": "string"},
+        "block_number": {"type": "integer"},
+        "block_hash": {"type": "string"},
+        "observed_at": {"type": "integer"},
     },
-    'required': ['network', 'block_number', 'block_hash', 'observed_at'],
+    "required": ["network", "block_number", "block_hash", "observed_at"],
 }
-CHAIN_STATUS_OUTPUT = OutputConfig(
-    example={
-        'network': NETWORK,
-        'block_number': 12345678,
-        'block_hash': '0x' + '1' * 64,
-        'observed_at': 1760000000,
+
+CHAIN_STATUS_EXAMPLE = {
+    "network": NETWORK,
+    "block_number": 12345678,
+    "block_hash": "0x" + "1" * 64,
+    "observed_at": 1760000000,
+}
+CHAIN_STATUS_SCHEMA = SNAPSHOT_SCHEMA
+
+TOKEN_METADATA_EXAMPLE = {
+    "network": NETWORK,
+    "token": "0x" + "a" * 40,
+    "snapshot": CHAIN_STATUS_EXAMPLE,
+    "is_contract": True,
+    "fields": {"decimals": 18, "symbol": "TOKEN", "name": "Example Token"},
+    "evidence_ids": ["example-evidence-id"],
+    "missing": [],
+}
+TOKEN_METADATA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "network": {"type": "string"},
+        "token": {"type": "string"},
+        "snapshot": SNAPSHOT_SCHEMA,
+        "is_contract": {"type": "boolean"},
+        "fields": {"type": "object"},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "missing": {"type": "array", "items": {"type": "string"}},
     },
-    schema=SNAPSHOT_SCHEMA,
-)
-TOKEN_METADATA_OUTPUT = OutputConfig(
-    example={
-        'network': NETWORK,
-        'token': '0x' + 'a' * 40,
-        'snapshot': {
-            'network': NETWORK,
-            'block_number': 12345678,
-            'block_hash': '0x' + '1' * 64,
-            'observed_at': 1760000000,
-        },
-        'is_contract': True,
-        'fields': {'decimals': 18, 'symbol': 'TOKEN', 'name': 'Example Token'},
-        'evidence_ids': ['example-evidence-id'],
-        'missing': [],
+    "required": [
+        "network",
+        "token",
+        "snapshot",
+        "is_contract",
+        "fields",
+        "evidence_ids",
+        "missing",
+    ],
+}
+
+COVERAGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "contract": {"type": "boolean"},
+        "metadata": {"type": "boolean"},
+        "holders": {"type": "boolean"},
+        "liquidity": {"type": "boolean"},
+        "activity": {"type": "boolean"},
     },
-    schema={
-        'type': 'object',
-        'properties': {
-            'network': {'type': 'string'},
-            'token': {'type': 'string'},
-            'snapshot': SNAPSHOT_SCHEMA,
-            'is_contract': {'type': 'boolean'},
-            'fields': {'type': 'object'},
-            'evidence_ids': {'type': 'array', 'items': {'type': 'string'}},
-            'missing': {'type': 'array', 'items': {'type': 'string'}},
-        },
-        'required': ['network', 'token', 'snapshot', 'is_contract', 'fields', 'evidence_ids', 'missing'],
+    "required": ["contract", "metadata", "holders", "liquidity", "activity"],
+}
+TOKEN_CONTEXT_EXAMPLE = {
+    **TOKEN_METADATA_EXAMPLE,
+    "coverage": {
+        "contract": True,
+        "metadata": True,
+        "holders": False,
+        "liquidity": False,
+        "activity": False,
     },
-)
-TOKEN_CONTEXT_OUTPUT = OutputConfig(
-    example={
-        **TOKEN_METADATA_OUTPUT.example,
-        'coverage': {
-            'contract': True,
-            'metadata': True,
-            'holders': False,
-            'liquidity': False,
-            'activity': False,
-        },
+}
+TOKEN_CONTEXT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        **TOKEN_METADATA_SCHEMA["properties"],
+        "coverage": COVERAGE_SCHEMA,
     },
-    schema={
-        'type': 'object',
-        'properties': {
-            **TOKEN_METADATA_OUTPUT.schema['properties'],
-            'coverage': {
-                'type': 'object',
-                'properties': {
-                    'contract': {'type': 'boolean'},
-                    'metadata': {'type': 'boolean'},
-                    'holders': {'type': 'boolean'},
-                    'liquidity': {'type': 'boolean'},
-                    'activity': {'type': 'boolean'},
-                },
-                'required': ['contract', 'metadata', 'holders', 'liquidity', 'activity'],
-            },
-        },
-        'required': TOKEN_METADATA_OUTPUT.schema['required'] + ['coverage'],
-    },
-)
+    "required": [*TOKEN_METADATA_SCHEMA["required"], "coverage"],
+}
+
 ROUTE_DETAILS = {
-    'GET /chain/status': {
-        'description': 'Canonical-at-read-time Base mainnet block status with block hash provenance.',
-        'extensions': declare_discovery_extension(output=CHAIN_STATUS_OUTPUT),
-    },
-    'GET /token/metadata/:address': {
-        'description': 'Base token contract metadata pinned to one canonical-at-read-time block hash.',
-        'extensions': declare_discovery_extension(
-            path_params_schema=TOKEN_ADDRESS_SCHEMA,
-            output=TOKEN_METADATA_OUTPUT,
+    "GET /chain/status": {
+        "description": "Canonical-at-read-time Base mainnet block status with block hash provenance.",
+        "extensions": declare_discovery_extension(
+            output=OutputConfig(
+                example=CHAIN_STATUS_EXAMPLE,
+                schema=CHAIN_STATUS_SCHEMA,
+            ),
         ),
     },
-    'GET /token/context/:address': {
-        'description': 'Composed Base token context with evidence IDs and explicit coverage gaps.',
-        'extensions': declare_discovery_extension(
+    "GET /token/metadata/:address": {
+        "description": "Base token contract metadata pinned to one canonical-at-read-time block hash.",
+        "extensions": declare_discovery_extension(
             path_params_schema=TOKEN_ADDRESS_SCHEMA,
-            output=TOKEN_CONTEXT_OUTPUT,
+            output=OutputConfig(
+                example=TOKEN_METADATA_EXAMPLE,
+                schema=TOKEN_METADATA_SCHEMA,
+            ),
+        ),
+    },
+    "GET /token/context/:address": {
+        "description": "Composed Base token context with evidence IDs and explicit coverage gaps.",
+        "extensions": declare_discovery_extension(
+            path_params_schema=TOKEN_ADDRESS_SCHEMA,
+            output=OutputConfig(
+                example=TOKEN_CONTEXT_EXAMPLE,
+                schema=TOKEN_CONTEXT_SCHEMA,
+            ),
         ),
     },
 }
 
 
 def required(name):
-    value = os.environ.get(name, '').strip()
+    value = os.environ.get(name, "").strip()
     if not value:
-        raise RuntimeError(f'{name} is required for paid routes')
+        raise RuntimeError(f"{name} is required for paid routes")
     return value
 
 
-pay_to = valid_address(required('PRIME_PAY_TO'))
-facilitator_url = required('PRIME_FACILITATOR_URL')
-rpc_url = required('PRIME_BASE_RPC_URL')
-db_path = required('PRIME_EVIDENCE_DB')
-journal_path = required('PRIME_DELIVERY_JOURNAL')
-server = x402ResourceServer(HTTPFacilitatorClient(FacilitatorConfig(url=facilitator_url)))
+pay_to = valid_address(required("PRIME_PAY_TO"))
+facilitator_url = required("PRIME_FACILITATOR_URL")
+rpc_url = required("PRIME_BASE_RPC_URL")
+db_path = required("PRIME_EVIDENCE_DB")
+journal_path = required("PRIME_DELIVERY_JOURNAL")
+
+server = x402ResourceServer(
+    HTTPFacilitatorClient(FacilitatorConfig(url=facilitator_url))
+)
 server.register(NETWORK, ExactEvmServerScheme())
-# The x402 matcher uses :param syntax; FastAPI handlers below use {param}.
+
+# PaymentMiddlewareASGI in x402 >=2.24 auto-registers the Bazaar resource
+# extension whenever a configured route declares extensions.bazaar. The x402
+# matcher uses :param syntax; FastAPI handlers below use {param}.
 routes = {
     path: RouteConfig(
-        accepts=[PaymentOption(scheme='exact', pay_to=pay_to, price=price, network=NETWORK)],
-        mime_type='application/json',
-        description=ROUTE_DETAILS[path]['description'],
+        accepts=[
+            PaymentOption(
+                scheme="exact",
+                pay_to=pay_to,
+                price=price,
+                network=NETWORK,
+            )
+        ],
+        mime_type="application/json",
+        description=ROUTE_DETAILS[path]["description"],
         service_name=SERVICE_NAME,
         tags=SERVICE_TAGS,
-        extensions=ROUTE_DETAILS[path]['extensions'],
+        extensions=ROUTE_DETAILS[path]["extensions"],
     )
     for path, price in PRICES.items()
 }
-app = FastAPI(title='Prime-Agent x402 Intelligence', docs_url=None, redoc_url=None, openapi_url=None)
-app.add_middleware(PaymentMiddlewareASGI, routes=routes, server=server)
-app.add_middleware(DeliveryJournalASGI, path=journal_path, pay_to=pay_to, prices=PRICES)
+
+app = FastAPI(
+    title=SERVICE_NAME,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+app.add_middleware(
+    PaymentMiddlewareASGI,
+    routes=routes,
+    server=server,
+)
+app.add_middleware(
+    DeliveryJournalASGI,
+    path=journal_path,
+    pay_to=pay_to,
+    prices=PRICES,
+)
 
 
 @lru_cache(maxsize=1)
@@ -172,16 +215,16 @@ def execute(method, *args):
         raise HTTPException(503, str(exc)) from exc
 
 
-@app.get('/chain/status')
+@app.get("/chain/status")
 def chain_status():
     return execute(intelligence().chain_status)
 
 
-@app.get('/token/metadata/{address}')
+@app.get("/token/metadata/{address}")
 def metadata(address: str):
     return execute(intelligence().metadata, address)
 
 
-@app.get('/token/context/{address}')
+@app.get("/token/context/{address}")
 def context(address: str):
     return execute(intelligence().token_context, address)
