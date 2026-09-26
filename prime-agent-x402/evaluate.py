@@ -1,4 +1,4 @@
-"""Independent offline evaluator of confirmed settlement exports and actual costs."""
+"""Offline evaluator of seller-reported settlement exports and costs."""
 import argparse
 import json
 from decimal import Decimal, InvalidOperation
@@ -29,11 +29,11 @@ def reconcile(receipts, costs):
         except (KeyError, InvalidOperation) as exc: raise ValueError('invalid cost') from exc
         if value < 0: raise ValueError('negative cost')
         expenses += value
-    return {'settled_revenue_usd':str(revenue), 'attributed_cost_usd':str(expenses),
-            'contribution_usd':str(revenue-expenses), 'distinct_payer_wallets':len(payers),
-            'settled_receipts':len(paid), 'unsettled_records':unsettled,
+    return {'reported_settled_revenue_usd':str(revenue), 'reported_attributed_cost_usd':str(expenses),
+            'reported_contribution_usd':str(revenue-expenses), 'reported_distinct_payer_wallets':len(payers),
+            'reported_settled_receipts':len(paid), 'unsettled_records':unsettled,
             'duplicate_transactions':duplicates,
-            'caveat':'Exports require independent chain confirmation; wallet count is not independent buyers.'}
+            'caveat':'Seller exports are unverified; use verify_transfers for independent chain corroboration. Wallet count is not independent buyers.'}
 
 def read_jsonl(path):
     with open(path, encoding='utf-8') as f: return [json.loads(line) for line in f if line.strip()]
