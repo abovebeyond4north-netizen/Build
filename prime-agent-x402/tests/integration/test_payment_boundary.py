@@ -1,4 +1,4 @@
-"""Unpaid HTTP challenge through the real x402 middleware and a local facilitator."""
+"""Payment boundary through the real x402 middleware and a local facilitator."""
 import base64
 import json
 import os
@@ -10,6 +10,9 @@ from fastapi.testclient import TestClient
 
 
 class SupportedHandler(BaseHTTPRequestHandler):
+    verify_calls = 0
+    settle_calls = 0
+
     def do_GET(self):
         if self.path != '/supported':
             self.send_error(404)
@@ -18,6 +21,23 @@ class SupportedHandler(BaseHTTPRequestHandler):
             'kinds': [{'x402Version': 2, 'scheme': 'exact', 'network': 'eip155:8453', 'extra': {}}],
             'extensions': [], 'signers': {}
         }).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get('Content-Length', '0')))
+        if self.path == '/verify':
+            type(self).verify_calls += 1
+            body = json.dumps({'isValid': False, 'invalidReason': 'invalid_signature', 'payer': None}).encode()
+        elif self.path == '/settle':
+            type(self).settle_calls += 1
+            body = json.dumps({'success': False, 'transaction': '', 'network': 'eip155:8453'}).encode()
+        else:
+            self.send_error(404)
+            return
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(body)))
@@ -63,3 +83,34 @@ class PaymentBoundaryTests(unittest.TestCase):
             response = client.get('/token/verdict/0x'+'a'*40)
             self.assertEqual(response.status_code, 404)
             self.assertNotIn('PAYMENT-REQUIRED', response.headers)
+
+    def test_all_offered_routes_require_payment(self):
+        address = '0x' + 'a' * 40
+        for path, amount in [('/chain/status', '1000'),
+                             (f'/token/metadata/{address}', '3000'),
+                             (f'/token/context/{address}', '9000')]:
+            with self.subTest(path=path), TestClient(self.app) as client:
+                response = client.get(path)
+                self.assertEqual(response.status_code, 402)
+                challenge = json.loads(base64.b64decode(response.headers['PAYMENT-REQUIRED']))
+                self.assertEqual(challenge['accepts'][0]['amount'], amount)
+
+    def test_invalid_payment_never_settles(self):
+        with TestClient(self.app) as client:
+            challenge_response = client.get('/chain/status')
+            challenge = json.loads(base64.b64decode(challenge_response.headers['PAYMENT-REQUIRED']))
+            accepted = challenge['accepts'][0]
+            payment = {
+                'x402Version': 2, 'accepted': accepted, 'resource': challenge['resource'],
+                'payload': {
+                    'signature': '0x' + '0' * 130,
+                    'authorization': {'from': '0x' + '2' * 40, 'to': accepted['payTo'],
+                                      'value': accepted['amount'], 'validAfter': '0',
+                                      'validBefore': '9999999999', 'nonce': '0x' + '3' * 64},
+                },
+            }
+            signature = base64.b64encode(json.dumps(payment).encode()).decode()
+            before = SupportedHandler.settle_calls
+            response = client.get('/chain/status', headers={'PAYMENT-SIGNATURE': signature})
+            self.assertEqual(response.status_code, 402)
+            self.assertEqual(SupportedHandler.settle_calls, before)
