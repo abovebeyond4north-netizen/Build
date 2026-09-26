@@ -8,6 +8,7 @@ from x402.http.types import RouteConfig
 from x402.mechanisms.evm.exact import ExactEvmServerScheme
 from x402.server import x402ResourceServer
 from prime_agent import BaseRPC, EvidenceStore, Intelligence, NETWORK, valid_address
+from delivery_journal import DeliveryJournalASGI
 
 
 def required(name):
@@ -19,6 +20,7 @@ pay_to = valid_address(required('PRIME_PAY_TO'))
 facilitator_url = required('PRIME_FACILITATOR_URL')
 rpc_url = required('PRIME_BASE_RPC_URL')
 db_path = required('PRIME_EVIDENCE_DB')
+journal_path = required('PRIME_DELIVERY_JOURNAL')
 server = x402ResourceServer(HTTPFacilitatorClient(FacilitatorConfig(url=facilitator_url)))
 server.register(NETWORK, ExactEvmServerScheme())
 # The x402 matcher uses :param syntax; FastAPI handlers below use {param}.
@@ -30,6 +32,7 @@ routes = {path: RouteConfig(
     for path, price in PRICES.items()}
 app = FastAPI(title='Prime-Agent x402 Intelligence', docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(PaymentMiddlewareASGI, routes=routes, server=server)
+app.add_middleware(DeliveryJournalASGI, path=journal_path, pay_to=pay_to, prices=PRICES)
 
 @lru_cache(maxsize=1)
 def intelligence(): return Intelligence(BaseRPC(rpc_url), EvidenceStore(db_path))
