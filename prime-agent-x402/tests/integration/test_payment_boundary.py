@@ -211,6 +211,38 @@ class PaymentBoundaryTests(unittest.TestCase):
             x402_manifest["capabilities"]["tokenContext"]["holders"]
         )
 
+    def test_openapi_declares_x402_prices_and_agent_guidance(self):
+        doc = self.client.get("/openapi.json").json()
+        self.assertIn("x-guidance", doc["info"])
+        cases = [
+            ("/chain/status", "0.001"),
+            ("/token/metadata/{address}", "0.003"),
+            ("/token/context/{address}", "0.009"),
+        ]
+        for path, price in cases:
+            with self.subTest(path=path):
+                operation = doc["paths"][path]["get"]
+                payment = operation["x-payment-info"]
+                self.assertEqual(
+                    payment["price"],
+                    {"mode": "fixed", "currency": "USD", "amount": price},
+                )
+                self.assertEqual(payment["protocols"], [{"x402": {}}])
+                self.assertIn("402", operation["responses"])
+                self.assertIn("200", operation["responses"])
+                schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+                self.assertEqual(schema["type"], "object")
+
+        self.assertEqual(doc["paths"]["/catalog"]["get"]["security"], [])
+        self.assertIn(
+            "Liquidity",
+            doc["paths"]["/token/context/{address}"]["get"]["tags"],
+        )
+        self.assertIn(
+            "Token Metadata",
+            doc["paths"]["/token/metadata/{address}"]["get"]["tags"],
+        )
+
     def test_mcp_discovery_tools_are_free_quotes_not_paid_content(self):
         tools = asyncio.run(self.server_module.mcp_server.list_tools())
         names = {tool.name for tool in tools}
