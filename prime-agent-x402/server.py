@@ -9,6 +9,7 @@ from x402.mechanisms.evm.exact import ExactEvmServerScheme
 from x402.server import x402ResourceServer
 from prime_agent import BaseRPC, EvidenceStore, Intelligence, NETWORK, valid_address
 from delivery_journal import DeliveryJournalASGI
+from pricing import PRICES
 
 
 def required(name):
@@ -24,8 +25,6 @@ journal_path = required('PRIME_DELIVERY_JOURNAL')
 server = x402ResourceServer(HTTPFacilitatorClient(FacilitatorConfig(url=facilitator_url)))
 server.register(NETWORK, ExactEvmServerScheme())
 # The x402 matcher uses :param syntax; FastAPI handlers below use {param}.
-PRICES = {'GET /chain/status':'$0.001', 'GET /token/metadata/:address':'$0.003',
-          'GET /token/context/:address':'$0.009'}
 routes = {path: RouteConfig(
     accepts=[PaymentOption(scheme='exact', pay_to=pay_to, price=price, network=NETWORK)],
     mime_type='application/json', description='Prime-Agent Base chain intelligence')
