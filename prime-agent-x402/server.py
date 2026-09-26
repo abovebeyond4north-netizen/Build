@@ -3,7 +3,7 @@ import os
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException
-from x402.extensions.bazaar import OutputConfig, declare_discovery_extension
+from x402.extensions.bazaar import (\n    OutputConfig,\n    bazaar_resource_server_extension,\n    declare_discovery_extension,\n)
 from x402.http import FacilitatorConfig, HTTPFacilitatorClient, PaymentOption
 from x402.http.middleware.fastapi import PaymentMiddlewareASGI
 from x402.http.types import RouteConfig
