@@ -197,6 +197,20 @@ class PaymentBoundaryTests(unittest.TestCase):
         self.assertEqual(openapi.status_code, 200)
         self.assertIn("/chain/status", openapi.json()["paths"])
 
+        manifest = self.client.get("/.well-known/x402")
+        self.assertEqual(manifest.status_code, 200)
+        x402_manifest = manifest.json()
+        self.assertEqual(x402_manifest["spec"], "agent402-service-manifest/1")
+        self.assertEqual(x402_manifest["version"], 1)
+        self.assertEqual(len(x402_manifest["resources"]), 3)
+        self.assertEqual(
+            x402_manifest["payment"]["x402"]["network"],
+            "eip155:8453",
+        )
+        self.assertFalse(
+            x402_manifest["capabilities"]["tokenContext"]["holders"]
+        )
+
     def test_mcp_discovery_tools_are_free_quotes_not_paid_content(self):
         tools = asyncio.run(self.server_module.mcp_server.list_tools())
         names = {tool.name for tool in tools}
