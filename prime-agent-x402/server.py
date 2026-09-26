@@ -21,8 +21,9 @@ rpc_url = required('PRIME_BASE_RPC_URL')
 db_path = required('PRIME_EVIDENCE_DB')
 server = x402ResourceServer(HTTPFacilitatorClient(FacilitatorConfig(url=facilitator_url)))
 server.register(NETWORK, ExactEvmServerScheme())
-PRICES = {'GET /chain/status':'$0.001', 'GET /token/metadata/{address}':'$0.003',
-          'GET /token/context/{address}':'$0.009'}
+# The x402 matcher uses :param syntax; FastAPI handlers below use {param}.
+PRICES = {'GET /chain/status':'$0.001', 'GET /token/metadata/:address':'$0.003',
+          'GET /token/context/:address':'$0.009'}
 routes = {path: RouteConfig(
     accepts=[PaymentOption(scheme='exact', pay_to=pay_to, price=price, network=NETWORK)],
     mime_type='application/json', description='Prime-Agent Base chain intelligence')
