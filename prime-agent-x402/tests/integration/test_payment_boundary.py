@@ -77,6 +77,8 @@ class PaymentBoundaryTests(unittest.TestCase):
         import server
         cls.app = server.app
         cls.server_module = server
+        cls.client = TestClient(cls.app)
+        cls.client.__enter__()
 
     def tearDown(self):
         SupportedHandler.verify_valid = False
@@ -87,14 +89,15 @@ class PaymentBoundaryTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls.client.__exit__(None, None, None)
         cls.facilitator.shutdown()
         cls.facilitator.server_close()
         cls.thread.join(timeout=2)
         cls.log_dir.cleanup()
 
     def test_unsigned_request_is_402_without_rpc(self):
-        with TestClient(self.app) as client:
-            response = client.get('/chain/status')
+        client = self.client
+        response = client.get('/chain/status')
             self.assertEqual(response.status_code, 402)
             header = response.headers['PAYMENT-REQUIRED']
             challenge = json.loads(base64.b64decode(header))
@@ -105,8 +108,8 @@ class PaymentBoundaryTests(unittest.TestCase):
 
     def test_bazaar_discovery_metadata_is_in_dynamic_402(self):
         address = '0x' + 'a' * 40
-        with TestClient(self.app) as client:
-            response = client.get(f'/token/metadata/{address}')
+        client = self.client
+        response = client.get(f'/token/metadata/{address}')
         self.assertEqual(response.status_code, 402)
         challenge = json.loads(base64.b64decode(response.headers['PAYMENT-REQUIRED']))
         resource = challenge['resource']
@@ -123,8 +126,8 @@ class PaymentBoundaryTests(unittest.TestCase):
 
 
     def test_free_discovery_surfaces_do_not_require_payment(self):
-        with TestClient(self.app) as client:
-            catalog = client.get('/catalog')
+        client = self.client
+        catalog = client.get('/catalog')
             self.assertEqual(catalog.status_code, 200)
             self.assertNotIn('PAYMENT-REQUIRED', catalog.headers)
             payload = catalog.json()
@@ -165,8 +168,8 @@ class PaymentBoundaryTests(unittest.TestCase):
         self.assertIn('/token/metadata/0x', quote['url'])
 
     def test_unoffered_verdict_is_not_paid(self):
-        with TestClient(self.app) as client:
-            response = client.get('/token/verdict/0x'+'a'*40)
+        client = self.client
+        response = client.get('/token/verdict/0x'+'a'*40)
             self.assertEqual(response.status_code, 404)
             self.assertNotIn('PAYMENT-REQUIRED', response.headers)
 
@@ -175,7 +178,7 @@ class PaymentBoundaryTests(unittest.TestCase):
         for path, amount in [('/chain/status', '1000'),
                              (f'/token/metadata/{address}', '3000'),
                              (f'/token/context/{address}', '9000')]:
-            with self.subTest(path=path), TestClient(self.app) as client:
+            with self.subTest(path=path):
                 response = client.get(path)
                 self.assertEqual(response.status_code, 402)
                 challenge = json.loads(base64.b64decode(response.headers['PAYMENT-REQUIRED']))
@@ -183,8 +186,8 @@ class PaymentBoundaryTests(unittest.TestCase):
                 self.assertIn('bazaar', challenge['extensions'])
 
     def test_invalid_payment_never_settles(self):
-        with TestClient(self.app) as client:
-            signature = self.payment_header(client)
+        client = self.client
+        signature = self.payment_header(client)
             before = SupportedHandler.settle_calls
             before_verify = SupportedHandler.verify_calls
             response = client.get('/chain/status', headers={'PAYMENT-SIGNATURE': signature})
@@ -217,7 +220,8 @@ class PaymentBoundaryTests(unittest.TestCase):
         data = {'network': 'eip155:8453', 'block_number': 42, 'marker': 'paid-content'}
         fake = MagicMock()
         fake.chain_status.side_effect = lambda: (SupportedHandler.events.append('handler'), data)[1]
-        with patch.object(self.server_module, 'intelligence', return_value=fake), TestClient(self.app) as client:
+        client = self.client
+        with patch.object(self.server_module, 'intelligence', return_value=fake):
             signature = self.payment_header(client)
             with self.assertLogs('delivery_journal', level='INFO') as logs:
                 response = client.get('/chain/status', headers={'PAYMENT-SIGNATURE': signature})
@@ -241,7 +245,8 @@ class PaymentBoundaryTests(unittest.TestCase):
         SupportedHandler.settle_success = False
         fake = MagicMock()
         fake.chain_status.side_effect = lambda: {'marker': 'private-paid-content'}
-        with patch.object(self.server_module, 'intelligence', return_value=fake), TestClient(self.app) as client:
+        client = self.client
+        with patch.object(self.server_module, 'intelligence', return_value=fake):
             signature = self.payment_header(client)
             response = client.get('/chain/status', headers={'PAYMENT-SIGNATURE': signature})
         self.assertEqual(response.status_code, 402)
