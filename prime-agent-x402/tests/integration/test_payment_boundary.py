@@ -111,7 +111,7 @@ class PaymentBoundaryTests(unittest.TestCase):
         challenge = json.loads(base64.b64decode(response.headers['PAYMENT-REQUIRED']))
         resource = challenge['resource']
         self.assertEqual(resource['serviceName'], 'Prime-Agent x402 Intelligence')
-        self.assertEqual(resource['tags'], ['base', 'chain-data', 'token-metadata', 'agent-intelligence', 'x402'])
+        self.assertEqual(resource['tags'], ['base', 'erc20', 'token-metadata', 'contract', 'provenance'])
         self.assertTrue(resource['url'].startswith('http://testserver/token/metadata/'))
         bazaar = challenge['extensions']['bazaar']
         self.assertEqual(bazaar['routeTemplate'], '/token/metadata/:address')
@@ -120,6 +120,49 @@ class PaymentBoundaryTests(unittest.TestCase):
         self.assertEqual(bazaar['info']['input']['pathParams']['address'], address)
         self.assertEqual(bazaar['info']['output']['type'], 'json')
         self.assertEqual(bazaar['info']['output']['example']['network'], 'eip155:8453')
+
+
+    def test_free_discovery_surfaces_do_not_require_payment(self):
+        with TestClient(self.app) as client:
+            catalog = client.get('/catalog')
+            self.assertEqual(catalog.status_code, 200)
+            self.assertNotIn('PAYMENT-REQUIRED', catalog.headers)
+            payload = catalog.json()
+            self.assertEqual(payload['service'], 'Prime-Agent x402 Intelligence')
+            self.assertEqual(len(payload['products']), 3)
+            self.assertTrue(all(product['paid'] for product in payload['products']))
+
+            llms = client.get('/llms.txt')
+            self.assertEqual(llms.status_code, 200)
+            self.assertIn('/token/context/{address}', llms.text)
+
+            server_json = client.get('/server.json')
+            self.assertEqual(server_json.status_code, 200)
+            manifest = server_json.json()
+            self.assertEqual(
+                manifest['name'],
+                'io.github.abovebeyond4north-netizen/prime-agent-x402-intelligence',
+            )
+            self.assertEqual(manifest['remotes'][0]['type'], 'streamable-http')
+            self.assertTrue(manifest['remotes'][0]['url'].endswith('/mcp/'))
+
+            openapi = client.get('/openapi.json')
+            self.assertEqual(openapi.status_code, 200)
+            self.assertIn('/chain/status', openapi.json()['paths'])
+
+    def test_mcp_discovery_tools_are_free_quotes_not_paid_content(self):
+        import asyncio
+        tools = asyncio.run(self.server_module.mcp_server.list_tools())
+        names = {tool.name for tool in tools}
+        self.assertIn('list_products', names)
+        self.assertIn('quote_token_product', names)
+        quote = self.server_module.quote_token_product(
+            'token_metadata',
+            '0x' + 'a' * 40,
+        )
+        self.assertEqual(quote['price_usd'], '0.003')
+        self.assertFalse(quote['spends_funds'])
+        self.assertIn('/token/metadata/0x', quote['url'])
 
     def test_unoffered_verdict_is_not_paid(self):
         with TestClient(self.app) as client:
