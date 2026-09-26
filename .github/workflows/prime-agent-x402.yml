@@ -1,0 +1,46 @@
+name: Prime-Agent x402 core
+on:
+  pull_request:
+    paths:
+      - "prime-agent-x402/**"
+      - ".github/workflows/prime-agent-x402.yml"
+  push:
+    branches: [main]
+    paths:
+      - "prime-agent-x402/**"
+      - ".github/workflows/prime-agent-x402.yml"
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile source
+        run: python -m py_compile prime_agent.py server.py evaluate.py verify_transfers.py delivery_journal.py pricing.py audit_sales.py
+        working-directory: prime-agent-x402
+      - name: Run deterministic tests
+        run: python -m unittest discover -s tests -v
+        working-directory: prime-agent-x402
+      - name: Install server dependencies
+        run: python -m pip install -r requirements.txt
+        working-directory: prime-agent-x402
+      - name: Import configured paid server
+        run: python -c "import server; assert len(server.routes) == 3"
+        working-directory: prime-agent-x402
+        env:
+          PRIME_PAY_TO: "0x0000000000000000000000000000000000000001"
+          PRIME_FACILITATOR_URL: "http://127.0.0.1:9911"
+          PRIME_BASE_RPC_URL: "http://127.0.0.1:9912"
+          PRIME_EVIDENCE_DB: "/tmp/prime-agent-x402-ci.sqlite"
+          PRIME_DELIVERY_JOURNAL: "/tmp/prime-agent-x402-deliveries.jsonl"
+      - name: Install HTTP test client
+        run: python -m pip install httpx2
+        working-directory: prime-agent-x402
+      - name: Test unsigned payment challenge
+        run: python -m unittest discover -s tests/integration -v
+        working-directory: prime-agent-x402
