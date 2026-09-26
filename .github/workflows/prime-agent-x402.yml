@@ -26,3 +26,14 @@ jobs:
       - name: Run deterministic tests
         run: python -m unittest discover -s tests -v
         working-directory: prime-agent-x402
+      - name: Install server dependencies
+        run: python -m pip install -r requirements.txt
+        working-directory: prime-agent-x402
+      - name: Import configured paid server
+        run: python -c "import server; assert len(server.routes) == 3"
+        working-directory: prime-agent-x402
+        env:
+          PRIME_PAY_TO: "0x0000000000000000000000000000000000000001"
+          PRIME_FACILITATOR_URL: "http://127.0.0.1:9911"
+          PRIME_BASE_RPC_URL: "http://127.0.0.1:9912"
+          PRIME_EVIDENCE_DB: "/tmp/prime-agent-x402-ci.sqlite"
