@@ -1,4 +1,5 @@
 import tempfile
+import urllib.error
 import unittest
 import json
 from unittest.mock import patch
@@ -55,10 +56,15 @@ class CoreTests(unittest.TestCase):
         payload=json.dumps({'jsonrpc':'2.0','id':1,'result':'0x1234'}).encode()
         with patch('urllib.request.urlopen', return_value=Response(payload)) as urlopen:
             rpc.code(TOKEN, {'block_hash':'0x'+'1'*64})
-            sent=json.loads(urlopen.call_args.args[0].data)
+            request=urlopen.call_args.args[0]
+            sent=json.loads(request.data)
             self.assertEqual(sent['params'][1],{'blockHash':'0x'+'1'*64,'requireCanonical':True})
+            self.assertEqual(request.get_header('User-agent'),'Prime-Agent-x402/1.0')
         with patch('urllib.request.urlopen', return_value=Response(b' '*(MAX_RPC_BYTES+1))):
             with self.assertRaisesRegex(RuntimeError,'byte limit'): rpc.call('eth_chainId',[])
+        denied=urllib.error.HTTPError(rpc.url,403,'Forbidden',None,None)
+        with patch('urllib.request.urlopen', side_effect=denied):
+            with self.assertRaisesRegex(RuntimeError,'RPC request failed'): rpc.call('eth_chainId',[])
     def test_receipt_dedup(self):
         receipts=[{'status':'settled','network':NETWORK,'transaction':'0x1','amount_usd':'0.02','payer':TOKEN}]*2
         out=reconcile(receipts,[{'amount_usd':'0.001'}])
