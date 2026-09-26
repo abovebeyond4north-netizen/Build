@@ -111,6 +111,8 @@ class PaymentBoundaryTests(unittest.TestCase):
             }
             signature = base64.b64encode(json.dumps(payment).encode()).decode()
             before = SupportedHandler.settle_calls
+            before_verify = SupportedHandler.verify_calls
             response = client.get('/chain/status', headers={'PAYMENT-SIGNATURE': signature})
             self.assertEqual(response.status_code, 402)
+            self.assertGreater(SupportedHandler.verify_calls, before_verify)
             self.assertEqual(SupportedHandler.settle_calls, before)
