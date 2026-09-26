@@ -5,6 +5,7 @@ import json
 import re
 import sqlite3
 import time
+import urllib.error
 import urllib.request
 import threading
 from dataclasses import dataclass
@@ -57,12 +58,23 @@ class BaseRPC:
         if method not in {'eth_chainId', 'eth_getBlockByNumber', 'eth_getCode', 'eth_call'}:
             raise ValueError('RPC method disallowed')
         body = canonical({'jsonrpc': '2.0', 'id': 1, 'method': method, 'params': params}).encode()
-        req = urllib.request.Request(self.url, body, {'Content-Type': 'application/json'}, method='POST')
+        req = urllib.request.Request(
+            self.url,
+            body,
+            {
+                'Content-Type': 'application/json',
+                'User-Agent': 'Prime-Agent-x402/1.0',
+            },
+            method='POST',
+        )
         self.calls += 1
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            if resp.status != 200:
-                raise RuntimeError('RPC HTTP failure')
-            raw = resp.read(MAX_RPC_BYTES + 1)
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                if resp.status != 200:
+                    raise RuntimeError('RPC HTTP failure')
+                raw = resp.read(MAX_RPC_BYTES + 1)
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise RuntimeError('RPC request failed') from exc
         if len(raw) > MAX_RPC_BYTES:
             raise RuntimeError('RPC response exceeds byte limit')
         try:
