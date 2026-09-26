@@ -1,21 +1,33 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-10T04:50:59.186Z",
-  "purpose": "Measure process activity and declared safeguards; not demonstrated capability improvement.",
-  "learningScore": 0.79,
+  "generatedAt": "2026-09-26T16:28:48.634Z",
+  "purpose": "Separate process activity from independently evaluated capability improvement.",
+  "metricKind": "process_activity_plus_external_capability_evidence",
+  "limitations": [
+    "Process activity is not capability",
+    "Reversibility is assumed",
+    "Safety consistency checks a declaration",
+    "Capability improvement is accepted only from a separate sealed-evaluation evidence report"
+  ],
+  "learningScore": 0.825,
+  "processActivityScore": 0.825,
+  "capabilityEvidenceAccepted": false,
+  "capabilityStatus": "not_measured",
+  "capabilityAssessment": {
+    "accepted": false,
+    "status": "not_measured",
+    "reasons": [
+      "No independent capability evidence report is present."
+    ]
+  },
   "dimensions": {
     "diversity": 1,
-    "evidenceDepth": 0.4,
+    "evidenceDepth": 0.5,
     "reversibility": 1,
     "safetyConsistency": 1,
-    "cadence": 0.4
+    "cadence": 0.5
   },
   "selectedStrategies": [
-    {
-      "id": "increase-evidence-depth",
-      "recommendation": "Accumulate more verified run records before accepting stronger claims.",
-      "expectedEffect": "better calibration and less overfitting to early runs"
-    },
     {
       "id": "preserve-reversibility",
       "recommendation": "Keep all learning updates in small JSON and Markdown artifacts until tests prove app-level changes.",
@@ -33,12 +45,5 @@
     "external actions remain disabled",
     "income is not guaranteed or assumed"
   ],
-  "nextHumanStep": "Review selected strategies and mark whether the generated proposal was useful.",
-  "metricKind": "process_activity_proxy",
-  "limitations": [
-    "History length and cadence measure activity",
-    "Reversibility is assumed",
-    "Safety consistency checks a declaration",
-    "No independent capability or outcome evaluation"
-  ]
+  "nextHumanStep": "Review selected strategies and mark whether the generated proposal was useful."
 }
