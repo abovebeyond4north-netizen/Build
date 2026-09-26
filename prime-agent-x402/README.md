@@ -4,7 +4,7 @@ Three configured paid Base routes (`/chain/status`, `/token/metadata/{address}`,
 
 ## Local core test
 
-Run `python3 -m unittest discover -s tests -v` in this directory. No third-party libraries are needed for the core or evaluator. After installing `requirements.txt` and `httpx2`, run `python3 -m unittest discover -s tests/integration -v` to verify all three route challenges, an invalid retry, and mock acceptance and settlement paths using a local fake facilitator. The invalid retry reaches `/verify` and never calls `/settle`. On mock success, the handler runs between `/verify` and `/settle`; on mock settlement failure, paid content is withheld. The fake deliberately does not validate signatures or move funds.
+Run `python3 -m unittest discover -s tests -v` in this directory. No third-party libraries are needed for the core or offline audits. After installing `requirements.txt` and `httpx2`, run `python3 -m unittest discover -s tests/integration -v` to verify all three route challenges, an invalid retry, and mock acceptance and settlement paths using a local fake facilitator. The invalid retry reaches `/verify` and never calls `/settle`. On mock success, the handler runs between `/verify` and `/settle`; on mock settlement failure, paid content is withheld. The fake deliberately does not validate signatures or move funds.
 
 ## Paid server
 
@@ -14,7 +14,9 @@ The x402 middleware is responsible for payment challenge, verification and settl
 
 ## Receipt evaluation
 
-Run `python3 evaluate.py --receipts receipts.jsonl --costs costs.jsonl`. Receipt records need `status`, `transaction`, `network`, `amount_usd`, `payer`; cost records need `amount_usd`. Exports must come from an independent, confirmed source. The evaluator deduplicates settlements and does not count merely verified authorizations. It does not itself query a chain.
+Run `python3 evaluate.py --receipts receipts.jsonl --costs costs.jsonl`. Receipt records need `status`, `transaction`, `network`, `amount_usd`, `payer`; cost records need `amount_usd`. Outputs are explicitly named `reported_*`: this calculation deduplicates seller claims but does not independently verify settlement or costs. It does not count merely verified authorizations.
+
+Run `python3 verify_transfers.py --claims claims.jsonl --audit-rpc-url https://YOUR_BASE_RPC --pay-to 0xYOUR_PAYEE` to corroborate inbound transfers against a separately configured Base RPC. Each JSONL claim needs `status: "settled"`, `network: "eip155:8453"`, `asset` set to Circle's Base USDC contract `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`, `transaction` as a transaction hash, `payer` as an EVM address, and `amount_atomic` as a positive decimal integer string (for example `"20000"` for 0.02 USDC). The checker rejects failed, noncanonical at audit time, or fewer than 12 blocks deep transactions; it requires an exact ERC-20 Transfer to the independently configured payee and rejects duplicate log claims. `matched_usdc_nominal` represents transferred USDC units, **not** verified x402 revenue: an inbound transfer alone cannot link a payment to a delivered request or establish independent buyer identity. Block depth is not a guarantee of finality. No real claims or live RPC receipts have been audited here.
 
 References: [x402 FastAPI integration](https://github.com/x402-foundation/x402/blob/main/docs/extensions/bazaar.mdx), [x402 v2 specification](https://github.com/x402-foundation/x402/blob/main/specs/x402-specification-v2.md), [SDK changes](https://github.com/x402-foundation/x402/blob/main/python/x402/CHANGELOG.md).
 
