@@ -273,6 +273,23 @@ def execute(method, *args):
         raise HTTPException(503, str(exc)) from exc
 
 
+@app.get("/health/rpc")
+def rpc_health():
+    try:
+        rpc = intelligence().rpc
+        snapshot = rpc.snapshot()
+        decimals = rpc.token_call(
+            "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+            "0x313ce567",
+            snapshot,
+        )
+        if decimals.lower() != "0x" + (6).to_bytes(32, "big").hex():
+            raise RuntimeError("unexpected Base USDC decimals response")
+        return {"ok": True, "network": NETWORK, "eip1898": True}
+    except RuntimeError as exc:
+        raise HTTPException(503, "Base RPC health check failed") from exc
+
+
 @app.get("/chain/status")
 def chain_status():
     return execute(intelligence().chain_status)
