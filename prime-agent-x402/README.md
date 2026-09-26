@@ -4,13 +4,13 @@ Three configured paid Base routes (`/chain/status`, `/token/metadata/{address}`,
 
 ## Local core test
 
-Run `python3 -m unittest discover -s tests -v` in this directory. No third-party libraries are needed for the core or evaluator.
+Run `python3 -m unittest discover -s tests -v` in this directory. No third-party libraries are needed for the core or evaluator. After installing `requirements.txt` and `httpx2`, run `python3 -m unittest discover -s tests/integration -v` to verify the unpaid x402 challenge using a local fake facilitator. The test sends no blockchain transaction.
 
 ## Paid server
 
 Install `requirements.txt` in a Python 3.11+ environment. Set `PRIME_PAY_TO` to the operator's real Base address, `PRIME_FACILITATOR_URL` to a facilitator confirmed to support x402 v2 exact Base, `PRIME_BASE_RPC_URL` to a Base mainnet RPC endpoint, and `PRIME_EVIDENCE_DB` to a writable SQLite file path. Start with `uvicorn server:app --host 127.0.0.1 --port 8000`. Startup fails when required configuration is absent. There is no free access switch.
 
-The x402 middleware is responsible for payment challenge, verification and settlement. The intelligence core checks Base chain ID, pins reads to an EIP-1898 block hash with `requireCanonical`, and checks the block by number again before returning composed token facts. Providers without EIP-1898 support fail closed. RPC responses over 512,000 bytes are rejected. A later reorganization remains possible: each response identifies its observed block rather than claiming finality. This implementation has **not** executed a paid request. Before exposure to customers, verify route matching and settlement on the configured facilitator, strengthen provider failure handling and limits, and reconcile transactions independently.
+The x402 middleware is responsible for payment challenge, verification and settlement. The intelligence core checks Base chain ID, pins reads to an EIP-1898 block hash with `requireCanonical`, and checks the block by number again before returning composed token facts. Providers without EIP-1898 support fail closed. RPC responses over 512,000 bytes are rejected. A later reorganization remains possible: each response identifies its observed block rather than claiming finality. An unsigned challenge and the absence of the unfinished verdict route have passed in CI on Python 3.11 and 3.12. This implementation has **not** executed a paid request. Before exposure to customers, verify paid retries and settlement on the configured facilitator, strengthen provider failure handling and limits, and reconcile transactions independently.
 
 ## Receipt evaluation
 
