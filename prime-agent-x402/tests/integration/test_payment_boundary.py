@@ -233,6 +233,7 @@ class PaymentBoundaryTests(unittest.TestCase):
                 schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
                 self.assertEqual(schema["type"], "object")
 
+        self.assertEqual(doc["paths"]["/"]["get"]["security"], [])
         self.assertEqual(doc["paths"]["/catalog"]["get"]["security"], [])
         self.assertIn(
             "Liquidity",
