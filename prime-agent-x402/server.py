@@ -3,10 +3,11 @@ import os
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from x402.extensions.bazaar import OutputConfig, declare_discovery_extension
 from x402.http import FacilitatorConfig, HTTPFacilitatorClient, PaymentOption
 from x402.http.middleware.fastapi import PaymentMiddlewareASGI
-from x402.http.types import RouteConfig
+from x402.http.types import PaywallConfig, RouteConfig
 from x402.mechanisms.evm.exact import ExactEvmServerScheme
 from x402.server import x402ResourceServer
 
@@ -192,6 +193,10 @@ app.add_middleware(
     PaymentMiddlewareASGI,
     routes=routes,
     server=server,
+    paywall_config=PaywallConfig(
+        app_name=SERVICE_NAME,
+        testnet=False,
+    ),
 )
 app.add_middleware(
     DeliveryJournalASGI,
@@ -199,6 +204,30 @@ app.add_middleware(
     pay_to=pay_to,
     prices=PRICES,
 )
+
+
+@app.get("/", response_class=HTMLResponse)
+def landing():
+    return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Prime-Agent x402 Intelligence</title>
+  <style>
+    body{font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:48px auto;padding:0 20px;line-height:1.5}
+    a.buy{display:inline-block;padding:14px 18px;border:1px solid currentColor;border-radius:10px;text-decoration:none;font-weight:700}
+    code{overflow-wrap:anywhere}
+  </style>
+</head>
+<body>
+  <h1>Prime-Agent x402 Intelligence</h1>
+  <p>Machine-payable Base intelligence via x402. The cheapest live product is chain status at <strong>$0.001 USDC</strong>.</p>
+  <p><a class="buy" href="/chain/status">Buy chain status — $0.001 USDC</a></p>
+  <p>Opening a paid route in a compatible browser shows the official x402 EVM paywall. Connect a wallet, review the Base mainnet USDC terms, and approve the payment. Never paste a private key into this site.</p>
+  <p>Agent endpoint: <code>GET /chain/status</code></p>
+</body>
+</html>"""
 
 
 @lru_cache(maxsize=1)
