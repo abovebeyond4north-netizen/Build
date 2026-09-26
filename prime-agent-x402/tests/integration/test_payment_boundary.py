@@ -103,6 +103,24 @@ class PaymentBoundaryTests(unittest.TestCase):
             self.assertEqual(challenge['accepts'][0]['scheme'], 'exact')
             self.assertEqual(challenge['accepts'][0]['amount'], '1000')
 
+    def test_bazaar_discovery_metadata_is_in_dynamic_402(self):
+        address = '0x' + 'a' * 40
+        with TestClient(self.app) as client:
+            response = client.get(f'/token/metadata/{address}')
+        self.assertEqual(response.status_code, 402)
+        challenge = json.loads(base64.b64decode(response.headers['PAYMENT-REQUIRED']))
+        resource = challenge['resource']
+        self.assertEqual(resource['serviceName'], 'Prime-Agent x402 Intelligence')
+        self.assertEqual(resource['tags'], ['base', 'chain-data', 'token-metadata', 'agent-intelligence', 'x402'])
+        self.assertTrue(resource['url'].startswith('http://testserver/token/metadata/'))
+        bazaar = challenge['extensions']['bazaar']
+        self.assertEqual(bazaar['routeTemplate'], '/token/metadata/:address')
+        self.assertEqual(bazaar['info']['input']['type'], 'http')
+        self.assertEqual(bazaar['info']['input']['method'], 'GET')
+        self.assertEqual(bazaar['info']['input']['pathParams']['address'], address)
+        self.assertEqual(bazaar['info']['output']['type'], 'json')
+        self.assertEqual(bazaar['info']['output']['example']['network'], 'eip155:8453')
+
     def test_unoffered_verdict_is_not_paid(self):
         with TestClient(self.app) as client:
             response = client.get('/token/verdict/0x'+'a'*40)
@@ -119,6 +137,7 @@ class PaymentBoundaryTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 402)
                 challenge = json.loads(base64.b64decode(response.headers['PAYMENT-REQUIRED']))
                 self.assertEqual(challenge['accepts'][0]['amount'], amount)
+                self.assertIn('bazaar', challenge['extensions'])
 
     def test_invalid_payment_never_settles(self):
         with TestClient(self.app) as client:
@@ -136,7 +155,10 @@ class PaymentBoundaryTests(unittest.TestCase):
         challenge = json.loads(base64.b64decode(challenge_response.headers['PAYMENT-REQUIRED']))
         accepted = challenge['accepts'][0]
         payment = {
-            'x402Version': 2, 'accepted': accepted, 'resource': challenge['resource'],
+            'x402Version': 2,
+            'accepted': accepted,
+            'resource': challenge['resource'],
+            'extensions': challenge.get('extensions', {}),
             'payload': {
                 'signature': '0x' + '0' * 130,
                 'authorization': {'from': '0x' + '2' * 40, 'to': accepted['payTo'],
