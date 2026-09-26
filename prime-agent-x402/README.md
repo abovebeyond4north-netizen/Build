@@ -56,3 +56,20 @@ The production service exposes a free discovery/control plane around the paid x4
 The MCP server intentionally exposes only `list_products` and `quote_token_product`. These tools discover and quote paid products without spending funds and without returning paid intelligence. Buyers still obtain chain status, token metadata, or token context through the x402-protected HTTP routes under their own authorization and budget policy.
 
 The repository also contains `prime-agent-x402/server.json` so the remote MCP server can be published to the official MCP Registry after the live MCP endpoint is verified. The registry entry is not claimed until publication is observed in the registry.
+
+
+## Enriched token context (0.3.0)
+
+`GET /token/context/{address}` now composes canonical Base contract metadata with a bounded DEX Screener token-pairs observation. The DEX observation is cached for 60 seconds and reports, at most, 30 Base pairs with:
+
+- aggregate reported liquidity in USD,
+- aggregate reported 24-hour volume,
+- reported 24-hour buy/sell counts,
+- the highest-liquidity observed pair,
+- an evidence ID and explicit source note.
+
+DEX Screener values are third-party reported market observations, not Prime-Agent-verified onchain accounting. The response says this explicitly and does not turn those values into a risk verdict. If the upstream source is unavailable or malformed, the paid response remains partial and sets liquidity/activity coverage false rather than inventing data.
+
+Holder coverage remains false. Blockscout documents a token-holder API, but the zero-key Base instance path did not pass the independent cloud reliability probe used for this release. Prime-Agent therefore does not claim holder concentration evidence yet. A future holder source must pass availability, bounded-response, provenance, and failure-mode tests before `coverage.holders` can become true.
+
+References: [DEX Screener API reference](https://docs.dexscreener.com/api/reference), [Blockscout token API](https://docs.blockscout.com/devs/apis/rpc/token).
