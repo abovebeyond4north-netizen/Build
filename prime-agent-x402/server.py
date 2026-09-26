@@ -19,7 +19,7 @@ from x402.server import x402ResourceServer
 
 from delivery_journal import DeliveryJournalASGI
 from pricing import PRICES
-from prime_agent import BaseRPC, EvidenceStore, Intelligence, NETWORK, valid_address
+from prime_agent import BaseRPC, DexScreenerClient, EvidenceStore, Intelligence, NETWORK, valid_address
 
 
 SERVICE_NAME = "Prime-Agent x402 Intelligence"
@@ -101,23 +101,88 @@ COVERAGE_SCHEMA = {
     },
     "required": ["contract", "metadata", "holders", "liquidity", "activity"],
 }
+DEX_MARKET_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "pair_count": {"type": "integer"},
+        "aggregate_liquidity_usd": {"type": "number"},
+        "aggregate_volume_h24_usd": {"type": "number"},
+        "buys_h24": {"type": "integer"},
+        "sells_h24": {"type": "integer"},
+        "top_pair": {"type": ["object", "null"]},
+        "sample_limited_to": {"type": "integer"},
+        "source_note": {"type": "string"},
+    },
+    "required": [
+        "pair_count",
+        "aggregate_liquidity_usd",
+        "aggregate_volume_h24_usd",
+        "buys_h24",
+        "sells_h24",
+        "top_pair",
+        "sample_limited_to",
+        "source_note",
+    ],
+}
 TOKEN_CONTEXT_EXAMPLE = {
     **TOKEN_METADATA_EXAMPLE,
+    "holders": {
+        "available": False,
+        "reason": "No zero-key holder indexer has passed the production reliability gate.",
+    },
+    "dex_market": {
+        "pair_count": 2,
+        "aggregate_liquidity_usd": 250000.0,
+        "aggregate_volume_h24_usd": 75000.0,
+        "buys_h24": 125,
+        "sells_h24": 141,
+        "top_pair": {
+            "dex": "example-dex",
+            "pair_address": "0x" + "b" * 40,
+            "url": "https://dexscreener.com/base/example",
+            "liquidity_usd": 150000.0,
+            "volume_h24_usd": 50000.0,
+            "buys_h24": 90,
+            "sells_h24": 100,
+            "price_usd": "1.00",
+        },
+        "sample_limited_to": 30,
+        "source_note": "DEX Screener-reported pool data; aggregates can overlap economically and are not independently verified onchain by Prime-Agent.",
+    },
     "coverage": {
         "contract": True,
         "metadata": True,
         "holders": False,
-        "liquidity": False,
-        "activity": False,
+        "liquidity": True,
+        "activity": True,
     },
 }
 TOKEN_CONTEXT_SCHEMA = {
     "type": "object",
     "properties": {
         **TOKEN_METADATA_SCHEMA["properties"],
+        "holders": {"type": "object"},
+        "dex_market": {
+            "oneOf": [
+                DEX_MARKET_SCHEMA,
+                {
+                    "type": "object",
+                    "properties": {
+                        "available": {"type": "boolean"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["available", "reason"],
+                },
+            ]
+        },
         "coverage": COVERAGE_SCHEMA,
     },
-    "required": [*TOKEN_METADATA_SCHEMA["required"], "coverage"],
+    "required": [
+        *TOKEN_METADATA_SCHEMA["required"],
+        "holders",
+        "dex_market",
+        "coverage",
+    ],
 }
 
 ROUTE_DETAILS = {
@@ -143,7 +208,7 @@ ROUTE_DETAILS = {
         ),
     },
     "GET /token/context/:address": {
-        "description": "Composed Base token context with evidence IDs and explicit coverage gaps.",
+        "description": "Base token context combining canonical contract metadata with DEX liquidity/activity evidence and explicit coverage gaps.",
         "tags": ["base", "token-context", "evidence", "coverage", "agent-intelligence"],
         "extensions": declare_discovery_extension(
             path_params_schema=TOKEN_ADDRESS_SCHEMA,
@@ -168,6 +233,7 @@ facilitator_url = required("PRIME_FACILITATOR_URL")
 rpc_url = required("PRIME_BASE_RPC_URL")
 db_path = required("PRIME_EVIDENCE_DB")
 journal_path = required("PRIME_DELIVERY_JOURNAL")
+dex_url = os.environ.get("PRIME_DEXSCREENER_URL", "https://api.dexscreener.com").strip()
 
 server = x402ResourceServer(
     HTTPFacilitatorClient(FacilitatorConfig(url=facilitator_url))
@@ -214,6 +280,13 @@ def product_catalog(base_url: str) -> dict:
             "scheme": "exact",
             "description": ROUTE_DETAILS[route]["description"],
             "tags": ROUTE_DETAILS[route]["tags"],
+            "sample_output": (
+                CHAIN_STATUS_EXAMPLE
+                if route == "GET /chain/status"
+                else TOKEN_METADATA_EXAMPLE
+                if route == "GET /token/metadata/:address"
+                else TOKEN_CONTEXT_EXAMPLE
+            ),
             "paid": True,
         })
     return {
@@ -452,7 +525,11 @@ async def payment_diagnostics(request, call_next):
 
 @lru_cache(maxsize=1)
 def intelligence():
-    return Intelligence(BaseRPC(rpc_url), EvidenceStore(db_path))
+    return Intelligence(
+        BaseRPC(rpc_url),
+        EvidenceStore(db_path),
+        DexScreenerClient(dex_url),
+    )
 
 
 def execute(method, *args):
@@ -479,6 +556,29 @@ def rpc_health():
         return {"ok": True, "network": NETWORK, "eip1898": True}
     except RuntimeError as exc:
         raise HTTPException(503, "Base RPC health check failed") from exc
+
+
+@app.get("/health/enrichment")
+def enrichment_health():
+    try:
+        pairs = DexScreenerClient(dex_url).token_pairs(
+            "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+        )
+        base_pairs = sum(
+            1
+            for pair in pairs
+            if isinstance(pair, dict) and pair.get("chainId") == "base"
+        )
+        if base_pairs < 1:
+            raise RuntimeError("no Base pairs returned")
+        return {
+            "ok": True,
+            "source": "dexscreener",
+            "base_pairs_observed": base_pairs,
+            "holders": False,
+        }
+    except RuntimeError as exc:
+        raise HTTPException(503, "DEX enrichment health check failed") from exc
 
 
 @app.get("/chain/status")
