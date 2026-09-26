@@ -446,7 +446,7 @@ app.add_middleware(
 )
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, summary="Prime-Agent Landing Page", openapi_extra={"security": []})
 def landing():
     return """<!doctype html>
 <html lang="en">
