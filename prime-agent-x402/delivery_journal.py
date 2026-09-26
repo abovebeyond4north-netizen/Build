@@ -63,7 +63,7 @@ class DeliveryJournalASGI:
                     if (receipt.get('success') is not True or receipt.get('network') != NETWORK
                             or not isinstance(transaction, str) or not TX.fullmatch(transaction)):
                         raise ValueError('invalid settlement response')
-                    append_record(self.path, {
+                    record = {
                         'event': 'asgi_response_sent', 'request_id': request_id,
                         'timestamp': int(time.time()), 'route': route, 'price': self.prices[route],
                         'status': response_status, 'network': NETWORK, 'pay_to': self.pay_to,
@@ -71,7 +71,15 @@ class DeliveryJournalASGI:
                         'payer_reported_by_facilitator': receipt.get('payer'),
                         'body_sha256': digest.hexdigest(),
                         'basis': 'seller observed settlement header and ASGI send completion',
-                    })
+                    }
+                    append_record(self.path, record)
+                    _logger.info(
+                        'x402 settlement_delivered route=%s transaction=%s payer=%s body_sha256=%s',
+                        route,
+                        record['transaction'],
+                        record['payer_reported_by_facilitator'],
+                        record['body_sha256'],
+                    )
                 except (KeyError, TypeError, ValueError, OSError):
                     _logger.exception('Unable to journal a paid response; settlement requires separate reconciliation')
 
