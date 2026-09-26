@@ -5,6 +5,7 @@ import os
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -12,6 +13,9 @@ from fastapi.testclient import TestClient
 class SupportedHandler(BaseHTTPRequestHandler):
     verify_calls = 0
     settle_calls = 0
+    verify_valid = False
+    settle_success = False
+    events = []
 
     def do_GET(self):
         if self.path != '/supported':
@@ -31,10 +35,17 @@ class SupportedHandler(BaseHTTPRequestHandler):
         self.rfile.read(int(self.headers.get('Content-Length', '0')))
         if self.path == '/verify':
             type(self).verify_calls += 1
-            body = json.dumps({'isValid': False, 'invalidReason': 'invalid_signature', 'payer': None}).encode()
+            type(self).events.append('verify')
+            valid = type(self).verify_valid
+            body = json.dumps({'isValid': valid, 'invalidReason': None if valid else 'invalid_signature',
+                               'payer': '0x' + '2' * 40 if valid else None}).encode()
         elif self.path == '/settle':
             type(self).settle_calls += 1
-            body = json.dumps({'success': False, 'transaction': '', 'network': 'eip155:8453'}).encode()
+            type(self).events.append('settle')
+            body = json.dumps({'success': type(self).settle_success,
+                               'transaction': '0x' + '4' * 64 if type(self).settle_success else '',
+                               'network': 'eip155:8453', 'payer': '0x' + '2' * 40,
+                               'errorReason': None if type(self).settle_success else 'mock_settlement_failure'}).encode()
         else:
             self.send_error(404)
             return
@@ -60,6 +71,12 @@ class PaymentBoundaryTests(unittest.TestCase):
         os.environ['PRIME_EVIDENCE_DB'] = ':memory:'
         import server
         cls.app = server.app
+        cls.server_module = server
+
+    def tearDown(self):
+        SupportedHandler.verify_valid = False
+        SupportedHandler.settle_success = False
+        SupportedHandler.events.clear()
 
     @classmethod
     def tearDownClass(cls):
@@ -97,22 +114,53 @@ class PaymentBoundaryTests(unittest.TestCase):
 
     def test_invalid_payment_never_settles(self):
         with TestClient(self.app) as client:
-            challenge_response = client.get('/chain/status')
-            challenge = json.loads(base64.b64decode(challenge_response.headers['PAYMENT-REQUIRED']))
-            accepted = challenge['accepts'][0]
-            payment = {
-                'x402Version': 2, 'accepted': accepted, 'resource': challenge['resource'],
-                'payload': {
-                    'signature': '0x' + '0' * 130,
-                    'authorization': {'from': '0x' + '2' * 40, 'to': accepted['payTo'],
-                                      'value': accepted['amount'], 'validAfter': '0',
-                                      'validBefore': '9999999999', 'nonce': '0x' + '3' * 64},
-                },
-            }
-            signature = base64.b64encode(json.dumps(payment).encode()).decode()
+            signature = self.payment_header(client)
             before = SupportedHandler.settle_calls
             before_verify = SupportedHandler.verify_calls
             response = client.get('/chain/status', headers={'PAYMENT-SIGNATURE': signature})
             self.assertEqual(response.status_code, 402)
             self.assertGreater(SupportedHandler.verify_calls, before_verify)
             self.assertEqual(SupportedHandler.settle_calls, before)
+
+    @staticmethod
+    def payment_header(client):
+        challenge_response = client.get('/chain/status')
+        challenge = json.loads(base64.b64decode(challenge_response.headers['PAYMENT-REQUIRED']))
+        accepted = challenge['accepts'][0]
+        payment = {
+            'x402Version': 2, 'accepted': accepted, 'resource': challenge['resource'],
+            'payload': {
+                'signature': '0x' + '0' * 130,
+                'authorization': {'from': '0x' + '2' * 40, 'to': accepted['payTo'],
+                                  'value': accepted['amount'], 'validAfter': '0',
+                                  'validBefore': '9999999999', 'nonce': '0x' + '3' * 64},
+            },
+        }
+        return base64.b64encode(json.dumps(payment).encode()).decode()
+
+    def test_mock_settlement_precedes_content(self):
+        SupportedHandler.verify_valid = True
+        SupportedHandler.settle_success = True
+        data = {'network': 'eip155:8453', 'block_number': 42, 'marker': 'paid-content'}
+        fake = MagicMock()
+        fake.chain_status.side_effect = lambda: (SupportedHandler.events.append('handler'), data)[1]
+        with patch.object(self.server_module, 'intelligence', return_value=fake), TestClient(self.app) as client:
+            signature = self.payment_header(client)
+            response = client.get('/chain/status', headers={'PAYMENT-SIGNATURE': signature})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), data)
+        self.assertIn('PAYMENT-RESPONSE', response.headers)
+        self.assertEqual(SupportedHandler.events, ['verify', 'handler', 'settle'])
+
+    def test_mock_settlement_failure_withholds_content(self):
+        SupportedHandler.verify_valid = True
+        SupportedHandler.settle_success = False
+        fake = MagicMock()
+        fake.chain_status.side_effect = lambda: {'marker': 'private-paid-content'}
+        with patch.object(self.server_module, 'intelligence', return_value=fake), TestClient(self.app) as client:
+            signature = self.payment_header(client)
+            response = client.get('/chain/status', headers={'PAYMENT-SIGNATURE': signature})
+        self.assertEqual(response.status_code, 402)
+        self.assertNotIn('private-paid-content', response.text)
+        self.assertEqual(SupportedHandler.events, ['verify', 'settle'])
+        fake.chain_status.assert_called_once()
