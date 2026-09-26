@@ -10,7 +10,7 @@ Run `python3 -m unittest discover -s tests -v` in this directory. No third-party
 
 Install `requirements.txt` in a Python 3.11+ environment. Set `PRIME_PAY_TO` to the operator's real Base address, `PRIME_FACILITATOR_URL` to a facilitator confirmed to support x402 v2 exact Base, `PRIME_BASE_RPC_URL` to a Base mainnet RPC endpoint, `PRIME_EVIDENCE_DB` to a writable SQLite file path, and `PRIME_DELIVERY_JOURNAL` to a writable JSONL file in a private directory. Start with `uvicorn server:app --host 127.0.0.1 --port 8000`. Startup fails when required configuration is absent. There is no free access switch.
 
-The x402 middleware is responsible for payment challenge, verification and settlement. The intelligence core checks Base chain ID, pins reads to an EIP-1898 block hash with `requireCanonical`, and checks the block by number again before returning composed token facts. Providers without EIP-1898 support fail closed. RPC responses over 512,000 bytes are rejected. A later reorganization remains possible: each response identifies its observed block rather than claiming finality. All three unsigned challenges, a rejected retry, mock settlement success and failure, and the absence of the unfinished verdict route have passed in CI on Python 3.11 and 3.12. The middleware price patterns use x402's `:address` syntax while FastAPI handlers use `{address}`. This implementation has **not** executed a paid request. Before exposure to customers, verify paid retries and settlement on the configured facilitator, strengthen provider failure handling and limits, and reconcile transactions independently.
+The x402 middleware is responsible for payment challenge, verification and settlement. The intelligence core checks Base chain ID, pins reads to an EIP-1898 block hash with `requireCanonical`, and checks the block by number again before returning composed token facts. Providers without EIP-1898 support fail closed. RPC responses over 512,000 bytes are rejected. A later reorganization remains possible: each response identifies its observed block rather than claiming finality. All three unsigned challenges, a rejected retry, mock settlement success and failure, and the absence of the unfinished verdict route have passed in CI on Python 3.11 and 3.12. The middleware price patterns use x402's `:address` syntax while FastAPI handlers use `{address}`. A production browser-wallet request has now completed the x402 flow for `/chain/status`: the server observed a paid retry, returned HTTP 200 protected content, and PayAI subsequently listed the route in its Bazaar catalog. This bootstrap transaction proves the integration path, not organic demand or profitability. Exact transaction-to-delivery reconciliation remains a separate audit requirement.
 
 The outer delivery journal records a transaction reference, configured route price and payee, facilitator-reported payer, and SHA-256 of the response bytes after ASGI send completion when a 200 response carries a successful settlement header. It never stores the payment signature. An unsigned challenge or failed settlement produces no paid journal record. A server-side send event does not establish that the buyer received content; the header, journal, and reported payer are not independent settlement evidence. If a journal write fails, the already sent response remains available and an error is logged, leaving an explicit audit gap. Protect and back up the journal; this is an operational event log, not a tamper-proof ledger.
 
@@ -25,7 +25,7 @@ Run `python3 audit_sales.py --journal "$PRIME_DELIVERY_JOURNAL" --audit-rpc-url 
 
 ## Bazaar discoverability
 
-Every paid x402 v2 route declares the official Bazaar discovery extension. The 402 challenge includes a stable service name, shared search tags, route-specific descriptions, callable input metadata, and output examples/schemas. Dynamic token routes declare the `:address` path parameter so facilitators can consolidate concrete token URLs under a single route template.
+Every paid x402 v2 route declares the official Bazaar discovery extension. The 402 challenge includes a stable service name, endpoint-specific search tags, route-specific descriptions, callable input metadata, and output examples/schemas. Dynamic token routes declare the `:address` path parameter so facilitators can consolidate concrete token URLs under a single route template.
 
 This makes the service **discovery-ready**, not automatically indexed. Catalog inclusion is facilitator-controlled and must be observed after a real paid request echoes the Bazaar extension through settlement. For a live deployment, verify all of the following before claiming discoverability:
 
@@ -39,3 +39,20 @@ The integration suite asserts that dynamic-route 402 responses contain Bazaar me
 References: [x402 FastAPI integration](https://github.com/x402-foundation/x402/blob/main/docs/extensions/bazaar.mdx), [x402 v2 specification](https://github.com/x402-foundation/x402/blob/main/specs/x402-specification-v2.md), [SDK changes](https://github.com/x402-foundation/x402/blob/main/python/x402/CHANGELOG.md).
 
 Block-hash addressing: [EIP-1898](https://eips.ethereum.org/EIPS/eip-1898).
+
+
+## Agent discovery and MCP
+
+The production service exposes a free discovery/control plane around the paid x402 data plane:
+
+- `GET /catalog` — product list, prices, route templates, capability tags, and purchase URL templates.
+- `GET /capabilities.json` — compatibility alias for machine capability crawlers.
+- `GET /.well-known/ai-catalog.json` — machine-readable catalog alias.
+- `GET /llms.txt` — concise agent-readable usage documentation.
+- `GET /openapi.json` — OpenAPI schema for the HTTP service.
+- `GET /server.json` — MCP Registry-compatible server metadata.
+- `/mcp/` — MCP v2 Streamable HTTP endpoint.
+
+The MCP server intentionally exposes only `list_products` and `quote_token_product`. These tools discover and quote paid products without spending funds and without returning paid intelligence. Buyers still obtain chain status, token metadata, or token context through the x402-protected HTTP routes under their own authorization and budget policy.
+
+The repository also contains `prime-agent-x402/server.json` so the remote MCP server can be published to the official MCP Registry after the live MCP endpoint is verified. The registry entry is not claimed until publication is observed in the registry.
