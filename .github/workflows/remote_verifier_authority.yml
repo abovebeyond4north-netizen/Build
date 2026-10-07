@@ -63,7 +63,7 @@ jobs:
           fi
 
       - name: Upload attested receipt
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: dgm-remote-verification-${{ github.event.issue.number }}
           path: |

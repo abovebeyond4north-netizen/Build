@@ -52,7 +52,7 @@ jobs:
         run: python -m adi_genesis15.confirmatory --output genesis15_confirmatory.json
       - name: Preserve result ledger
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: genesis15-confirmatory-ledger
           path: genesis15_confirmatory.json

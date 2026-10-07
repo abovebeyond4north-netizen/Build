@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload capability evidence receipt
         if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: darwin-capability-evidence-${{ github.sha }}
           path: |
