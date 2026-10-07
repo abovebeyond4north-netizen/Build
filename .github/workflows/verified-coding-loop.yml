@@ -56,7 +56,7 @@ jobs:
         run: npm run build
 
       - name: Upload verification report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: verified-improvement-report
           path: |
