@@ -1,8 +1,9 @@
 {
-  "time": "2026-09-10T04:50:57.505Z",
+  "time": "2026-10-13T00:47:40.975Z",
   "decision": "approved",
   "beforeScore": 130,
   "afterScore": 130,
+  "elapsedSeconds": 1.113253345,
   "testsPassed": true,
   "buildPassed": true,
   "rule": "Only update learning state when tests pass, build passes, and quality score is not worse.",
