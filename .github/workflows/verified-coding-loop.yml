@@ -27,10 +27,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -65,7 +65,7 @@ jobs:
 
       - name: Create pull request for verified updates
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: 'Verified coding loop: update learning state and proposal'
           title: 'Verified coding loop update'
