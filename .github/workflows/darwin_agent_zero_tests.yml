@@ -55,7 +55,7 @@ jobs:
           cache-dependency-path: darwin_agent_zero/pyproject.toml
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload capability evidence receipt
         if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: darwin-capability-evidence-${{ github.sha }}
           path: |
