@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.abovebeyond4north-netizen/prime-agent-x402-intelligence",
+  "title": "Prime-Agent x402 Intelligence",
+  "description": "Discover and quote x402-paid Base intelligence products.",
+  "version": "0.3.0",
+  "websiteUrl": "https://prime-agent-x402-intelligence.onrender.com",
+  "repository": {
+    "url": "https://github.com/abovebeyond4north-netizen/Build",
+    "source": "github",
+    "subfolder": "prime-agent-x402"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://prime-agent-x402-intelligence.onrender.com/mcp/"
+    }
+  ]
+}
