@@ -10,10 +10,6 @@ permissions:
   attestations: write
   issues: write
 
-concurrency:
-  group: remote-verifier-issue-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 jobs:
   verify:
     if: >-
@@ -33,45 +29,133 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Evaluate immutable issue-event request
-        id: evaluate
+      - name: Bind request to deterministic evaluation key
         run: |
           mkdir -p remote-verification
           python verifier_authority/remote_issue_request.py \
+            preflight \
+            "$GITHUB_EVENT_PATH" \
+            remote-verification/preflight.json
+
+      - name: Read complete issue history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api \
+            --paginate \
+            --slurp \
+            "repos/$GITHUB_REPOSITORY/issues?state=all&per_page=100" \
+            > remote-verification/issues.json
+
+      - name: Claim one-shot hidden evidence
+        id: claim
+        shell: bash
+        run: |
+          set +e
+          python verifier_authority/remote_issue_request.py \
+            claim \
+            remote-verification/preflight.json \
+            remote-verification/issues.json \
+            > remote-verification/claim.json \
+            2> remote-verification/claim-error.txt
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "claimed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "claimed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reject duplicate request before hidden evaluation
+        if: steps.claim.outputs.claimed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          error = Path("remote-verification/claim-error.txt").read_text(
+              encoding="utf-8"
+          ).strip()
+          body = "\n".join(
+              [
+                  "<!-- dgm-remote-verifier-rejected:v2 -->",
+                  "Remote verifier request rejected before hidden evaluation.",
+                  error,
+              ]
+          )
+          Path("remote-verification/rejection-comment.json").write_text(
+              json.dumps({"body": body}),
+              encoding="utf-8",
+          )
+          PY
+          gh api \
+            --method POST \
+            "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" \
+            --input remote-verification/rejection-comment.json
+          gh api \
+            --method PATCH \
+            "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER" \
+            -f state=closed \
+            -f state_reason=not_planned
+
+      - name: Evaluate immutable issue-event request
+        if: steps.claim.outputs.claimed == 'true'
+        id: evaluate
+        run: |
+          python verifier_authority/remote_issue_request.py \
+            evaluate \
             "$GITHUB_EVENT_PATH" \
             remote-verification \
             | tee remote-verification/result.json
 
       - name: Attest remote verification receipt
+        if: steps.claim.outputs.claimed == 'true'
         uses: actions/attest@v4
         with:
           subject-path: remote-verification/receipt.json
 
       - name: Verify provenance and reject forged receipt
+        if: steps.claim.outputs.claimed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh attestation verify             remote-verification/receipt.json             -R "$GITHUB_REPOSITORY"             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/remote_verifier_authority.yml"             --source-ref refs/heads/main             --deny-self-hosted-runners
+          gh attestation verify \
+            remote-verification/receipt.json \
+            -R "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/remote_verifier_authority.yml" \
+            --source-ref refs/heads/main \
+            --deny-self-hosted-runners
 
           cp remote-verification/receipt.json remote-verification/tampered-receipt.json
           printf '\n ' >> remote-verification/tampered-receipt.json
 
-          if gh attestation verify             remote-verification/tampered-receipt.json             -R "$GITHUB_REPOSITORY"             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/remote_verifier_authority.yml"             --source-ref refs/heads/main             --deny-self-hosted-runners
+          if gh attestation verify \
+            remote-verification/tampered-receipt.json \
+            -R "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/remote_verifier_authority.yml" \
+            --source-ref refs/heads/main \
+            --deny-self-hosted-runners
           then
             echo "tampered receipt unexpectedly verified" >&2
             exit 1
           fi
 
       - name: Upload attested receipt
+        if: steps.claim.outputs.claimed == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: dgm-remote-verification-${{ github.event.issue.number }}
           path: |
             remote-verification/receipt.json
             remote-verification/result.json
+            remote-verification/preflight.json
+            remote-verification/claim.json
           retention-days: 30
 
       - name: Publish receipt back to request issue
+        if: steps.claim.outputs.claimed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -82,6 +166,7 @@ jobs:
             --input remote-verification/comment.json
 
       - name: Close completed verification request
+        if: steps.claim.outputs.claimed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
