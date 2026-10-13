@@ -65,7 +65,7 @@ jobs:
 
       - name: Create pull request for verified updates
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: 'Verified coding loop: update learning state and proposal'
           title: 'Verified coding loop update'
