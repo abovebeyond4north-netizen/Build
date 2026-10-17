@@ -1,9 +1,20 @@
 {
   "schemaVersion": 1,
-  "loopRuns": 4,
+  "loopRuns": 5,
   "bestScore": 0.901,
   "totalRevenueRecorded": 0,
   "experimentHistory": [
+    {
+      "time": "2026-10-17T15:41:17.443Z",
+      "id": "portfolio-proof-page",
+      "title": "Improve the project as a portfolio proof asset",
+      "score": 0.861,
+      "cost": 0,
+      "revenuePotential": 0.64,
+      "learningValue": 0.82,
+      "decision": "proposed_not_executed",
+      "safety": "human approval required before outreach, payments, or external actions"
+    },
     {
       "time": "2026-10-13T00:47:42.216Z",
       "id": "open-source-issue-checklist",
@@ -57,6 +68,6 @@
     "human approval before outreach or money movement",
     "low-risk lawful work only"
   ],
-  "lastRunAt": "2026-10-13T00:47:42.216Z",
-  "lastSelectedExperiment": "open-source-issue-checklist"
+  "lastRunAt": "2026-10-17T15:41:17.443Z",
+  "lastSelectedExperiment": "portfolio-proof-page"
 }
