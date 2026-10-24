@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-13T00:47:42.312Z",
+  "generatedAt": "2026-10-24T16:02:06.485Z",
   "purpose": "Separate process activity from independently evaluated capability improvement.",
   "metricKind": "process_activity_plus_external_capability_evidence",
   "limitations": [
@@ -9,8 +9,8 @@
     "Safety consistency checks a declaration",
     "Capability improvement is accepted only from a separate sealed-evaluation evidence report"
   ],
-  "learningScore": 0.825,
-  "processActivityScore": 0.825,
+  "learningScore": 0.818,
+  "processActivityScore": 0.818,
   "capabilityEvidenceAccepted": false,
   "capabilityStatus": "not_measured",
   "capabilityAssessment": {
@@ -21,11 +21,11 @@
     ]
   },
   "dimensions": {
-    "diversity": 1,
-    "evidenceDepth": 0.5,
+    "diversity": 0.83,
+    "evidenceDepth": 0.6,
     "reversibility": 1,
     "safetyConsistency": 1,
-    "cadence": 0.5
+    "cadence": 0.6
   },
   "selectedStrategies": [
     {
