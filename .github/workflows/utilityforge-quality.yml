@@ -1,0 +1,21 @@
+name: UtilityForge deployment checks
+on:
+  push:
+    branches: [utilityforge-deploy]
+    paths:
+      - 'utilityforge/**'
+      - '.github/workflows/utilityforge-quality.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify deployed utility's source and data handling
+        run: node --test utilityforge/tests/smoke.test.cjs
