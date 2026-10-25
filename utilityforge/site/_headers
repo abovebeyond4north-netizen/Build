@@ -1,0 +1,9 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'sha256-Cp69dclGvtXhTqK+rZlrKOKN0r2HW87VBAbqH2fFrr0='; style-src 'self'; worker-src 'self'; img-src 'self' data:; connect-src 'none'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
+
+/assets/*
+  Cache-Control: public, max-age=3600
