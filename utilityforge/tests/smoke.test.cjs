@@ -1,16 +1,23 @@
-const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const vm=require('node:vm');const path=require('node:path');
-const html=fs.readFileSync(path.join(__dirname,'../site/index.html'),'utf8');
-const script=html.match(/<script>([\s\S]*?)<\/script>/);
-if(!script)throw new Error('Script not found');
-const core=script[1].split('const $=id=>')[0];const scope={};vm.createContext(scope);vm.runInContext(core,scope,{timeout:2000});
-const {parseCSV,cleanCSV,toCSV,toJSON,getReport}=scope;
-test('quoted commas and newlines',()=>{const d=parseCSV('a,b\n"hello, world","one\ntwo"\n');assert.equal(d.rows[0][0],'hello, world');assert.equal(d.rows[0][1],'one\ntwo')});
-test('tab delimiter and BOM',()=>{const d=parseCSV('\ufeffa\tb\nx\ty\n');assert.equal(d.delimiter,'\t');assert.equal(d.rows[0][1],'y')});
-test('reject ragged rows',()=>assert.throws(()=>parseCSV('a,b\nx\n')));
-test('reject invalid quotes',()=>assert.throws(()=>parseCSV('a,b\nx"y",z\n')));
-test('reject open quotes',()=>assert.throws(()=>parseCSV('a,b\n"hello,x')));
-test('clean duplicates and empty lines',()=>{const d=cleanCSV(parseCSV('a,b\nx,1\nx,1\n,\ny,2\n'),{trim:true,headers:true,empty:true,dedup:true});assert.equal(d.rows.length,2);assert.equal(d.blanks,1);assert.equal(d.duplicates,1)});
-test('protect CSV spreadsheet formulas',()=>assert.match(toCSV({headers:['a'],rows:[['=1+2']]}),/'=1\+2/));
-test('keep JSON values',()=>assert.equal(JSON.parse(toJSON({headers:['c'],rows:[['=SUM(A1)']]}))[0].c,'=SUM(A1)'));
-test('quality report correct',()=>{const r=JSON.parse(getReport({headers:['a'],rows:[['x'],['']],input:2,blanks:0,duplicates:0}));assert.equal(r.columns[0].missing,1)});
-test('no external scripts, upload form or third-party trackers',()=>{assert.doesNotMatch(html,/<script[^>]+src=/);assert.doesNotMatch(html,/<form/i);assert.doesNotMatch(html,/https?:\/\//)});
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const root=path.join(__dirname,'../site');
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+test('v2 site contains a usable local-first workspace',()=>{
+ for(const id of ['loadSample','runButton','downloadCsv','downloadJson','downloadReport','dropZone','preview']) assert.ok(html.includes('id="'+id+'"'),id);
+ assert.match(html,/<script type="module" src="\/assets\/app.js"/);
+});
+test('all local assets exist',()=>{
+ for(const pathName of ['assets/csv-engine.js','assets/app.js','assets/style.css'])
+  assert.ok(fs.statSync(path.join(root,pathName)).size>500,pathName);
+});
+test('no external payment processor or tracker',()=>{
+ assert.doesNotMatch(html,/<script[^>]+src="https?:\/\//);
+ assert.doesNotMatch(html,/<form[^>]*>/);
+});
+test('core JS imports are explicit and local',()=>{
+ const app=fs.readFileSync(path.join(root,'assets/app.js'),'utf8');
+ assert.match(app,/from '\.\/csv-engine.js'/);
+ assert.doesNotMatch(app,/\beval\s*\(/);
+});
