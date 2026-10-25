@@ -1,0 +1,14 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const {pathToFileURL}=require('node:url');
+const path=require('node:path');
+const promise=import(pathToFileURL(path.join(__dirname,'../site/assets/csv-engine.js')).href);
+test('quoted commas and multiline cells',async()=>{const e=await promise;const t=e.parseCSV('a,b\n"hi, there","line\n2"\n');assert.equal(t.rows[0][0],'hi, there');assert.equal(t.rows[0][1],'line\n2')});
+test('TSV and BOM autodetection',async()=>{const e=await promise;const t=e.parseCSV('\ufeffa\tb\n1\t2\n');assert.equal(t.rows[0][1],'2')});
+test('strict malformed records',async()=>{const e=await promise;assert.throws(()=>e.parseCSV('a,b\n1\n'));assert.throws(()=>e.parseCSV('a,b\n"oops,x\n'))});
+test('normalization never duplicates suffixes',async()=>{const e=await promise;assert.deepEqual(e.normalizedHeaders(['foo','foo','foo_2','foo']),['foo','foo_2','foo_2_2','foo_3'])});
+test('deduplication and blanks',async()=>{const e=await promise;const t=e.parseCSV('a,b\nx,1\nx,1\n,\ny,2\n');const v=e.transform(t,{trimCells:true,removeDuplicates:true,dropEmptyRows:true});assert.equal(v.rows.length,2)});
+test('formula-safe output',async()=>{const e=await promise;const t=e.serializeCSV({headers:['x'],rows:[['=1+2'],['@x'],['-1.25']]});assert.ok(t.includes("'=1+2"));assert.ok(t.includes("'@x"));assert.ok(!t.includes("'-1.25"))});
+test('JSON duplicate header safety',async()=>{const e=await promise;const data=JSON.parse(e.serializeJSON({headers:['x','x'],rows:[['1','2']]}));assert.deepEqual(data,[{x:'1',x_2:'2'}])});
+test('column profile supports missing numbers',async()=>{const e=await promise;const p=e.profile({headers:['n'],rows:[['1'],[''],['3']]});assert.equal(p[0].empty,1);assert.equal(p[0].min,1);assert.equal(p[0].max,3)});
+test('HTML-like data is never executed by parser',async()=>{const e=await promise;const t=e.parseCSV('v\n"<script>alert(1)</script>"\n');assert.equal(t.rows[0][0],'<script>alert(1)</script>')});
