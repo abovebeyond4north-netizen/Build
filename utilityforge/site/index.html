@@ -1,63 +1,65 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Free private CSV cleaner and converter. Remove duplicates, clean headers, inspect and download data locally. No file uploads."><meta name="robots" content="index,follow"><title>UtilityForge — Private CSV Cleaner</title><style>
-:root{font:16px/1.5 system-ui,Arial,sans-serif;color:#e9f0f9;background:#0a1120}*{box-sizing:border-box}body{margin:0}a{color:#71e9ca}button,input{font:inherit}button{cursor:pointer;border:1px solid #39435a;border-radius:11px;padding:.65rem 1rem;background:#1d2940;color:#f5f9ff}button:hover:not(:disabled){border-color:#67e3c7}button:disabled{opacity:.35;cursor:not-allowed}header{border-bottom:1px solid #29394c;padding:1.1rem 4vw;display:flex;align-items:center;justify-content:space-between;gap:1rem}.logo{font-weight:900;letter-spacing:.03em}.tag{font-size:.8rem;color:#86e5cb}main{max-width:1200px;margin:0 auto;padding:1.5rem 1.2rem 5rem}.hero{padding:2.2rem 0}.eyebrow{font-size:.75rem;color:#76e8ce;letter-spacing:.15em;font-weight:750}.hero h1{font-size:clamp(2.4rem,6vw,4.6rem);letter-spacing:-.06em;line-height:1.08;margin:.8rem 0}.hero h1 em{font-style:normal;color:#7fe6ce}.hero p{max-width:720px;font-size:1.15rem;color:#bac9dc}.grid{display:grid;grid-template-columns:360px 1fr;gap:1.2rem}.panel{background:#131e32;border:1px solid #2e4157;border-radius:19px;padding:1.4rem;min-width:0}.panel h2{font-size:1.3rem;margin:.3rem 0 1.2rem}#drop{border:1px dashed #6bbcaf;border-radius:14px;padding:2rem 1rem;text-align:center;background:#142a35;cursor:pointer}#drop:hover{background:#193b46}#drop strong{display:block}#drop small{display:block;color:#b5c7d3;margin-top:.3rem}.sample{display:block;margin:1rem 0;width:100%;background:transparent;border:0;color:#8ef9d7}.options{border-top:1px solid #2c3b50;padding-top:1.2rem;margin-top:1rem}.option{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.75rem 0;border-bottom:1px solid #24354b}.option small{display:block;color:#9fb0c6}.option input{accent-color:#59dbc0;width:20px;height:20px}.primary{width:100%;margin-top:1.5rem;background:#65dfc1;color:#07151a;font-weight:800}#status{font-size:.86rem;color:#abc1d4;overflow-wrap:anywhere}.bad{color:#ffaca6!important}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-bottom:1.2rem}.stat{background:#1a2a3f;padding:.8rem;border-radius:9px}.stat small{color:#adbdd0;display:block}.stat b{font-size:1.45rem}.preview{overflow:auto;min-height:285px;max-height:480px;border:1px solid #304258;border-radius:12px}.placeholder{padding:3rem 1rem;text-align:center;color:#a4bad0}table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:.88rem}th,td{text-align:left;padding:.6rem .8rem;border-bottom:1px solid #263950;max-width:260px;overflow:hidden;text-overflow:ellipsis}th{position:sticky;top:0;background:#21324a}.exports{display:flex;flex-wrap:wrap;gap:.65rem;margin-top:1rem}.info{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1.2rem}.info>div{border:1px solid #293c51;padding:1.5rem;border-radius:16px;background:#111e30}.info h3{margin-top:0}footer{color:#a1b2c4;border-top:1px solid #27364c;padding:1.5rem 4vw;font-size:.85rem}@media(max-width:800px){.grid,.info{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}main{padding:1rem}.hero{padding:1.5rem 0}.panel{padding:1rem}}</style></head><body><header><span class="logo">◆ UtilityForge / CSV Studio</span><span class="tag">FREE · NO UPLOADS</span></header><main><section class="hero"><div class="eyebrow">DATA TOOLS / PRIVACY-FIRST</div><h1>Clean data.<br><em>Keep it yours.</em></h1><p>Repair messy CSVs, remove duplicates, convert to JSON and export quality reports. All processing happens on your device — no account or upload required.</p></section><section class="grid"><div class="panel"><div class="eyebrow">01 / IMPORT</div><h2>Source dataset</h2><div role="button" tabindex="0" id="drop"><strong>Drop or choose a CSV file</strong><small>CSV, TSV, semicolon or pipe · 5 MB maximum</small></div><input id="file" type="file" accept=".csv,.tsv,.txt" hidden><button id="sample" class="sample">Load example dataset →</button><div class="options"><div class="eyebrow">02 / CONFIGURE</div><label class="option"><span>Trim whitespace<small>Clean spaces around each cell</small></span><input id="trim" type="checkbox" checked></label><label class="option"><span>Normalize headers<small>Consistent column names</small></span><input id="headers" type="checkbox"></label><label class="option"><span>Remove empty rows<small>Drop blank records</small></span><input id="empty" type="checkbox" checked></label><label class="option"><span>Deduplicate<small>Keep one copy of repeated rows</small></span><input id="dedup" type="checkbox" checked></label></div><button id="process" class="primary" disabled>Process dataset</button><p id="status" role="status" aria-live="polite">Select a file or load the example.</p></div><div class="panel"><div class="eyebrow">03 / REVIEW</div><h2>Results preview</h2><div class="stats"><div class="stat"><small>Input rows</small><b id="countIn">—</b></div><div class="stat"><small>Output rows</small><b id="countOut">—</b></div><div class="stat"><small>Removed</small><b id="countRemoved">—</b></div><div class="stat"><small>Columns</small><b id="countCols">—</b></div></div><div class="preview" id="preview"><div class="placeholder">Your data preview will appear here. Only the first 12 rows are displayed.</div></div><div class="exports"><button id="csv" disabled>↓ Download CSV</button><button id="json" disabled>↓ Download JSON</button><button id="report" disabled>↓ Quality report</button></div></div></section><section class="info"><div><h3>Private by design</h3><p>Your file remains on your device. There is no third-party analytics, server-side processing, upload endpoint, or account registration.</p></div><div><h3>Designed for actual work</h3><p>Supports quoted multiline CSV, multiple delimiters, duplicate removal, consistent headers, JSON exports, and formula-neutralized spreadsheet downloads.</p></div></section></main><footer>© UtilityForge CSV Studio · Free utility, no tracking · Not a paid storefront</footer><script>function parseCSV(text){
-  if(!text || !text.trim()) throw new Error("The file is empty.");
-  if(text.charCodeAt(0)===65279)text=text.slice(1);
-  const candidates=[",","\t",";","|"];let counts=[0,0,0,0],quoted=false;
-  for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted && text[i+1]==='"'){i++;continue}quoted=!quoted;continue}if(!quoted&&(c==='\r'||c==='\n'))break;if(!quoted){const j=candidates.indexOf(c);if(j>=0)counts[j]++}}
-  const delimiter=candidates[counts.indexOf(Math.max(...counts))];
-  let rows=[],row=[],field="",inside=false,closed=false;
-  function pushField(){row.push(field);field="";closed=false}
-  function pushRow(){pushField();rows.push(row);if(rows.length>100001)throw new Error("Maximum 100,000 data rows.");row=[]}
-  for(let i=0;i<text.length;i++){
-    const c=text[i];
-    if(inside){if(c==='"'){if(text[i+1]==='"'){field+='"';i++}else{inside=false;closed=true}}else field+=c;continue}
-    if(c==='"'){if(field!==""||closed)throw new Error("Invalid quote in CSV.");inside=true;continue}
-    if(c===delimiter){pushField();continue}
-    if(c==='\r'||c==='\n'){pushRow();if(c==='\r'&&text[i+1]==='\n')i++;continue}
-    if(closed)throw new Error("Unexpected text after a closing quote.");
-    field+=c
-  }
-  if(inside)throw new Error("Unclosed quoted field.");
-  if(field!==""||row.length>0||!(text.endsWith("\n")||text.endsWith("\r")))pushRow();
-  if(rows.length<1||!rows[0].some(x=>x.trim()))throw new Error("Header row required.");
-  const width=rows[0].length;if(width>250)throw new Error("Maximum 250 columns.");
-  for(let i=1;i<rows.length;i++)if(rows[i].length!==width)throw new Error("Row "+(i+1)+" has "+rows[i].length+" columns; expected "+width+".");
-  return {headers:rows[0],rows:rows.slice(1),delimiter}
-}
-function unique(headers){
-  const used=new Set();
-  return headers.map((h,i)=>{let base=String(h).trim()||"column_"+(i+1),name=base,n=2;while(used.has(name)){name=base+"_"+n;n++}used.add(name);return name})
-}
-function cleanCSV(data,options){
-  const hs=options.headers?data.headers.map(x=>x.trim().toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")||"column"):data.headers;
-  const headers=unique(hs),rows=[],seen=new Set();let blanks=0,duplicates=0;
-  for(const src of data.rows){const row=options.trim?src.map(s=>s.trim()):[...src];
-    if(options.empty&&row.every(x=>!x.trim())){blanks++;continue}
-    const key=JSON.stringify(row);
-    if(options.dedup&&seen.has(key)){duplicates++;continue}
-    seen.add(key);rows.push(row)
-  }
-  return {headers,rows,blanks,duplicates,input:data.rows.length}
-}
-function toCSV(data){
-  const enc=s=>{let v=String(s);if(/^\s*[=+\-@]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"';};
-  return [data.headers,...data.rows].map(r=>r.map(enc).join(",")).join("\r\n")+"\r\n"
-}
-function toJSON(data){return JSON.stringify(data.rows.map(r=>Object.fromEntries(data.headers.map((h,i)=>[h,r[i]]))),null,2)}
-function getReport(data){return JSON.stringify({source_rows:data.input,output_rows:data.rows.length,removed_empty:data.blanks,removed_duplicates:data.duplicates,columns:data.headers.map((h,i)=>({name:h,missing:data.rows.filter(r=>!r[i]?.trim()).length,distinct:new Set(data.rows.map(r=>r[i])).size}))},null,2)}
-
-const $=id=>document.getElementById(id);let source=null,result=null,fileName="dataset.csv";
-const sample='Full Name,City,Amount,Notes\n Alice ,Ottawa,12,first\n Bob,Toronto,5,repeat\n Alice ,Ottawa,12,first\n,,, \n Chris,Montreal,20,"multi-line\nnote"\n Dana,Kingston,8,=2+2\n';
-function notice(msg,error=false){$("status").textContent=msg;$("status").className=error?"bad":""}
-function show(data){$("preview").replaceChildren();const table=document.createElement("table"),head=document.createElement("tr");for(const v of data.headers){const th=document.createElement("th");th.textContent=v;head.append(th)}const thead=document.createElement("thead");thead.append(head);table.append(thead);const body=document.createElement("tbody");for(const row of data.rows.slice(0,12)){const tr=document.createElement("tr");for(const v of row){const td=document.createElement("td");td.textContent=v;tr.append(td)}body.append(tr)}table.append(body);$("preview").append(table)}
-function reset(){result=null;["csv","json","report"].forEach(id=>$(id).disabled=true)}
-function process(){if(!source)return;try{result=cleanCSV(source,{trim:$("trim").checked,headers:$("headers").checked,empty:$("empty").checked,dedup:$("dedup").checked});$("countIn").textContent=source.rows.length;$("countOut").textContent=result.rows.length;$("countRemoved").textContent=source.rows.length-result.rows.length;$("countCols").textContent=result.headers.length;show(result);["csv","json","report"].forEach(id=>$(id).disabled=false);notice("Processing complete. All computations stayed in this browser.")}catch(e){reset();notice(e.message,true)}}
-function load(content,name){try{if(new Blob([content]).size>5*1024*1024)throw new Error("File exceeds 5 MB.");source=parseCSV(content);fileName=name;$("process").disabled=false;process()}catch(e){source=null;reset();$("process").disabled=true;notice(e.message,true)}}
-$("sample").onclick=()=>load(sample,"sample_orders.csv");$("process").onclick=process;
-["trim","headers","empty","dedup"].forEach(id=>$(id).onchange=process);
-$("drop").onclick=()=>$("file").click();$("drop").onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();$("file").click()}};
-$("file").onchange=async e=>{const f=e.target.files?.[0];if(!f)return;if(f.size>5*1024*1024){notice("File exceeds 5 MB.",true);return}load(await f.text(),f.name);e.target.value=""};
-$("drop").ondragover=e=>e.preventDefault();$("drop").ondrop=async e=>{e.preventDefault();let f=e.dataTransfer.files[0];if(f)load(await f.text(),f.name)};
-function save(value,ext,mime){if(!result)return;const url=URL.createObjectURL(new Blob([value],{type:mime})),a=document.createElement("a");a.href=url;a.download=(fileName.replace(/\.[^.]*$/,"").replace(/[^a-zA-Z0-9_-]/g,"_")||"dataset")+"_"+ext;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-$("csv").onclick=()=>save(toCSV(result),"clean.csv","text/csv;charset=utf-8");$("json").onclick=()=>save(toJSON(result),"clean.json","application/json");$("report").onclick=()=>save(getReport(result),"quality.json","application/json");
-</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1221">
+  <meta name="description" content="Clean, inspect, deduplicate, and convert CSV data privately in your browser. Export validated CSV, JSON, and column profiling reports. No uploads or accounts.">
+  <meta name="robots" content="index,follow">
+  <title>UtilityForge — Private CSV Cleaner & Converter</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"UtilityForge CSV Studio","applicationCategory":"BusinessApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"CAD"},"description":"Free browser-based CSV cleaning, deduplication, conversion, and profiling tool. Local data processing."}</script>
+  <script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#tool">Skip to tool</a>
+  <header class="site-header"><div class="shell navbar">
+    <a class="brand" href="/"><span class="mark">U<span>F</span></span><span>UtilityForge<span class="brand-muted"> / CSV Studio</span></span></a>
+    <nav aria-label="Primary"><a href="#tool">Tool</a><a href="#how-it-works">How it works</a><a href="#privacy">Privacy</a></nav>
+    <span class="header-chip"><span class="status-dot"></span>Free · Local-first</span>
+  </div></header>
+  <main>
+    <section class="hero shell"><div class="eyebrow">DATA UTILITIES / NO ACCOUNT REQUIRED</div>
+      <h1>Clean data.<br><em>Keep it yours.</em></h1>
+      <p class="lead">Fix messy CSV files, remove duplicates, inspect columns, and convert to JSON — entirely inside your browser. Your data never leaves your device.</p>
+      <div class="hero-facts"><span>✓ Works offline after loading</span><span>✓ No file uploads</span><span>✓ Spreadsheet-safe CSV export</span></div>
+    </section>
+    <section class="shell tool-grid" id="tool" aria-label="CSV cleaner">
+      <div class="panel controls">
+        <div class="panel-heading"><div><div class="step">01 / IMPORT</div><h2>Source data</h2></div><span class="small-note">CSV / TSV / TXT</span></div>
+        <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="Choose or drop a CSV file">
+          <div class="upload-icon" aria-hidden="true">↥</div>
+          <strong>Drop your file here</strong><span>or click to browse</span>
+          <small>5 MB maximum · processes locally</small>
+        </div>
+        <input type="file" id="fileInput" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
+        <div class="paste-row"><span>Just exploring?</span><button type="button" id="loadSample" class="text-button">Load sample dataset →</button></div>
+        <div class="section-divider"></div>
+        <div class="panel-heading"><div><div class="step">02 / CONFIGURE</div><h2>Transformations</h2></div></div>
+        <div class="options">
+          <label class="option"><span><b>Trim whitespace</b><small>Remove extra spaces around cell values</small></span><input type="checkbox" id="trimCells" checked></label>
+          <label class="option"><span><b>Normalize headers</b><small>Use lowercase_snake_case column names</small></span><input type="checkbox" id="normalizeHeaders"></label>
+          <label class="option"><span><b>Remove empty rows</b><small>Discard records with no content</small></span><input type="checkbox" id="dropEmptyRows" checked></label>
+          <label class="option"><span><b>Deduplicate records</b><small>Keep the first identical row</small></span><input type="checkbox" id="removeDuplicates" checked></label>
+        </div>
+        <button type="button" id="runButton" class="primary" disabled>Process dataset <span>↗</span></button>
+        <p class="status" id="status" role="status" aria-live="polite">Choose a file or load a sample to begin.</p>
+      </div>
+      <div class="panel workspace" aria-label="Processed data output">
+        <div class="panel-heading"><div><div class="step">03 / REVIEW</div><h2>Results preview</h2></div><span class="tag" id="resultStatus">WAITING FOR DATA</span></div>
+        <div class="metrics"><div><small>Input rows</small><strong id="inputRows">—</strong></div><div><small>Output rows</small><strong id="outputRows">—</strong></div><div><small>Rows removed</small><strong id="removedRows">—</strong></div><div><small>Columns</small><strong id="columnCount">—</strong></div></div>
+        <div class="table-toolbar"><span>DATA PREVIEW <small>(FIRST 12 ROWS)</small></span><span id="previewLabel">No data loaded</span></div>
+        <div id="preview" class="data-area"><div class="empty-state"><span>⌘</span><strong>Your workspace is ready</strong><p>Load a sample dataset or import a CSV file to inspect and transform it.</p></div></div>
+        <div class="outputs"><div class="outputs-caption">EXPORT RESULTS</div><div class="buttons"><button type="button" id="downloadCsv" disabled>↓ Download CSV</button><button type="button" id="downloadJson" disabled>↓ Download JSON</button><button type="button" id="downloadReport" disabled>↓ Quality report</button></div></div>
+      </div>
+    </section>
+    <section class="shell content-block" id="how-it-works"><div class="eyebrow">BUILT FOR PRACTICAL DATA WORK</div><h2>One clean workflow, three useful exports.</h2><div class="feature-grid">
+      <article><span class="feature-number">01</span><h3>Normalize messy data</h3><p>Clean inconsistent whitespace, normalize column names, remove empty rows, and deduplicate exact matches without writing code.</p></article>
+      <article><span class="feature-number">02</span><h3>Validate before export</h3><p>Inspect row counts and a column report with missing-value counts, distinct values, and basic numeric range detection.</p></article>
+      <article><span class="feature-number">03</span><h3>Choose the output</h3><p>Download spreadsheet-safe CSV, row-oriented JSON, or a machine-readable quality report for repeatable workflows.</p></article>
+    </div></section>
+    <section class="shell privacy" id="privacy"><div><div class="eyebrow">DATA SAFETY BY DESIGN</div><h2>Private means private.</h2><p>All file parsing, cleaning and conversion happens in your browser. This site has no upload endpoint, login, analytics tracker or external script. It does not save datasets on a server.</p></div><div class="privacy-seal" aria-hidden="true">LOCAL<br><strong>ONLY</strong></div></section>
+  </main>
+  <footer class="shell footer"><span>© UtilityForge · Free CSV Studio</span><span>Zero tracking · No accounts · Built for useful work</span></footer>
+</body>
+</html>
