@@ -17,5 +17,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verify deployed utility's source and data handling
-        run: node --test utilityforge/tests/smoke.test.cjs
+      - name: Verify UtilityForge v2 source, UI, and real parser behavior
+        run: cd utilityforge && npm test
