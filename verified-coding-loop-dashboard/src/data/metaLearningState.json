@@ -1,9 +1,26 @@
 {
   "schemaVersion": 1,
-  "metaRuns": 4,
+  "metaRuns": 5,
   "bestLearningScore": 0.825,
-  "lastDecision": "process_activity_improved_or_equal",
+  "lastDecision": "process_activity_observed_lower_score",
   "strategyHistory": [
+    {
+      "time": "2026-10-31T12:42:46.199Z",
+      "learningScore": 0.818,
+      "processActivityScore": 0.818,
+      "capabilityEvidenceAccepted": false,
+      "capabilityStatus": "not_measured",
+      "diversity": 0.83,
+      "evidenceDepth": 0.6,
+      "reversibility": 1,
+      "safetyConsistency": 1,
+      "cadence": 0.6,
+      "selectedStrategyIds": [
+        "preserve-reversibility",
+        "add-human-outcome-feedback"
+      ],
+      "decision": "process_activity_observed_lower_score"
+    },
     {
       "time": "2026-10-13T00:47:42.312Z",
       "learningScore": 0.825,
@@ -74,5 +91,5 @@
     "track rejected ideas for later review",
     "require human review before outside-world action"
   ],
-  "lastRunAt": "2026-10-13T00:47:42.312Z"
+  "lastRunAt": "2026-10-31T12:42:46.199Z"
 }
